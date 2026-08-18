@@ -9,3 +9,41 @@ generator client {
 datasource db {
   provider = "mysql"
 }
+
+enum Role {
+  ADMIN
+  COACH
+  PLAYER
+  REFEREE
+  PUBLIC
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  fullName     String     @map("full_name")
+  phone        String?    @unique
+  email        String?    @unique
+  passwordHash String     @map("password_hash")
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  roles        UserRole[]
+
+  @@map("users")
+}
+
+model UserRole {
+  id     Int  @id @default(autoincrement())
+  userId Int  @map("user_id")
+  role   Role
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
