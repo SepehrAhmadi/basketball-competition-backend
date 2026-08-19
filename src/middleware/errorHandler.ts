@@ -12,4 +12,4 @@ function errorHandler(
   res.status(statusCode).json({ statusCode, message });
 }
 
-module.exports = errorHandler;
+export default errorHandler;
