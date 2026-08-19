@@ -12,6 +12,7 @@ datasource db {
 
 enum Role {
   ADMIN
+  ORG_MANAGER
   COACH
   PLAYER
   REFEREE
