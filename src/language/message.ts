@@ -1,0 +1,32 @@
+export const messages = {
+  error: {
+    auth: {
+      invalidSelfRegisterRole: "نقش انتخاب‌شده برای ثبت‌نام مجاز نیست",
+      phoneOrEmailInUse: "شماره تلفن یا ایمیل قبلاً استفاده شده است",
+      invalidCredentials: "اطلاعات ورود نامعتبر است",
+      accountNotActive: "حساب کاربری فعال نیست",
+      notAuthorizedAdminPanel: "شما مجاز به ورود به پنل مدیریت نیستید",
+      refreshTokenNotFound: "توکن تازه‌سازی یافت نشد",
+      invalidRefreshToken: "توکن تازه‌سازی نامعتبر است",
+      userNotFound: "کاربر یافت نشد",
+      fullNameRequired: "نام کامل الزامی است",
+      phoneRequired: "شماره تلفن الزامی است",
+      invalidEmail: "ایمیل نامعتبر است",
+      passwordMinLength: "رمز عبور باید حداقل ۸ کاراکتر باشد",
+      identifierRequired: "شماره تلفن یا ایمیل الزامی است",
+      passwordRequired: "رمز عبور الزامی است",
+      atLeastOneRoleRequired: "حداقل یک نقش الزامی است",
+    },
+  },
+  success: {
+    auth: {
+      accountCreated: "حساب کاربری با موفقیت ایجاد شد",
+      loginSuccessful: "ورود با موفقیت انجام شد",
+      tokenRefreshed: "توکن با موفقیت تازه‌سازی شد",
+      loggedOut: "خروج با موفقیت انجام شد",
+      accountDeleted: "حساب کاربری با موفقیت حذف شد",
+      userCreated: "کاربر با موفقیت ایجاد شد",
+      userDeleted: "کاربر با موفقیت حذف شد",
+    },
+  },
+} as const;

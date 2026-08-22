@@ -1,3 +1,4 @@
+import "dotenv/config"; // must be first — before app.ts is imported
 import app from "./app.ts";
 
 const PORT = process.env.PORT || 8081;

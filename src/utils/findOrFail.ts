@@ -1,4 +1,4 @@
-import AppError from "./appError";
+import AppError from "./appError.ts";
 
 async function findOrFail(model: any, id: number, notFoundMessage: string) {
   const record = await model.findUnique({ where: { id: Number(id) } });
@@ -6,4 +6,4 @@ async function findOrFail(model: any, id: number, notFoundMessage: string) {
   return record;
 }
 
-module.exports = findOrFail;
+export default findOrFail;

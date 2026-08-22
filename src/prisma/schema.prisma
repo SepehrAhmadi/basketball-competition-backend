@@ -23,14 +23,17 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+  DELETED
 }
 
 model User {
   id           Int        @id @default(autoincrement())
   fullName     String     @map("full_name")
-  phone        String?    @unique
-  email        String?    @unique
+  phone        String     @unique
+  email        String     @unique
   passwordHash String     @map("password_hash")
+  avatarUrl    String?    @map("avatar_url")
+  refreshToken String?    @map("refresh_token")
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now()) @map("created_at")
   roles        UserRole[]
