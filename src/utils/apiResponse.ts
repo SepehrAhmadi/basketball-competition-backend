@@ -9,4 +9,4 @@ function sendResponse(
   return res.status(statusCode).json({ statusCode, message, data });
 }
 
-module.exports = { sendResponse };
+export default { sendResponse };

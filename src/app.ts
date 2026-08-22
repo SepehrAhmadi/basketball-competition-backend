@@ -1,3 +1,4 @@
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -13,12 +14,14 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+dotenv.config();
+
 app.use(credentials);
 app.use(cors(corsOptions));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser());
 app.use("/", express.static(path.join(__dirname, "public")));
-app.use(errorHandler)
+app.use(errorHandler);
 
 export default app;

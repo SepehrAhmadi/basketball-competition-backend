@@ -7,4 +7,4 @@ const idParamSchema = z.object({
     .positive(),
 });
 
-module.exports = { idParamSchema };
+export default { idParamSchema };
