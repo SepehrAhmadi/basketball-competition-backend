@@ -6,12 +6,21 @@ import AppError from "../../../utils/appError.ts";
 import findOrFail from "../../../utils/findOrFail.ts";
 import type { Role } from "../../../prisma/generated/prisma/enums.ts";
 
-const SELF_REGISTER_ROLES: Role[] = ["PLAYER", "COACH", "REFEREE"];
+const SELF_REGISTER_ROLES: Role[] = [
+  "ORG_MANAGER",
+  "PLAYER",
+  "COACH",
+  "REFEREE",
+];
 
 function signAccessToken(userId: number, roles: Role[]) {
-  return jwt.sign({ userId, roles }, process.env.ACCESS_TOKEN_SECRET as string, {
-    expiresIn: "15m",
-  });
+  return jwt.sign(
+    { userId, roles },
+    process.env.ACCESS_TOKEN_SECRET as string,
+    {
+      expiresIn: "15m",
+    },
+  );
 }
 
 function signRefreshToken(userId: number) {
@@ -25,11 +34,12 @@ interface RegisterInput {
   phone: string;
   email: string;
   password: string;
-  role: Role;
+  roles: Role[];
 }
 
 async function register(input: RegisterInput) {
-  if (!SELF_REGISTER_ROLES.includes(input.role)) {
+  const roles = [...new Set(input.roles)];
+  if (roles.some((role) => !SELF_REGISTER_ROLES.includes(role))) {
     throw new AppError(400, messages.error.auth.invalidSelfRegisterRole);
   }
 
@@ -48,7 +58,7 @@ async function register(input: RegisterInput) {
       phone: input.phone,
       email: input.email,
       passwordHash,
-      roles: { create: { role: input.role } },
+      roles: { create: roles.map((role) => ({ role })) },
     },
   });
 }
@@ -116,7 +126,7 @@ async function refreshAccessToken(refreshTokenFromCookie: string | undefined) {
   try {
     const decoded = jwt.verify(
       refreshTokenFromCookie,
-      process.env.REFRESH_TOKEN_SECRET as string
+      process.env.REFRESH_TOKEN_SECRET as string,
     ) as { userId: number };
 
     if (decoded.userId !== user.id) {
@@ -135,12 +145,17 @@ async function logout(refreshTokenFromCookie: string | undefined) {
     return { hadSession: false };
   }
 
-  const user = await prisma.user.findFirst({ where: { refreshToken: refreshTokenFromCookie } });
+  const user = await prisma.user.findFirst({
+    where: { refreshToken: refreshTokenFromCookie },
+  });
   if (!user) {
     return { hadSession: false };
   }
 
-  await prisma.user.update({ where: { id: user.id }, data: { refreshToken: null } });
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { refreshToken: null },
+  });
   return { hadSession: true };
 }
 
