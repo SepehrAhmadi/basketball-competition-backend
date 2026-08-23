@@ -17,6 +17,20 @@ export const messages = {
       passwordRequired: "رمز عبور الزامی است",
       atLeastOneRoleRequired: "حداقل یک نقش الزامی است",
     },
+    organization: {
+      nameRequired: "نام باشگاه الزامی است",
+      notFound: "باشگاه یافت نشد",
+      notAuthorized: "شما مجاز به دسترسی به این باشگاه نیستید",
+    },
+    player: {
+      notFound: "بازیکن یافت نشد",
+    },
+    coach: {
+      notFound: "مربی یافت نشد",
+    },
+    referee: {
+      notFound: "داور یافت نشد",
+    },
   },
   success: {
     auth: {
@@ -27,6 +41,25 @@ export const messages = {
       accountDeleted: "حساب کاربری با موفقیت حذف شد",
       userCreated: "کاربر با موفقیت ایجاد شد",
       userDeleted: "کاربر با موفقیت حذف شد",
+    },
+    organization: {
+      list: "لیست باشگاه‌ها با موفقیت دریافت شد",
+      found: "باشگاه با موفقیت دریافت شد",
+      created: "باشگاه با موفقیت ایجاد شد",
+      updated: "باشگاه با موفقیت به‌روزرسانی شد",
+      deleted: "باشگاه با موفقیت حذف شد",
+    },
+    player: {
+      found: "اطلاعات بازیکن با موفقیت دریافت شد",
+      updated: "اطلاعات بازیکن با موفقیت به‌روزرسانی شد",
+    },
+    coach: {
+      found: "اطلاعات مربی با موفقیت دریافت شد",
+      updated: "اطلاعات مربی با موفقیت به‌روزرسانی شد",
+    },
+    referee: {
+      found: "اطلاعات داور با موفقیت دریافت شد",
+      updated: "اطلاعات داور با موفقیت به‌روزرسانی شد",
     },
   },
 } as const;
