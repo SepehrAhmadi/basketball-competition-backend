@@ -2,7 +2,7 @@ import { Router } from "express";
 import validate from "../../../middleware/validate.ts";
 import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
 import verifyRole from "../../../middleware/auth/verifyRole.middleware.ts";
-import schemas from "../../../shared/schemas.validation.ts";
+import { idParamSchema } from "../../../shared/schemas.validation.ts";
 import authValidation from "./auth.validation.ts";
 import authController from "./auth.controller.ts";
 
@@ -49,7 +49,7 @@ router.delete(
   "/admin/users/:id",
   verifyJWT,
   verifyRole("ADMIN"),
-  validate(schemas.idParamSchema, "params"),
+  validate(idParamSchema, "params"),
   authController.adminDeleteUser
 );
 

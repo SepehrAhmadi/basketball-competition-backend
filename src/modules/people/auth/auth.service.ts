@@ -34,6 +34,7 @@ interface RegisterInput {
   phone: string;
   email: string;
   password: string;
+  avatarUrl?: string;
   roles: Role[];
 }
 
@@ -58,6 +59,7 @@ async function register(input: RegisterInput) {
       phone: input.phone,
       email: input.email,
       passwordHash,
+      avatarUrl: input.avatarUrl,
       roles: { create: roles.map((role) => ({ role })) },
     },
   });
