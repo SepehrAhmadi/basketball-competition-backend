@@ -1,4 +1,5 @@
-import "dotenv/config"; // must be first — before app.ts is imported
+import "./swagger/zod-extend.ts"; 
+import "dotenv/config"; 
 import app from "./app.ts";
 
 const PORT = process.env.PORT || 8081;
