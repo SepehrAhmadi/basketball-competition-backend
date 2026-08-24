@@ -5,6 +5,7 @@ const registerSchema = z.object({
   fullName: z.string().min(1, messages.error.auth.fullNameRequired),
   phone: z.string().min(1, messages.error.auth.phoneRequired),
   email: z.string().email(messages.error.auth.invalidEmail),
+  avatarUrl: z.string().optional(),
   password: z.string().min(8, messages.error.auth.passwordMinLength),
   roles: z
     .array(z.enum(["ORG_MANAGER", "PLAYER", "COACH", "REFEREE"]))

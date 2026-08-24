@@ -115,7 +115,6 @@ model Coach {
   firstName  String      @map("first_name")
   lastName   String      @map("last_name")
   nationalId String?     @unique @map("national_id")
-  phone      String?
   photoUrl   String?     @map("photo_url")
   degree     CoachDegree
   createdAt  DateTime    @default(now()) @map("created_at")
@@ -131,7 +130,6 @@ model Referee {
   firstName    String   @map("first_name")
   lastName     String   @map("last_name")
   nationalId   String?  @unique @map("national_id")
-  phone        String?
   licenseLevel String?  @map("license_level")
   photoUrl     String?  @map("photo_url")
   createdAt    DateTime @default(now()) @map("created_at")

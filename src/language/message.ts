@@ -16,6 +16,7 @@ export const messages = {
       identifierRequired: "شماره تلفن یا ایمیل الزامی است",
       passwordRequired: "رمز عبور الزامی است",
       atLeastOneRoleRequired: "حداقل یک نقش الزامی است",
+      phoneNumberLength: "شماره تلفن باید ۱۱ رقم باشد",
     },
     organization: {
       nameRequired: "نام باشگاه الزامی است",
