@@ -2,13 +2,32 @@ import prisma from "../../../config/db.config.ts";
 import findOrFail from "../../../utils/findOrFail.ts";
 import { messages } from "../../../language/message.ts";
 
-async function getAllOrganizations(userId: number, roles: string[]) {
-  if (roles.includes("ADMIN")) {
-    return prisma.organization.findMany();
+interface ListOrganizationsQuery {
+  page: number;
+  pageSize: number;
+}
+
+async function getAllOrganizations(
+  userId: number,
+  roles: string[],
+  query: ListOrganizationsQuery,
+) {
+  const where: any = {};
+  if (!roles.includes("ADMIN")) {
+    where.managers = { some: { userId } };
   }
-  return prisma.organization.findMany({
-    where: { managers: { some: { userId } } },
-  });
+
+  const [items, total] = await prisma.$transaction([
+    prisma.organization.findMany({
+      where,
+      orderBy: { id: "asc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    }),
+    prisma.organization.count({ where }),
+  ]);
+
+  return { items, total, page: query.page, pageSize: query.pageSize };
 }
 
 async function getOrganizationById(id: number) {

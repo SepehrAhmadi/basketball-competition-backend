@@ -5,11 +5,17 @@ import apiResponse from "../../../utils/apiResponse.ts";
 
 async function getAll(req: Request, res: Response, next: NextFunction) {
   try {
-    const organizations = await organizationsService.getAllOrganizations(
+    const query = req.query as unknown as {
+      page: number;
+      pageSize: number;
+      city?: string;
+    };
+    const result = await organizationsService.getAllOrganizations(
       req.userId as number,
       req.roles as string[],
+      query,
     );
-    return apiResponse.sendResponse(res, 200, messages.success.organization.list, organizations);
+    return apiResponse.sendResponse(res, 200, messages.success.organization.list, result);
   } catch (err) {
     next(err);
   }
