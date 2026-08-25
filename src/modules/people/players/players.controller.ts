@@ -6,6 +6,8 @@ import apiResponse from "../../../utils/apiResponse.ts";
 async function getMe(req: Request, res: Response, next: NextFunction) {
   try {
     const player = await playersService.getOwnProfile(req.userId as number);
+    if (!player)
+      return apiResponse.sendResponse(res, 404, messages.error.player.notFound);
     return apiResponse.sendResponse(res, 200, messages.success.player.found, player);
   } catch (err) {
     next(err);

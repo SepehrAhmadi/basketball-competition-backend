@@ -6,7 +6,14 @@ import apiResponse from "../../../utils/apiResponse.ts";
 async function getMe(req: Request, res: Response, next: NextFunction) {
   try {
     const coach = await coachesService.getOwnProfile(req.userId as number);
-    return apiResponse.sendResponse(res, 200, messages.success.coach.found, coach);
+    if (!coach)
+      return apiResponse.sendResponse(res, 404, messages.error.coach.notFound);
+    return apiResponse.sendResponse(
+      res,
+      200,
+      messages.success.coach.found,
+      coach,
+    );
   } catch (err) {
     next(err);
   }
@@ -14,8 +21,16 @@ async function getMe(req: Request, res: Response, next: NextFunction) {
 
 async function updateMe(req: Request, res: Response, next: NextFunction) {
   try {
-    const coach = await coachesService.upsertOwnProfile(req.userId as number, req.body);
-    return apiResponse.sendResponse(res, 200, messages.success.coach.updated, coach);
+    const coach = await coachesService.upsertOwnProfile(
+      req.userId as number,
+      req.body,
+    );
+    return apiResponse.sendResponse(
+      res,
+      200,
+      messages.success.coach.updated,
+      coach,
+    );
   } catch (err) {
     next(err);
   }
