@@ -8,7 +8,6 @@ async function getAll(req: Request, res: Response, next: NextFunction) {
     const query = req.query as unknown as {
       page: number;
       pageSize: number;
-      city?: string;
     };
     const result = await organizationsService.getAllOrganizations(
       req.userId as number,

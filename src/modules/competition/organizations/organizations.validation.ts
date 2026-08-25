@@ -23,12 +23,7 @@ export const createOrganizationSchema = z.object({
 
 export const updateOrganizationSchema = createOrganizationSchema.partial();
 
-export const organizationListQuerySchema = paginationQuerySchema.extend({
-  city: z.string().optional().openapi({
-    description: "Filter by city (partial match)",
-    example: "Tehran",
-  }),
-});
+export const organizationListQuerySchema = paginationQuerySchema.extend({});
 
 export default {
   createOrganizationSchema,
