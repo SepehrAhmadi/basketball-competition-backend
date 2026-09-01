@@ -35,6 +35,8 @@ interface RegisterInput {
   email: string;
   password: string;
   avatarUrl?: string;
+  birthDate?: Date;
+  nationalId?: string;
   roles: Role[];
 }
 
@@ -60,6 +62,8 @@ async function register(input: RegisterInput) {
       email: input.email,
       passwordHash,
       avatarUrl: input.avatarUrl,
+      birthDate: input.birthDate,
+      nationalId: input.nationalId,
       roles: { create: roles.map((role) => ({ role })) },
     },
   });
@@ -173,6 +177,8 @@ interface AdminCreateUserInput {
   phone: string;
   email: string;
   password: string;
+  birthDate?: Date;
+  nationalId?: string;
   roles: Role[];
 }
 
@@ -192,6 +198,8 @@ async function adminCreateUser(input: AdminCreateUserInput) {
       phone: input.phone,
       email: input.email,
       passwordHash,
+      birthDate: input.birthDate,
+      nationalId: input.nationalId,
       roles: { create: input.roles.map((role) => ({ role })) },
     },
   });

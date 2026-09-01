@@ -11,13 +11,6 @@ export const playerSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
     userId: z.number().openapi({ example: 10 }),
-    firstName: z.string().openapi({ example: "Ali" }),
-    lastName: z.string().openapi({ example: "Rezaei" }),
-    birthDate: z.coerce
-      .date()
-      .nullable()
-      .openapi({ example: "2001-05-04T00:00:00.000Z" }),
-    nationalId: z.string().nullable().openapi({ example: "0012345678" }),
     photoUrl: z
       .string()
       .nullable()
@@ -92,7 +85,7 @@ registry.registerPath({
         "application/json": {
           schema: errorResponseSchema(
             400,
-            `firstName: ${messages.error.auth.fullNameRequired}`,
+            "height: Expected number, received string",
           ),
         },
       },

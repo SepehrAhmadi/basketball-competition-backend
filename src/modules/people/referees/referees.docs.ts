@@ -11,9 +11,6 @@ export const refereeSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
     userId: z.number().openapi({ example: 12 }),
-    firstName: z.string().openapi({ example: "Hossein" }),
-    lastName: z.string().openapi({ example: "Ahmadi" }),
-    nationalId: z.string().nullable().openapi({ example: "0034567890" }),
     licenseLevel: z.string().nullable().openapi({ example: "INTERNATIONAL" }),
     photoUrl: z
       .string()
@@ -87,7 +84,7 @@ registry.registerPath({
         "application/json": {
           schema: errorResponseSchema(
             400,
-            `firstName: ${messages.error.auth.fullNameRequired}`,
+            "licenseLevel: Expected string, received number",
           ),
         },
       },

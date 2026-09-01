@@ -32,6 +32,13 @@ export const registerSchema = z.object({
     description: "Optional profile photo URL",
     example: "/uploads/avatars/10.png",
   }),
+  birthDate: z.coerce.date().optional().openapi({ example: "2001-05-04" }),
+  nationalId: z
+    .string()
+    .min(10)
+    .max(10)
+    .optional()
+    .openapi({ example: "0012345678" }),
   password: z
     .string()
     .min(8, messages.error.auth.passwordMinLength)
@@ -66,6 +73,13 @@ export const adminCreateUserSchema = z.object({
     .string()
     .email(messages.error.auth.invalidEmail)
     .openapi({ example: "ali@example.com" }),
+  birthDate: z.coerce.date().optional().openapi({ example: "2001-05-04" }),
+  nationalId: z
+    .string()
+    .min(10)
+    .max(10)
+    .optional()
+    .openapi({ example: "0012345678" }),
   password: z
     .string()
     .min(8, messages.error.auth.passwordMinLength)

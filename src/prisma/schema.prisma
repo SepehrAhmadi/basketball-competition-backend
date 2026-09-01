@@ -40,6 +40,8 @@ model User {
   email        String     @unique
   passwordHash String     @map("password_hash")
   avatarUrl    String?    @map("avatar_url")
+  birthDate    DateTime?  @map("birth_date")
+  nationalId   String?    @unique @map("national_id")
   refreshToken String?    @map("refresh_token")
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now()) @map("created_at")
@@ -93,16 +95,12 @@ model OrganizationManager {
 }
 
 model Player {
-  id         Int       @id @default(autoincrement())
-  userId     Int       @unique @map("user_id")
-  firstName  String    @map("first_name")
-  lastName   String    @map("last_name")
-  birthDate  DateTime? @map("birth_date")
-  nationalId String?   @unique @map("national_id")
-  photoUrl   String?   @map("photo_url")
-  height     Decimal?  @db.Decimal(5, 2)
-  position   String?
-  createdAt  DateTime  @default(now()) @map("created_at")
+  id        Int       @id @default(autoincrement())
+  userId    Int       @unique @map("user_id")
+  photoUrl  String?   @map("photo_url")
+  height    Decimal?  @db.Decimal(5, 2)
+  position  String?
+  createdAt DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id])
 
@@ -110,14 +108,11 @@ model Player {
 }
 
 model Coach {
-  id         Int         @id @default(autoincrement())
-  userId     Int         @unique @map("user_id")
-  firstName  String      @map("first_name")
-  lastName   String      @map("last_name")
-  nationalId String?     @unique @map("national_id")
-  photoUrl   String?     @map("photo_url")
-  degree     CoachDegree
-  createdAt  DateTime    @default(now()) @map("created_at")
+  id        Int         @id @default(autoincrement())
+  userId    Int         @unique @map("user_id")
+  photoUrl  String?     @map("photo_url")
+  degree    CoachDegree
+  createdAt DateTime    @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id])
 
@@ -127,9 +122,6 @@ model Coach {
 model Referee {
   id           Int      @id @default(autoincrement())
   userId       Int      @unique @map("user_id")
-  firstName    String   @map("first_name")
-  lastName     String   @map("last_name")
-  nationalId   String?  @unique @map("national_id")
   licenseLevel String?  @map("license_level")
   photoUrl     String?  @map("photo_url")
   createdAt    DateTime @default(now()) @map("created_at")

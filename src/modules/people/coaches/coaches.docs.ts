@@ -11,9 +11,6 @@ export const coachSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
     userId: z.number().openapi({ example: 11 }),
-    firstName: z.string().openapi({ example: "Reza" }),
-    lastName: z.string().openapi({ example: "Karimi" }),
-    nationalId: z.string().nullable().openapi({ example: "0023456789" }),
     photoUrl: z
       .string()
       .nullable()
@@ -87,7 +84,7 @@ registry.registerPath({
         "application/json": {
           schema: errorResponseSchema(
             400,
-            `firstName: ${messages.error.auth.fullNameRequired}`,
+            "degree: Invalid enum value. Expected 'LEVEL_1' | 'LEVEL_2' | 'LEVEL_3' | 'NATIONAL', received 'GOLD'",
           ),
         },
       },
