@@ -3,11 +3,15 @@
 import "../../../swagger/zod-extend.ts";
 import { z } from "zod";
 
+export const refereeLevelEnum = z.enum([
+  "LEVEL_1",
+  "LEVEL_2",
+  "LEVEL_3",
+  "NATIONAL",
+]);
+
 export const upsertRefereeSchema = z.object({
-  licenseLevel: z.string().optional().openapi({
-    description: "Refereeing license level",
-    example: "INTERNATIONAL",
-  }),
+  licenseLevel: refereeLevelEnum.openapi({ example: "LEVEL_1" }),
 });
 
 export default { upsertRefereeSchema };

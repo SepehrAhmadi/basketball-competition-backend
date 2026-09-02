@@ -8,6 +8,7 @@ import "../modules/people/referees/referees.docs.ts";
 import "../modules/competition/organizations/organizations.docs.ts";
 import "../modules/shared/roles/roles.docs.ts";
 import "../modules/shared/coach-degrees/coach-degrees.docs.ts";
+import "../modules/shared/referee-levels/referee-levels.docs.ts";
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 

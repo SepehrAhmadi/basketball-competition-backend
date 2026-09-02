@@ -5,13 +5,13 @@ import {
   errorResponseSchema,
   successResponseSchema,
 } from "../../../swagger/helpers.ts";
-import { upsertRefereeSchema } from "./referees.validation.ts";
+import { refereeLevelEnum, upsertRefereeSchema } from "./referees.validation.ts";
 
 export const refereeSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
     userId: z.number().openapi({ example: 12 }),
-    licenseLevel: z.string().nullable().openapi({ example: "INTERNATIONAL" }),
+    licenseLevel: refereeLevelEnum.openapi("RefereeLevel").openapi({ example: "LEVEL_2" }),
     photoUrl: z
       .string()
       .nullable()

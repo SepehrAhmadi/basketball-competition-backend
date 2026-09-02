@@ -68,5 +68,8 @@ export const messages = {
     coachDegrees: {
       fetched: "درجات مربیگری با موفقیت دریافت شد",
     },
+    refereeLevels: {
+      fetched: "درجات داوری با موفقیت دریافت شد",
+    },
   },
 } as const;

@@ -32,6 +32,12 @@ enum CoachDegree {
   LEVEL_3
   NATIONAL
 }
+enum RefreeLevel {
+  LEVEL_1
+  LEVEL_2
+  LEVEL_3
+  NATIONAL
+}
 
 model User {
   id           Int        @id @default(autoincrement())
@@ -122,7 +128,7 @@ model Coach {
 model Referee {
   id           Int      @id @default(autoincrement())
   userId       Int      @unique @map("user_id")
-  licenseLevel String?  @map("license_level")
+  licenseLevel RefreeLevel 
   photoUrl     String?  @map("photo_url")
   createdAt    DateTime @default(now()) @map("created_at")
 

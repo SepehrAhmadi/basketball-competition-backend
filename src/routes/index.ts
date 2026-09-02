@@ -6,6 +6,7 @@ import refereesRoutes from "../modules/people/referees/referees.routes.ts";
 import organizationsRoutes from "../modules/competition/organizations/organizations.routes.ts";
 import rolesRoutes from "../modules/shared/roles/roles.routes.ts";
 import coachDegreesRoutes from "../modules/shared/coach-degrees/coach-degrees.routes.ts";
+import refereeLevelsRoutes from "../modules/shared/referee-levels/referee-levels.routes.ts";
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use("/coaches", coachesRoutes);
 router.use("/referees", refereesRoutes);
 router.use("/roles", rolesRoutes);
 router.use("/coach-degrees", coachDegreesRoutes);
+router.use("/referee-levels", refereeLevelsRoutes);
 
 export default router;
