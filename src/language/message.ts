@@ -65,5 +65,8 @@ export const messages = {
     roles: {
       fetched: "نقش‌ها با موفقیت دریافت شد",
     },
+    coachDegrees: {
+      fetched: "درجات مربیگری با موفقیت دریافت شد",
+    },
   },
 } as const;

@@ -7,6 +7,7 @@ import "../modules/people/coaches/coaches.docs.ts";
 import "../modules/people/referees/referees.docs.ts";
 import "../modules/competition/organizations/organizations.docs.ts";
 import "../modules/shared/roles/roles.docs.ts";
+import "../modules/shared/coach-degrees/coach-degrees.docs.ts";
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 
