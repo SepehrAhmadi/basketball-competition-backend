@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `organizations` ADD COLUMN `status` ENUM('ACTIVE', 'INACTIVE', 'DELETED') NOT NULL DEFAULT 'ACTIVE';
