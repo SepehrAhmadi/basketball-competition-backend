@@ -3,18 +3,29 @@ import organizationsService from "./organizations.service.ts";
 import { messages } from "../../../language/message.ts";
 import apiResponse from "../../../utils/apiResponse.ts";
 
-async function getAll(req: Request, res: Response, next: NextFunction) {
+async function getAll(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
-    const query = req.query as unknown as {
+    const query = req.validatedQuery as {
       page: number;
       pageSize: number;
     };
+
     const result = await organizationsService.getAllOrganizations(
       req.userId as number,
       req.roles as string[],
       query,
     );
-    return apiResponse.sendResponse(res, 200, messages.success.organization.list, result);
+
+    return apiResponse.sendResponse(
+      res,
+      200,
+      messages.success.organization.list,
+      result,
+    );
   } catch (err) {
     next(err);
   }
