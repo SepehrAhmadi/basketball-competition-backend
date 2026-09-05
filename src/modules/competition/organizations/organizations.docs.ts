@@ -31,6 +31,7 @@ export const organizationSchema = z
     city: z.string().nullable().openapi({ example: "Tehran" }),
     phone: z.string().nullable().openapi({ example: "02112345678" }),
     email: z.string().email().nullable().openapi({ example: "info@titans.ir" }),
+    status: z.enum(["ACTIVE", "INACTIVE", "DELETED"]).openapi({ example: "ACTIVE" }),
     createdAt: z.date().openapi({ example: "2026-01-01T10:00:00.000Z" }),
   })
   .openapi("Organization");

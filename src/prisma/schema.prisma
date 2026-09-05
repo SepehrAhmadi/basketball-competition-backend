@@ -26,6 +26,12 @@ enum UserStatus {
   DELETED
 }
 
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
 enum CoachDegree {
   LEVEL_1
   LEVEL_2
@@ -80,6 +86,7 @@ model Organization {
   city        String?
   phone       String?
   email       String?
+  status      OrganizationStatus @default(ACTIVE)
   createdAt   DateTime @default(now()) @map("created_at")
 
   managers OrganizationManager[]

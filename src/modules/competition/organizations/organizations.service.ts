@@ -1,5 +1,5 @@
 import prisma from "../../../config/db.config.ts";
-import findOrFail from "../../../utils/findOrFail.ts";
+import AppError from "../../../utils/appError.ts";
 import { messages } from "../../../language/message.ts";
 
 interface ListOrganizationsQuery {
@@ -12,7 +12,7 @@ async function getAllOrganizations(
   roles: string[],
   query: ListOrganizationsQuery,
 ) {
-  const where: any = {};
+  const where: any = { status: { not: "DELETED" } };
   if (!roles.includes("ADMIN")) {
     where.managers = { some: { userId } };
   }
@@ -31,7 +31,13 @@ async function getAllOrganizations(
 }
 
 async function getOrganizationById(id: number) {
-  return findOrFail(prisma.organization, id, messages.error.organization.notFound);
+  const organization = await prisma.organization.findFirst({
+    where: { id, status: { not: "DELETED" } },
+  });
+  if (!organization) {
+    throw new AppError(404, messages.error.organization.notFound);
+  }
+  return organization;
 }
 
 async function createOrganization(data: any, userId: number) {
@@ -45,13 +51,27 @@ async function createOrganization(data: any, userId: number) {
 }
 
 async function updateOrganization(id: number, data: any) {
-  await findOrFail(prisma.organization, id, messages.error.organization.notFound);
-  return prisma.organization.update({ where: { id }, data });
+  const organization = await prisma.organization.findFirst({
+    where: { id, status: { not: "DELETED" } },
+  });
+  if (!organization) {
+    throw new AppError(404, messages.error.organization.notFound);
+  }
+  const { status: _ignoredStatus, ...safeData } = data;
+  return prisma.organization.update({ where: { id }, data: safeData });
 }
 
 async function deleteOrganization(id: number) {
-  await findOrFail(prisma.organization, id, messages.error.organization.notFound);
-  return prisma.organization.delete({ where: { id } });
+  const organization = await prisma.organization.findFirst({
+    where: { id, status: { not: "DELETED" } },
+  });
+  if (!organization) {
+    throw new AppError(404, messages.error.organization.notFound);
+  }
+  return prisma.organization.update({
+    where: { id },
+    data: { status: "DELETED" },
+  });
 }
 
 export default {
