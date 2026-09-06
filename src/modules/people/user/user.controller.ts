@@ -1,0 +1,111 @@
+import type { Request, Response, NextFunction } from "express";
+import userService from "./user.service.ts";
+import { messages } from "../../../language/message.ts";
+import apiResponse from "../../../utils/apiResponse.ts";
+import AppError from "../../../utils/appError.ts";
+import type {
+  ChangePasswordInput,
+  UpdateProfileInput,
+} from "./user.types.ts";
+
+const isProd = process.env.NODE_ENV === "production";
+
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: (isProd ? "none" : "lax") as "none" | "lax",
+  maxAge: 24 * 60 * 60 * 1000,
+};
+
+function getBaseUrl(req: Request): string {
+  const forwarded = req.headers["x-forwarded-proto"];
+  const proto =
+    (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0]?.trim()) ||
+    req.protocol;
+  return `${proto}://${req.get("host")}`;
+}
+
+async function getMe(req: Request, res: Response, next: NextFunction) {
+  try {
+    const profile = await userService.getOwnProfile(
+      req.userId as number,
+      getBaseUrl(req),
+    );
+    return apiResponse.sendResponse(res, 200, messages.success.user.profileFetched, profile);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateMe(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = (req.validatedBody ?? req.body) as UpdateProfileInput;
+    const profile = await userService.updateOwnProfile(
+      req.userId as number,
+      input,
+      getBaseUrl(req),
+    );
+    return apiResponse.sendResponse(res, 200, messages.success.user.profileUpdated, profile);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function uploadAvatar(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.file) {
+      throw new AppError(400, messages.error.user.avatarRequired);
+    }
+    const result = await userService.uploadOwnAvatar(
+      req.userId as number,
+      req.file,
+      getBaseUrl(req),
+    );
+    return apiResponse.sendResponse(res, 200, messages.success.user.avatarUploaded, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function removeAvatar(req: Request, res: Response, next: NextFunction) {
+  try {
+    await userService.removeOwnAvatar(req.userId as number);
+    return apiResponse.sendResponse(res, 200, messages.success.user.avatarRemoved);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function changePassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = (req.validatedBody ?? req.body) as ChangePasswordInput;
+    await userService.changeOwnPassword(
+      req.userId as number,
+      input.currentPassword,
+      input.newPassword,
+    );
+    res.clearCookie("jwt", refreshCookieOptions);
+    return apiResponse.sendResponse(res, 200, messages.success.user.passwordChanged);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteMe(req: Request, res: Response, next: NextFunction) {
+  try {
+    await userService.deleteOwnAccount(req.userId as number);
+    res.clearCookie("jwt", refreshCookieOptions);
+    return apiResponse.sendResponse(res, 200, messages.success.user.accountDeleted);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export default {
+  getMe,
+  updateMe,
+  uploadAvatar,
+  removeAvatar,
+  changePassword,
+  deleteMe,
+};

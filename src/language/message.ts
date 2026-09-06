@@ -34,7 +34,13 @@ export const messages = {
     },
     upload: {
       largeFile: "فایل بسیار بزرگ است",
-    }
+    },
+    user: {
+      notFound: "کاربر یافت نشد",
+      currentPasswordIncorrect: "رمز عبور فعلی نادرست است",
+      avatarNotFound: "آواتار یافت نشد",
+      avatarRequired: "فایل آواتار الزامی است",
+    },
   },
   success: {
     auth: {
@@ -73,6 +79,14 @@ export const messages = {
     },
     refereeLevels: {
       fetched: "درجات داوری با موفقیت دریافت شد",
+    },
+    user: {
+      profileFetched: "اطلاعات کاربری با موفقیت دریافت شد",
+      profileUpdated: "اطلاعات کاربری با موفقیت به‌روزرسانی شد",
+      avatarUploaded: "آواتار با موفقیت بارگذاری شد",
+      avatarRemoved: "آواتار با موفقیت حذف شد",
+      passwordChanged: "رمز عبور با موفقیت تغییر کرد",
+      accountDeleted: "حساب کاربری با موفقیت حذف شد",
     },
   },
 } as const;

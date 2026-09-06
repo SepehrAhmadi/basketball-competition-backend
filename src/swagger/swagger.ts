@@ -2,6 +2,7 @@ import { OpenApiGeneratorV3 } from "@asteasolutions/zod-to-openapi";
 import { registry } from "./registry.ts";
 
 import "../modules/people/auth/auth.docs.ts";
+import "../modules/people/user/user.docs.ts";
 import "../modules/people/players/players.docs.ts";
 import "../modules/people/coaches/coaches.docs.ts";
 import "../modules/people/referees/referees.docs.ts";

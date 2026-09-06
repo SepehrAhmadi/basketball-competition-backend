@@ -4,6 +4,7 @@ import prisma from "../../../config/db.config.ts";
 import { messages } from "../../../language/message.ts";
 import AppError from "../../../utils/appError.ts";
 import findOrFail from "../../../utils/findOrFail.ts";
+import userService from "../user/user.service.ts";
 import type { Role } from "../../../prisma/generated/prisma/enums.ts";
 
 const SELF_REGISTER_ROLES: Role[] = [
@@ -166,10 +167,9 @@ async function logout(refreshTokenFromCookie: string | undefined) {
 }
 
 async function deleteOwnAccount(userId: number) {
-  await prisma.user.update({
-    where: { id: userId },
-    data: { status: "DELETED", refreshToken: null },
-  });
+  // Self-service account deletion lives in user.service — kept here only
+  // as a backward-compatible delegate for DELETE /auth/account.
+  return userService.deleteOwnAccount(userId);
 }
 
 interface AdminCreateUserInput {
