@@ -32,6 +32,9 @@ export const messages = {
     referee: {
       notFound: "داور یافت نشد",
     },
+    upload: {
+      largeFile: "فایل بسیار بزرگ است",
+    }
   },
   success: {
     auth: {

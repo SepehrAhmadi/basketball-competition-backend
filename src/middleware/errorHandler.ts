@@ -1,15 +1,31 @@
 import type { Request, Response, NextFunction } from "express";
-import type AppError from "../utils/appError";
+import multer from "multer";
+import AppError from "../utils/appError.ts";
+import { messages } from "../language/message.ts";
 
-function errorHandler(
-  err: AppError,
+const errorHandler = (
+  err: AppError | Error,
   req: Request,
   res: Response,
   next: NextFunction,
-) {
-  const statusCode = err.statusCode || 500;
-  const message = err.message || "Server Error";
-  res.status(statusCode).json({ statusCode, message });
-}
+) => {
+  if (err instanceof AppError) {
+    return res
+      .status(err.statusCode)
+      .json({ statusCode: err.statusCode, message: err.message });
+  }
+
+  if (err instanceof multer.MulterError) {
+    const message =
+      err.code === "LIMIT_FILE_SIZE"
+        ? messages.error.upload.largeFile
+        : err.message;
+    return res.status(400).json({ statusCode: 400, message });
+  }
+
+  res
+    .status(500)
+    .json({ statusCode: 500, message: err.message || "Internal Server Error" });
+};
 
 export default errorHandler;

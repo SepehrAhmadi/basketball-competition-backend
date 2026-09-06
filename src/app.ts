@@ -21,6 +21,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser());
 app.use("/", express.static(path.join(__dirname, "public")));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Interactive API docs, generated from the zod validation schemas
 if (process.env.NODE_ENV !== "production") {
