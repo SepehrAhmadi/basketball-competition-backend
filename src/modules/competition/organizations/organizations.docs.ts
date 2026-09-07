@@ -10,11 +10,35 @@ import {
   paginatedResponseSchema,
   paginationQuerySchema,
 } from "../../../shared/schemas.validation.ts";
-import {
-  createOrganizationSchema,
-  updateOrganizationSchema,
-  organizationListQuerySchema,
-} from "./organizations.validation.ts";
+import { organizationListQuerySchema } from "./organizations.validation.ts";
+
+const organizationLogoField = z.string().openapi({
+  description: "Organization logo image (JPEG/PNG/WEBP, max 2MB)",
+  type: "string",
+  format: "binary",
+});
+
+const createOrganizationRequestSchema = z
+  .object({
+    name: z.string().openapi({ example: "Tehran Titans" }),
+    description: z.string().optional().openapi({ example: "Professional basketball club" }),
+    city: z.string().optional().openapi({ example: "Tehran" }),
+    phone: z.string().optional().openapi({ example: "02112345678" }),
+    email: z.string().email().optional().openapi({ example: "info@titans.ir" }),
+    logo: organizationLogoField.optional(),
+  })
+  .openapi("CreateOrganizationRequest");
+
+const updateOrganizationRequestSchema = z
+  .object({
+    name: z.string().optional().openapi({ example: "Tehran Titans" }),
+    description: z.string().optional().openapi({ example: "Professional basketball club" }),
+    city: z.string().optional().openapi({ example: "Tehran" }),
+    phone: z.string().optional().openapi({ example: "02112345678" }),
+    email: z.string().email().optional().openapi({ example: "info@titans.ir" }),
+    logo: organizationLogoField.optional(),
+  })
+  .openapi("UpdateOrganizationRequest");
 
 export const organizationSchema = z
   .object({
@@ -23,7 +47,7 @@ export const organizationSchema = z
     logoUrl: z
       .string()
       .nullable()
-      .openapi({ example: "/uploads/logos/org-1.png" }),
+      .openapi({ example: "/uploads/organizations/org-1.png" }),
     description: z
       .string()
       .nullable()
@@ -123,10 +147,10 @@ registry.registerPath({
   tags: ["Organizations"],
   summary: "Create an organization",
   description:
-    "Creates an organization and makes the authenticated user its first manager. Requires ORG_MANAGER or ADMIN.",
+    "Creates an organization and makes the authenticated user its first manager. Requires ORG_MANAGER or ADMIN. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo`. If no logo is sent, logoUrl stays null.",
   request: {
     body: {
-      content: { "application/json": { schema: createOrganizationSchema } },
+      content: { "multipart/form-data": { schema: createOrganizationRequestSchema } },
     },
   },
   responses: {
@@ -173,11 +197,11 @@ registry.registerPath({
   tags: ["Organizations"],
   summary: "Update an organization",
   description:
-    "Partial update — send only the fields to change. Requires ORG_MANAGER or ADMIN.",
+    "Partial update — send only the fields to change. Requires ORG_MANAGER or ADMIN. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo`. If no logo is sent, the existing logo remains unchanged.",
   request: {
     params: idParamSchema,
     body: {
-      content: { "application/json": { schema: updateOrganizationSchema } },
+      content: { "multipart/form-data": { schema: updateOrganizationRequestSchema } },
     },
   },
   responses: {

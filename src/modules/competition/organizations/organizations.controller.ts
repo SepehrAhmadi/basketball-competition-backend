@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
-import organizationsService from "./organizations.service.ts";
+import organizationsService, {
+  type CreateOrganizationInput,
+  type UpdateOrganizationInput,
+} from "./organizations.service.ts";
 import { messages } from "../../../language/message.ts";
 import apiResponse from "../../../utils/apiResponse.ts";
 
@@ -42,7 +45,12 @@ async function getById(req: Request, res: Response, next: NextFunction) {
 
 async function create(req: Request, res: Response, next: NextFunction) {
   try {
-    const organization = await organizationsService.createOrganization(req.body, req.userId as number);
+    const input = (req.validatedBody ?? req.body) as CreateOrganizationInput;
+    const organization = await organizationsService.createOrganization(
+      input,
+      req.userId as number,
+      req.file,
+    );
     return apiResponse.sendResponse(res, 201, messages.success.organization.created, organization);
   } catch (err) {
     next(err);
@@ -51,7 +59,12 @@ async function create(req: Request, res: Response, next: NextFunction) {
 
 async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    const organization = await organizationsService.updateOrganization(Number(req.params.id), req.body);
+    const input = (req.validatedBody ?? req.body) as UpdateOrganizationInput;
+    const organization = await organizationsService.updateOrganization(
+      Number(req.params.id),
+      input,
+      req.file,
+    );
     return apiResponse.sendResponse(res, 200, messages.success.organization.updated, organization);
   } catch (err) {
     next(err);

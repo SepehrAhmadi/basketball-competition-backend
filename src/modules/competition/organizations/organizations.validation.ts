@@ -5,12 +5,14 @@ import { z } from "zod";
 import { messages } from "../../../language/message.ts";
 import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
 
+// Multipart note: multer parses text fields into req.body (all strings) and the
+// logo file into req.file. File validation belongs to Multer — logoUrl is
+// server-generated and therefore never accepted from the client.
 export const createOrganizationSchema = z.object({
   name: z
     .string()
     .min(2, messages.error.organization.nameRequired)
     .openapi({ example: "Tehran Titans" }),
-  logoUrl: z.string().url().optional(),
   description: z.string().optional(),
   city: z.string().optional(),
   phone: z.string().optional(),
