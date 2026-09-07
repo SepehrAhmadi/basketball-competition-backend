@@ -20,6 +20,7 @@ export interface CreateOrganizationInput {
   city?: string;
   phone?: string;
   email?: string;
+  removeLogo?: boolean;
 }
 
 export interface UpdateOrganizationInput {
@@ -28,6 +29,7 @@ export interface UpdateOrganizationInput {
   city?: string;
   phone?: string;
   email?: string;
+  removeLogo?: boolean;
 }
 
 // Never delete arbitrary files based on the DB value — only resolve paths
@@ -62,8 +64,9 @@ function removeFileIfExists(filePath: string | null) {
   if (!filePath) return;
   try {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  } catch {
+  } catch (err) {
     // filesystem cleanup is best-effort — the DB is already consistent
+    console.error(`Failed to delete file at ${filePath}:`, err);
   }
 }
 
@@ -118,8 +121,17 @@ async function createOrganization(
   baseUrl?: string,
 ) {
   // logoUrl is server-generated from the uploaded file — never client-provided.
-  const { status: _ignoredStatus, logoUrl: _ignoredLogoUrl, ...safeData } =
-    data as CreateOrganizationInput & { status?: unknown; logoUrl?: unknown };
+  // removeLogo is meaningless on create (nothing exists yet to delete).
+  const {
+    status: _ignoredStatus,
+    logoUrl: _ignoredLogoUrl,
+    removeLogo: _ignoredRemoveLogo,
+    ...safeData
+  } = data as CreateOrganizationInput & {
+    status?: unknown;
+    logoUrl?: unknown;
+    removeLogo?: unknown;
+  };
   const logoUrl = file ? `${ORGANIZATION_LOGO_URL_PREFIX}${file.filename}` : undefined;
 
   try {
@@ -154,28 +166,47 @@ async function updateOrganization(
     throw new AppError(404, messages.error.organization.notFound);
   }
   // logoUrl is server-generated — a client-sent value must never reach Prisma.
-  const { status: _ignoredStatus, logoUrl: _ignoredLogoUrl, ...safeData } =
-    data as UpdateOrganizationInput & { status?: unknown; logoUrl?: unknown };
+  const {
+    status: _ignoredStatus,
+    logoUrl: _ignoredLogoUrl,
+    removeLogo,
+    ...safeData
+  } = data as UpdateOrganizationInput & {
+    status?: unknown;
+    logoUrl?: unknown;
+    removeLogo?: boolean;
+  };
 
-  // No file → logoUrl stays untouched. New file → point the DB at the new URL.
+  // Final logo state priority: new uploaded logo > explicit removal > keep.
+  // - file present            → use the new logo (removeLogo cannot delete it)
+  // - no file + removeLogo    → clear logoUrl (null)
+  // - no file, no removeLogo  → keep existing logoUrl untouched
   const newLogoUrl = file ? `${ORGANIZATION_LOGO_URL_PREFIX}${file.filename}` : undefined;
+  const shouldRemoveLogo = !file && removeLogo === true;
 
   let updated;
   try {
     updated = await prisma.organization.update({
       where: { id },
-      data: newLogoUrl ? { ...safeData, logoUrl: newLogoUrl } : safeData,
+      data:
+        newLogoUrl !== undefined
+          ? { ...safeData, logoUrl: newLogoUrl }
+          : shouldRemoveLogo
+            ? { ...safeData, logoUrl: null }
+            : safeData,
     });
   } catch (err) {
     // DB update failed — drop the new file, keep the old DB value and file.
+    // On removal the old file must also stay, since the DB still references it.
     if (file) removeFileIfExists(file.path);
     throw err;
   }
 
-  // DB now points at the new logo — the old physical file can go.
-  if (file && organization.logoUrl) {
+  // DB now holds the final state — the old physical file can go only when the
+  // logo actually changed (replaced or removed).
+  if ((file || shouldRemoveLogo) && organization.logoUrl) {
     const oldPath = organizationLogoUrlToPath(organization.logoUrl);
-    if (oldPath && oldPath !== file.path) removeFileIfExists(oldPath);
+    if (oldPath && oldPath !== file?.path) removeFileIfExists(oldPath);
   }
 
   return withPublicLogoUrl(updated);

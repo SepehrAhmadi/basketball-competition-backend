@@ -18,6 +18,15 @@ const organizationLogoField = z.string().openapi({
   format: "binary",
 });
 
+const removeLogoDocField = z
+  .boolean()
+  .optional()
+  .openapi({
+    example: false,
+    description:
+      'Send "true" (multipart text field) to remove the existing logo when no new logo file is provided. A newly uploaded logo takes precedence over removeLogo.',
+  });
+
 const createOrganizationRequestSchema = z
   .object({
     name: z.string().openapi({ example: "Tehran Titans" }),
@@ -26,6 +35,7 @@ const createOrganizationRequestSchema = z
     phone: z.string().optional().openapi({ example: "02112345678" }),
     email: z.string().email().optional().openapi({ example: "info@titans.ir" }),
     logo: organizationLogoField.optional(),
+    removeLogo: removeLogoDocField,
   })
   .openapi("CreateOrganizationRequest");
 
@@ -37,6 +47,7 @@ const updateOrganizationRequestSchema = z
     phone: z.string().optional().openapi({ example: "02112345678" }),
     email: z.string().email().optional().openapi({ example: "info@titans.ir" }),
     logo: organizationLogoField.optional(),
+    removeLogo: removeLogoDocField,
   })
   .openapi("UpdateOrganizationRequest");
 
@@ -147,7 +158,7 @@ registry.registerPath({
   tags: ["Organizations"],
   summary: "Create an organization",
   description:
-    "Creates an organization and makes the authenticated user its first manager. Requires ORG_MANAGER or ADMIN. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo`. If no logo is sent, logoUrl stays null.",
+    "Creates an organization and makes the authenticated user its first manager. Requires ORG_MANAGER or ADMIN. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\"). If no logo is sent, logoUrl stays null.",
   request: {
     body: {
       content: { "multipart/form-data": { schema: createOrganizationRequestSchema } },
@@ -197,7 +208,7 @@ registry.registerPath({
   tags: ["Organizations"],
   summary: "Update an organization",
   description:
-    "Partial update — send only the fields to change. Requires ORG_MANAGER or ADMIN. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo`. If no logo is sent, the existing logo remains unchanged.",
+    "Partial update — send only the fields to change. Requires ORG_MANAGER or ADMIN. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\"). If no logo is sent and removeLogo is not \"true\", the existing logo remains unchanged. Send removeLogo=\"true\" with no logo file to delete the existing logo (logoUrl becomes null). A newly uploaded logo takes precedence over removeLogo.",
   request: {
     params: idParamSchema,
     body: {
