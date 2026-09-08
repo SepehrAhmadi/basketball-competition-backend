@@ -6,6 +6,8 @@ import prisma from "../../../config/db.config.ts";
 import { messages } from "../../../language/message.ts";
 import AppError from "../../../utils/appError.ts";
 import type { UpdateProfileInput, UserProfile } from "./user.types.ts";
+import getPublicFileUrl from "../../../utils/getFileUrl.ts";
+import { gregorianToJalali, jalaliToGregorian } from "../../../utils/date.util.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,8 +33,8 @@ function toUserProfile(user: {
     fullName: user.fullName,
     phone: user.phone,
     email: user.email,
-    avatarUrl: getAvatarUrl(user.avatarUrl, baseUrl),
-    birthDate: user.birthDate,
+    avatarUrl: getPublicFileUrl(user.avatarUrl, baseUrl),
+    birthDate: gregorianToJalali(user.birthDate),
     nationalId: user.nationalId,
     status: user.status,
     roles: user.roles.map((r) => r.role),
@@ -41,14 +43,6 @@ function toUserProfile(user: {
 }
 
 const baseUrl = process.env.BASE_URL;
-function getAvatarUrl(
-  avatarUrl: string | null,
-  baseUrl: string,
-): string | null {
-  if (!avatarUrl) return null;
-
-  return `${baseUrl.replace(/\/$/, "")}/${avatarUrl.replace(/^\/+/, "")}`;
-}
 
 function avatarUrlToPath(avatarUrl: string | null): string | null {
   if (!avatarUrl || !avatarUrl.startsWith(AVATAR_URL_PREFIX)) return null;
@@ -89,13 +83,15 @@ async function updateOwnProfile(
     fullName?: string;
     phone?: string;
     email?: string;
-    birthDate?: Date;
+    birthDate?: Date | null;
     nationalId?: string;
   } = {};
   if (data.fullName !== undefined) updateData.fullName = data.fullName;
   if (data.phone !== undefined) updateData.phone = data.phone;
   if (data.email !== undefined) updateData.email = data.email;
-  if (data.birthDate !== undefined) updateData.birthDate = data.birthDate;
+if (data.birthDate !== undefined) {
+    updateData.birthDate = data.birthDate === null ? null : jalaliToGregorian(data.birthDate);
+  }
   if (data.nationalId !== undefined) updateData.nationalId = data.nationalId;
 
   if (Object.keys(updateData).length === 0) {
@@ -164,7 +160,7 @@ async function uploadOwnAvatar(
     removeFileIfExists(oldPath);
   }
 
-  return { avatarUrl };
+  return { avatarUrl: getPublicFileUrl(avatarUrl, baseUrl) as string };
 }
 
 async function removeOwnAvatar(userId: number): Promise<{ avatarUrl: null }> {

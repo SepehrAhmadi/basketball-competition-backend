@@ -39,14 +39,6 @@ function organizationLogoUrlToPath(logoUrl: string | null | undefined): string |
   return path.join(UPLOADS_ROOT, "organizations", path.basename(logoUrl));
 }
 
-// DB stores the relative logoUrl (e.g. /uploads/organizations/x.png);
-// the API exposes the absolute public URL built from the request host.
-function getLogoUrl(logoUrl: string | null | undefined, baseUrl?: string): string | null {
-  if (!logoUrl) return null;
-  if (!baseUrl) return logoUrl;
-  return `${baseUrl.replace(/\/$/, "")}/${logoUrl.replace(/^\/+/, "")}`;
-}
-
 const baseUrl = process.env.BASE_URL;
 function withPublicLogoUrl(
   organization: {

@@ -17,19 +17,10 @@ const refreshCookieOptions = {
   maxAge: 24 * 60 * 60 * 1000,
 };
 
-function getBaseUrl(req: Request): string {
-  const forwarded = req.headers["x-forwarded-proto"];
-  const proto =
-    (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0]?.trim()) ||
-    req.protocol;
-  return `${proto}://${req.get("host")}`;
-}
-
 async function getMe(req: Request, res: Response, next: NextFunction) {
   try {
     const profile = await userService.getOwnProfile(
       req.userId as number,
-      getBaseUrl(req),
     );
     return apiResponse.sendResponse(res, 200, messages.success.user.profileFetched, profile);
   } catch (err) {
@@ -43,7 +34,6 @@ async function updateMe(req: Request, res: Response, next: NextFunction) {
     const profile = await userService.updateOwnProfile(
       req.userId as number,
       input,
-      getBaseUrl(req),
     );
     return apiResponse.sendResponse(res, 200, messages.success.user.profileUpdated, profile);
   } catch (err) {
@@ -59,7 +49,6 @@ async function uploadAvatar(req: Request, res: Response, next: NextFunction) {
     const result = await userService.uploadOwnAvatar(
       req.userId as number,
       req.file,
-      getBaseUrl(req),
     );
     return apiResponse.sendResponse(res, 200, messages.success.user.avatarUploaded, result);
   } catch (err) {

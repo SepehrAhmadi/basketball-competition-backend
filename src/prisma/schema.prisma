@@ -1,9 +1,9 @@
 generator client {
   provider               = "prisma-client"
   output                 = "./generated/prisma"
-  moduleFormat            = "esm"
-  generatedFileExtension  = "ts"
-  importFileExtension     = "ts"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "ts"
 }
 
 datasource db {
@@ -38,6 +38,7 @@ enum CoachDegree {
   LEVEL_3
   NATIONAL
 }
+
 enum RefreeLevel {
   LEVEL_1
   LEVEL_2
@@ -52,7 +53,7 @@ model User {
   email        String     @unique
   passwordHash String     @map("password_hash")
   avatarUrl    String?    @map("avatar_url")
-  birthDate    DateTime?  @map("birth_date")
+  birthDate    DateTime?  @map("birth_date") @db.Date
   nationalId   String?    @unique @map("national_id")
   refreshToken String?    @map("refresh_token")
   status       UserStatus @default(ACTIVE)
@@ -79,15 +80,15 @@ model UserRole {
 }
 
 model Organization {
-  id          Int      @id @default(autoincrement())
+  id          Int                @id @default(autoincrement())
   name        String
-  logoUrl     String?  @map("logo_url")
-  description String?  @db.Text
+  logoUrl     String?            @map("logo_url")
+  description String?            @db.Text
   city        String?
   phone       String?
   email       String?
   status      OrganizationStatus @default(ACTIVE)
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
 
   managers OrganizationManager[]
 
@@ -108,12 +109,12 @@ model OrganizationManager {
 }
 
 model Player {
-  id        Int       @id @default(autoincrement())
-  userId    Int       @unique @map("user_id")
-  photoUrl  String?   @map("photo_url")
-  height    Decimal?  @db.Decimal(5, 2)
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique @map("user_id")
+  photoUrl  String?  @map("photo_url")
+  height    Decimal? @db.Decimal(5, 2)
   position  String?
-  createdAt DateTime  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id])
 
@@ -133,11 +134,11 @@ model Coach {
 }
 
 model Referee {
-  id           Int      @id @default(autoincrement())
-  userId       Int      @unique @map("user_id")
-  licenseLevel RefreeLevel 
-  photoUrl     String?  @map("photo_url")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id           Int         @id @default(autoincrement())
+  userId       Int         @unique @map("user_id")
+  licenseLevel RefreeLevel
+  photoUrl     String?     @map("photo_url")
+  createdAt    DateTime    @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id])
 

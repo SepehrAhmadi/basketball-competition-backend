@@ -27,7 +27,7 @@ export const userProfileSchema = z
     birthDate: z
       .string()
       .nullable()
-      .openapi({ example: "2001-05-04" }),
+      .openapi({ example: "1381/05/20" }),
     nationalId: z.string().nullable().openapi({ example: "0012345678" }),
     status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"]).openapi({
       example: "ACTIVE",

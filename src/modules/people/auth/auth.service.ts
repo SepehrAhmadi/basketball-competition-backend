@@ -6,6 +6,7 @@ import AppError from "../../../utils/appError.ts";
 import findOrFail from "../../../utils/findOrFail.ts";
 import userService from "../user/user.service.ts";
 import type { Role } from "../../../prisma/generated/prisma/enums.ts";
+import { jalaliToGregorian } from "../../../utils/date.util.ts";
 
 const SELF_REGISTER_ROLES: Role[] = [
   "ORG_MANAGER",
@@ -36,7 +37,7 @@ interface RegisterInput {
   email: string;
   password: string;
   avatarUrl?: string;
-  birthDate?: Date;
+  birthDate?: string | null;
   nationalId?: string;
   roles: Role[];
 }
@@ -63,7 +64,7 @@ async function register(input: RegisterInput) {
       email: input.email,
       passwordHash,
       avatarUrl: input.avatarUrl,
-      birthDate: input.birthDate,
+      birthDate: input.birthDate == null ? input.birthDate : jalaliToGregorian(input.birthDate),
       nationalId: input.nationalId,
       roles: { create: roles.map((role) => ({ role })) },
     },
@@ -177,7 +178,7 @@ interface AdminCreateUserInput {
   phone: string;
   email: string;
   password: string;
-  birthDate?: Date;
+  birthDate?: string | null;
   nationalId?: string;
   roles: Role[];
 }
@@ -198,7 +199,7 @@ async function adminCreateUser(input: AdminCreateUserInput) {
       phone: input.phone,
       email: input.email,
       passwordHash,
-      birthDate: input.birthDate,
+      birthDate: input.birthDate == null ? input.birthDate : jalaliToGregorian(input.birthDate),
       nationalId: input.nationalId,
       roles: { create: input.roles.map((role) => ({ role })) },
     },

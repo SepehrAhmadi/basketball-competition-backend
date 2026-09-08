@@ -3,6 +3,20 @@
 import "../../../swagger/zod-extend.ts";
 import { z } from "zod";
 import { messages } from "../../../language/message.ts";
+import { jalaliToGregorian } from "../../../utils/date.util.ts";
+
+const jalaliBirthDate = z
+  .string()
+  .nullable()
+  .optional()
+  .refine((value) => value == null || (() => {
+    try {
+      jalaliToGregorian(value);
+      return true;
+    } catch {
+      return false;
+    }
+  })(), "Birth date must be a valid Jalali date in YYYY/MM/DD format.");
 
 export const updateProfileSchema = z
   .object({
@@ -18,7 +32,7 @@ export const updateProfileSchema = z
       .string()
       .email(messages.error.auth.invalidEmail)
       .openapi({ example: "ali@example.com" }),
-    birthDate: z.coerce.date().optional().openapi({ example: "2001-05-04" }),
+    birthDate: jalaliBirthDate.openapi({ example: "1381/05/20" }),
     nationalId: z
       .string()
       .min(10)

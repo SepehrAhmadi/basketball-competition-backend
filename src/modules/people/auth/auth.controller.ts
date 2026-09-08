@@ -14,7 +14,7 @@ const refreshCookieOptions = {
 
 async function register(req: Request, res: Response, next: NextFunction) {
   try {
-    const user = await authService.register(req.body);
+    const user = await authService.register(req.validatedBody ?? req.body);
     return apiResponse.sendResponse(res, 201, messages.success.auth.accountCreated, { id: user.id });
   } catch (err) {
     next(err);
@@ -78,7 +78,7 @@ async function deleteAccount(req: Request, res: Response, next: NextFunction) {
 
 async function adminCreateUser(req: Request, res: Response, next: NextFunction) {
   try {
-    const user = await authService.adminCreateUser(req.body);
+    const user = await authService.adminCreateUser(req.validatedBody ?? req.body);
     return apiResponse.sendResponse(res, 201, messages.success.auth.userCreated, { id: user.id });
   } catch (err) {
     next(err);

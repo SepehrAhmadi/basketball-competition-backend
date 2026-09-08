@@ -4,7 +4,7 @@ export interface UpdateProfileInput {
   fullName?: string;
   phone?: string;
   email?: string;
-  birthDate?: Date;
+  birthDate?: string | null;
   nationalId?: string;
 }
 
@@ -19,7 +19,7 @@ export interface UserProfile {
   phone: string;
   email: string;
   avatarUrl: string | null;
-  birthDate: Date | null;
+  birthDate: string | null;
   nationalId: string | null;
   status: UserStatus;
   roles: Role[];
