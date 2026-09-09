@@ -32,6 +32,17 @@ enum OrganizationStatus {
   DELETED
 }
 
+enum TeamStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+enum TeamMemberRole {
+  COACH
+  PLAYER
+}
+
 enum CoachDegree {
   LEVEL_1
   LEVEL_2
@@ -64,6 +75,7 @@ model User {
   player               Player?
   coach                Coach?
   referee              Referee?
+  teamMemberships      TeamSeasonMember[]
 
   @@map("users")
 }
@@ -91,6 +103,7 @@ model Organization {
   createdAt   DateTime           @default(now()) @map("created_at")
 
   managers OrganizationManager[]
+  teams    Team[]
 
   @@map("organizations")
 }
@@ -143,4 +156,51 @@ model Referee {
   user User @relation(fields: [userId], references: [id])
 
   @@map("referees")
+}
+
+model Team {
+  id             Int        @id @default(autoincrement())
+  organizationId Int        @map("organization_id")
+  name           String
+  logoUrl        String?    @map("logo_url")
+  foundedYear    Int?       @map("founded_year")
+  status         TeamStatus @default(ACTIVE)
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  members      TeamSeasonMember[]
+
+  @@map("teams")
+}
+
+model Season {
+  id        Int       @id @default(autoincrement())
+  name      String
+  startDate DateTime? @map("start_date")
+  endDate   DateTime? @map("end_date")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  members TeamSeasonMember[]
+
+  @@map("seasons")
+}
+
+model TeamSeasonMember {
+  id           Int            @id @default(autoincrement())
+  teamId       Int            @map("team_id")
+  seasonId     Int            @map("season_id")
+  userId       Int            @map("user_id")
+  role         TeamMemberRole
+  jerseyNumber  Int?           @map("jersey_number")
+  isHeadCoach   Boolean        @default(false) @map("is_head_coach")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  team   Team   @relation(fields: [teamId], references: [id])
+  season Season @relation(fields: [seasonId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, seasonId, userId, role])
+  @@unique([teamId, seasonId, jerseyNumber])
+  @@map("team_season_members")
 }

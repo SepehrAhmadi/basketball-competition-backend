@@ -3,6 +3,7 @@
 import "../../../swagger/zod-extend.ts";
 import { z } from "zod";
 import { messages } from "../../../language/message.ts";
+import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
 import { jalaliToGregorian } from "../../../utils/date.util.ts";
 
 const jalaliBirthDate = z
@@ -56,4 +57,9 @@ export const changePasswordSchema = z
   })
   .strict();
 
-export default { updateProfileSchema, changePasswordSchema };
+export const searchUsersQuerySchema = paginationQuerySchema.extend({
+  role: z.enum(["COACH", "PLAYER", "REFEREE"]).optional(),
+  query: z.string().optional(),
+});
+
+export default { updateProfileSchema, changePasswordSchema, searchUsersQuerySchema };

@@ -215,6 +215,49 @@ async function deleteOwnAccount(userId: number): Promise<void> {
   });
 }
 
+interface SearchUsersQuery {
+  page: number;
+  pageSize: number;
+  role?: string;
+  query?: string;
+}
+
+async function searchUsers(searchQuery: SearchUsersQuery) {
+  const where: any = { status: "ACTIVE" };
+
+  if (searchQuery.role) {
+    where.roles = { some: { role: searchQuery.role as any } };
+  }
+
+  if (searchQuery.query) {
+    where.OR = [
+      { fullName: { contains: searchQuery.query } },
+      { phone: { contains: searchQuery.query } },
+    ];
+  }
+
+  const [items, total] = await prisma.$transaction([
+    prisma.user.findMany({
+      where,
+      select: { id: true, fullName: true, phone: true, avatarUrl: true },
+      orderBy: { fullName: "asc" },
+      skip: (searchQuery.page - 1) * searchQuery.pageSize,
+      take: searchQuery.pageSize,
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return {
+    items: items.map((item) => ({
+      ...item,
+      avatarUrl: getPublicFileUrl(item.avatarUrl, baseUrl),
+    })),
+    total,
+    page: searchQuery.page,
+    pageSize: searchQuery.pageSize,
+  };
+}
+
 export default {
   getOwnProfile,
   updateOwnProfile,
@@ -222,4 +265,5 @@ export default {
   removeOwnAvatar,
   changeOwnPassword,
   deleteOwnAccount,
+  searchUsers,
 };

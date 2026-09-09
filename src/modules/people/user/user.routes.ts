@@ -39,4 +39,10 @@ router.patch(
 
 router.delete("/me", userController.deleteMe);
 
+router.get(
+  "/search",
+  validate(userValidation.searchUsersQuerySchema, "query"),
+  userController.searchUsers,
+);
+
 export default router;

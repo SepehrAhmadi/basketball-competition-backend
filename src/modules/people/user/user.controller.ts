@@ -90,6 +90,22 @@ async function deleteMe(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+async function searchUsers(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = (req.validatedQuery ?? req.query) as {
+      page: number;
+      pageSize: number;
+      role?: string;
+      query?: string;
+    };
+
+    const result = await userService.searchUsers(query);
+    return apiResponse.sendResponse(res, 200, "Users found", result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   getMe,
   updateMe,
@@ -97,4 +113,5 @@ export default {
   removeAvatar,
   changePassword,
   deleteMe,
+  searchUsers,
 };

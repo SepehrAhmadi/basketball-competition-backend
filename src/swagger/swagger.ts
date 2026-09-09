@@ -7,6 +7,7 @@ import "../modules/people/players/players.docs.ts";
 import "../modules/people/coaches/coaches.docs.ts";
 import "../modules/people/referees/referees.docs.ts";
 import "../modules/competition/organizations/organizations.docs.ts";
+import "../modules/teams/teams.docs.ts";
 import "../modules/shared/roles/roles.docs.ts";
 import "../modules/shared/coach-degrees/coach-degrees.docs.ts";
 import "../modules/shared/referee-levels/referee-levels.docs.ts";
