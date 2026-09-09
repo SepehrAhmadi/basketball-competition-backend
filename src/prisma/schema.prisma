@@ -192,9 +192,8 @@ model TeamSeasonMember {
   seasonId     Int            @map("season_id")
   userId       Int            @map("user_id")
   role         TeamMemberRole
-  jerseyNumber  Int?           @map("jersey_number")
-  isHeadCoach   Boolean        @default(false) @map("is_head_coach")
-  createdAt     DateTime       @default(now()) @map("created_at")
+  jerseyNumber Int?           @map("jersey_number")
+  createdAt    DateTime       @default(now()) @map("created_at")
 
   team   Team   @relation(fields: [teamId], references: [id])
   season Season @relation(fields: [seasonId], references: [id])
