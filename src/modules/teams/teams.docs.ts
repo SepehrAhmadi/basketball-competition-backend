@@ -40,7 +40,7 @@ const createTeamRequestSchema = z
   .object({
     organizationId: z.number().openapi({ example: 1 }),
     name: z.string().openapi({ example: "Tehran Titans" }),
-    foundedYear: z.number().optional().openapi({ example: 2020 }),
+    foundedDate: z.string().optional().openapi({ example: "1399/01/01", description: "Jalali date in YYYY/MM/DD format" }),
     logo: teamLogoField.optional(),
     removeLogo: removeLogoDocField,
   })
@@ -50,7 +50,7 @@ const updateTeamRequestSchema = z
   .object({
     organizationId: z.number().optional().openapi({ example: 1 }),
     name: z.string().optional().openapi({ example: "Tehran Titans" }),
-    foundedYear: z.number().optional().openapi({ example: 2020 }),
+    foundedDate: z.string().optional().openapi({ example: "1399/01/01", description: "Jalali date in YYYY/MM/DD format" }),
     logo: teamLogoField.optional(),
     removeLogo: removeLogoDocField,
   })
@@ -92,7 +92,7 @@ export const teamSchema = z
       .string()
       .nullable()
       .openapi({ example: "/uploads/team-logos/team-1.png" }),
-    foundedYear: z.number().nullable().openapi({ example: 2020 }),
+    foundedDate: z.string().nullable().openapi({ example: "1399/01/01", description: "Jalali date in YYYY/MM/DD format" }),
     status: z.enum(["ACTIVE", "INACTIVE", "DELETED"]).openapi({ example: "ACTIVE" }),
     createdAt: z.date().openapi({ example: "2026-01-01T10:00:00.000Z" }),
     organization: z

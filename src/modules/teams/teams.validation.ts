@@ -2,6 +2,25 @@ import "../../swagger/zod-extend.ts";
 import { z } from "zod";
 import { messages } from "../../language/message.ts";
 import { paginationQuerySchema } from "../../shared/schemas.validation.ts";
+import { jalaliToGregorian } from "../../utils/date.util.ts";
+
+const jalaliFoundedDate = z
+  .string()
+  .nullable()
+  .optional()
+  .refine(
+    (value) =>
+      value == null ||
+      (() => {
+        try {
+          jalaliToGregorian(value);
+          return true;
+        } catch {
+          return false;
+        }
+      })(),
+    "Founded date must be a valid Jalali date in YYYY/MM/DD format.",
+  );
 
 // Multipart note: multer parses text fields into req.body (all strings) and the
 // logo file into req.file. File validation belongs to Multer — logoUrl is
@@ -31,7 +50,10 @@ export const createTeamSchema = z
       .string()
       .min(2, messages.error.team.nameRequired)
       .openapi({ example: "Tehran Titans" }),
-    foundedYear: z.coerce.number().int().min(1800).max(2100).optional(),
+    foundedDate: jalaliFoundedDate.openapi({
+      example: "1399/01/01",
+      description: "Jalali date in YYYY/MM/DD format",
+    }),
     removeLogo: removeLogoField,
   })
   .strict();

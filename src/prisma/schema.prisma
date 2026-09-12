@@ -163,7 +163,7 @@ model Team {
   organizationId Int        @map("organization_id")
   name           String
   logoUrl        String?    @map("logo_url")
-  foundedYear    Int?       @map("founded_year")
+  foundedDate    DateTime?  @map("founded_date") @db.Date
   status         TeamStatus @default(ACTIVE)
   createdAt      DateTime   @default(now()) @map("created_at")
 

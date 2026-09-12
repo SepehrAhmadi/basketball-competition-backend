@@ -15,15 +15,7 @@ export function jalaliToGregorian(value: string): Date {
   }
 
   return new Date(
-    Date.UTC(
-      parsed.year(),
-      parsed.month(),
-      parsed.date(),
-      12,
-      0,
-      0,
-      0,
-    ),
+    Date.UTC(parsed.year(), parsed.month(), parsed.date(), 12, 0, 0, 0),
   );
 }
 
@@ -32,3 +24,5 @@ export function gregorianToJalali(value: Date | null): string | null {
 
   return moment.utc(value).format(JALALI_FORMAT);
 }
+
+

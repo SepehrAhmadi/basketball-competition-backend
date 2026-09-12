@@ -5,6 +5,7 @@ import prisma from "../../config/db.config.ts";
 import AppError from "../../utils/appError.ts";
 import { messages } from "../../language/message.ts";
 import getPublicFileUrl from "../../utils/getFileUrl.ts";
+import { jalaliToGregorian, gregorianToJalali } from "../../utils/date.util.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,14 +17,14 @@ const TEAM_LOGO_URL_PREFIX = "/uploads/team-logos/";
 export interface CreateTeamInput {
   organizationId: number;
   name: string;
-  foundedYear?: number;
+  foundedDate?: string | null;
   removeLogo?: boolean;
 }
 
 export interface UpdateTeamInput {
   organizationId?: number;
   name?: string;
-  foundedYear?: number;
+  foundedDate?: string | null;
   removeLogo?: boolean;
 }
 
@@ -35,10 +36,11 @@ function teamLogoUrlToPath(logoUrl: string | null | undefined): string | null {
 }
 
 const baseUrl = process.env.BASE_URL;
-function withPublicLogoUrl(team: { logoUrl: string | null; [key: string]: any }) {
+function withPublicLogoUrl(team: { logoUrl: string | null; foundedDate: Date | null; [key: string]: any }) {
   return {
     ...team,
     logoUrl: getPublicFileUrl(team.logoUrl, baseUrl),
+    foundedDate: gregorianToJalali(team.foundedDate),
   };
 }
 
@@ -129,11 +131,16 @@ async function createTeam(
     ...safeData
   } = data as CreateTeamInput & { logoUrl?: unknown; removeLogo?: unknown };
 
+  // Convert Jalali date string to Gregorian Date before persisting
+  const foundedDate = safeData.foundedDate != null
+    ? jalaliToGregorian(safeData.foundedDate)
+    : undefined;
+
   const logoUrl = file ? `${TEAM_LOGO_URL_PREFIX}${file.filename}` : undefined;
 
   try {
     const team = await prisma.team.create({
-      data: logoUrl ? { ...safeData, logoUrl } : safeData,
+      data: { ...safeData, ...(foundedDate != null && { foundedDate }), ...(logoUrl != null && { logoUrl }) },
     });
     return withPublicLogoUrl(team);
   } catch (err) {
@@ -167,6 +174,11 @@ async function updateTeam(
     ...safeData
   } = data as UpdateTeamInput & { logoUrl?: unknown; removeLogo?: boolean };
 
+  // Convert Jalali date string to Gregorian Date before persisting
+  const foundedDate = safeData.foundedDate != null
+    ? jalaliToGregorian(safeData.foundedDate)
+    : undefined;
+
   const newLogoUrl = file ? `${TEAM_LOGO_URL_PREFIX}${file.filename}` : undefined;
   const shouldRemoveLogo = !file && removeLogo === true;
 
@@ -176,10 +188,10 @@ async function updateTeam(
       where: { id: teamId },
       data:
         newLogoUrl !== undefined
-          ? { ...safeData, logoUrl: newLogoUrl }
+          ? { ...safeData, ...(foundedDate != null && { foundedDate }), logoUrl: newLogoUrl }
           : shouldRemoveLogo
-            ? { ...safeData, logoUrl: null }
-            : safeData,
+            ? { ...safeData, ...(foundedDate != null && { foundedDate }), logoUrl: null }
+            : { ...safeData, ...(foundedDate != null && { foundedDate }) },
     });
   } catch (err) {
     if (file) removeFileIfExists(file.path);

@@ -33,7 +33,7 @@ async function createTeam(req: Request, res: Response, next: NextFunction) {
     const input = (req.validatedBody ?? req.body) as {
       organizationId: number;
       name: string;
-      foundedYear?: number;
+      foundedDate?: string;
     };
     const team = await teamsService.createTeam(
       input,
@@ -52,7 +52,7 @@ async function updateTeam(req: Request, res: Response, next: NextFunction) {
     const input = (req.validatedBody ?? req.body) as {
       organizationId?: number;
       name?: string;
-      foundedYear?: number;
+      foundedDate?: string;
       removeLogo?: boolean;
     };
     const team = await teamsService.updateTeam(
