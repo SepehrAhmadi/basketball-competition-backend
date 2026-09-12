@@ -8,7 +8,10 @@ async function getAllSeasons() {
 
   return seasons.map((season) => ({
     value: season.id,
-    label: gregorianToJalali(season.startDate),
+    label:
+      gregorianToJalali(season.startDate) +
+      " - " +
+      gregorianToJalali(season.endDate),
   }));
 }
 
