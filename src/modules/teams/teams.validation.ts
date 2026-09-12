@@ -72,7 +72,20 @@ export const teamIdParamSchema = z.object({
     .openapi({ example: 1 }),
 });
 
-export const rosterQuerySchema = z.object({
+export const rosterMemberParamSchema = z.object({
+  teamId: z.coerce
+    .number({ invalid_type_error: "The value must be a number" })
+    .int()
+    .positive()
+    .openapi({ example: 1 }),
+  memberId: z.coerce
+    .number({ invalid_type_error: "The value must be a number" })
+    .int()
+    .positive()
+    .openapi({ example: 1 }),
+});
+
+export const rosterQuerySchema = paginationQuerySchema.extend({
   seasonId: z.coerce.number().int().positive().optional(),
   role: z.enum(["COACH", "PLAYER"]).optional(),
 });
@@ -118,6 +131,7 @@ export default {
   createTeamSchema,
   updateTeamSchema,
   teamIdParamSchema,
+  rosterMemberParamSchema,
   rosterQuerySchema,
   addRosterMemberSchema,
   updateRosterMemberSchema,

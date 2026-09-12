@@ -5,9 +5,11 @@ import {
   errorResponseSchema,
   successResponseSchema,
 } from "../../../swagger/helpers.ts";
+import { paginatedResponseSchema } from "../../../shared/schemas.validation.ts";
 import {
   updateProfileSchema,
   changePasswordSchema,
+  searchUsersQuerySchema,
 } from "./user.validation.ts";
 
 const roleEnum = z
@@ -293,6 +295,54 @@ registry.registerPath({
         "application/json": {
           schema: successResponseSchema(z.null(), {
             messageExample: messages.success.user.accountDeleted,
+          }),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+  },
+});
+
+// ---- Search users ----
+
+const searchUserItemSchema = z
+  .object({
+    id: z.number().openapi({ example: 12 }),
+    fullName: z.string().openapi({ example: "Ali Rezaei" }),
+    phone: z.string().openapi({ example: "09121234567" }),
+    avatarUrl: z
+      .string()
+      .nullable()
+      .openapi({
+        example: "http://localhost:8081/uploads/avatars/12.webp",
+      }),
+  })
+  .openapi("SearchUserItem");
+
+const searchUsersResponseSchema = paginatedResponseSchema(searchUserItemSchema);
+
+registry.registerPath({
+  method: "get",
+  path: "/users/search",
+  tags: ["Users"],
+  summary: "Search users",
+  description:
+    "Paginated search for active users. Optionally filter by role (COACH, PLAYER, REFEREE) and/or a free-text query matching fullName or phone.",
+  request: {
+    query: searchUsersQuerySchema,
+  },
+  responses: {
+    "200": {
+      description: "Paginated list of matching users",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(searchUsersResponseSchema, {
+            messageExample: "Users found",
           }),
         },
       },

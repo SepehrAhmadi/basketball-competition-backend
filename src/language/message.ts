@@ -108,6 +108,9 @@ export const messages = {
     refereeLevels: {
       fetched: "درجات داوری با موفقیت دریافت شد",
     },
+    seasons: {
+      list: "لیست فصل‌ها با موفقیت دریافت شد",
+    },
     user: {
       profileFetched: "اطلاعات کاربری با موفقیت دریافت شد",
       profileUpdated: "اطلاعات کاربری با موفقیت به‌روزرسانی شد",

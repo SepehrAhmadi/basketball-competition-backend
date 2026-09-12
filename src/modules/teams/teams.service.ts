@@ -264,7 +264,7 @@ async function updateLogo(
 
 async function getRoster(
   teamId: number,
-  query: { seasonId?: number; role?: string },
+  query: { seasonId?: number; role?: string; page: number; pageSize: number },
 ) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
@@ -273,24 +273,35 @@ async function getRoster(
 
   const season = await getActiveSeasonOrThrow(query.seasonId);
 
-  const where: any = { teamId, seasonId: season.id };
+  const where: any = {
+    teamId,
+    seasonId: season.id,
+    status: "ACTIVE",
+  };
   if (query.role) {
     where.role = query.role;
   }
 
-  const members = await prisma.teamSeasonMember.findMany({
-    where,
-    include: {
-      user: {
-        select: { id: true, fullName: true, phone: true, avatarUrl: true },
+  const skip = (query.page - 1) * query.pageSize;
+
+  const [items, total] = await prisma.$transaction([
+    prisma.teamSeasonMember.findMany({
+      where,
+      skip,
+      take: query.pageSize,
+      include: {
+        user: {
+          select: { id: true, fullName: true, phone: true, avatarUrl: true },
+        },
       },
-    },
-    orderBy: { id: "asc" },
-  });
+      orderBy: { id: "asc" },
+    }),
+    prisma.teamSeasonMember.count({ where }),
+  ]);
 
   return {
     season: { id: season.id, name: season.name },
-    items: members.map((m) => ({
+    items: items.map((m) => ({
       id: m.id,
       userId: m.userId,
       role: m.role,
@@ -302,6 +313,9 @@ async function getRoster(
         avatarUrl: getPublicFileUrl(m.user.avatarUrl, baseUrl),
       },
     })),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
   };
 }
 
@@ -326,6 +340,12 @@ async function addRosterMember(
   if (!roles.includes("ADMIN")) {
     await assertOrgManager(team.organizationId, callerUserId);
   }
+
+  // Validate team season exists
+  const season = await prisma.season.findFirst({
+    where: { id: data.seasonId },
+  });
+  if (!season) throw new AppError(404, messages.error.team.seasonNotFound);
 
   // Verify target user exists and is active
   const targetUser = await prisma.user.findFirst({
@@ -353,35 +373,38 @@ async function addRosterMember(
   const jerseyNumber = data.role === "PLAYER" ? data.jerseyNumber : null;
 
   // Validate isHeadCoach: only COACH role can be head coach
-  const isHeadCoach = data.isHeadCoach ?? false;
+  const isHeadCoach = data.role === "COACH" ? (data.isHeadCoach ?? false) : false;
   if (isHeadCoach && data.role !== "COACH") {
     throw new AppError(400, messages.error.team.headCoachRequiredRole);
   }
 
-  // If setting as head coach, ensure no other head coach exists for this team/season
-  if (isHeadCoach) {
-    const existingHeadCoach = await prisma.teamSeasonMember.findFirst({
-      where: {
-        teamId,
-        seasonId: data.seasonId,
-        isHeadCoach: true,
-      },
-    });
-    if (existingHeadCoach) {
-      throw new AppError(409, messages.error.team.headCoachAlreadyExists);
-    }
-  }
-
+  // Create the roster member inside a transaction that handles head-coach demotion
   try {
-    const member = await prisma.teamSeasonMember.create({
-      data: {
-        teamId,
-        seasonId: data.seasonId,
-        userId: data.userId,
-        role: data.role,
-        jerseyNumber,
-        isHeadCoach,
-      },
+    const member = await prisma.$transaction(async (tx) => {
+      // If setting as head coach, demote any existing head coach for this team/season
+      if (isHeadCoach) {
+        await tx.teamSeasonMember.updateMany({
+          where: {
+            teamId,
+            seasonId: data.seasonId,
+            isHeadCoach: true,
+            status: "ACTIVE",
+          },
+          data: { isHeadCoach: false },
+        });
+      }
+
+      return tx.teamSeasonMember.create({
+        data: {
+          teamId,
+          seasonId: data.seasonId,
+          userId: data.userId,
+          role: data.role,
+          jerseyNumber,
+          isHeadCoach,
+          status: "ACTIVE",
+        },
+      });
     });
     return member;
   } catch (err: any) {
@@ -418,32 +441,31 @@ async function updateRosterMember(
     await assertOrgManager(team.organizationId, callerUserId);
   }
 
+  // Validate team season exists
+  const season = await prisma.season.findFirst({
+    where: { id: data.seasonId },
+  });
+  if (!season) throw new AppError(404, messages.error.team.seasonNotFound);
+
   const member = await prisma.teamSeasonMember.findFirst({
-    where: { id: memberId, teamId, seasonId: data.seasonId },
+    where: { id: memberId, teamId, seasonId: data.seasonId, status: "ACTIVE" },
   });
   if (!member) throw new AppError(404, messages.error.team.rosterMemberNotFound);
 
   const effectiveRole = data.role ?? member.role;
-  const effectiveIsHeadCoach = data.isHeadCoach ?? member.isHeadCoach;
 
-  // Validate isHeadCoach: only COACH role can be head coach
-  if (effectiveIsHeadCoach && effectiveRole !== "COACH") {
-    throw new AppError(400, messages.error.team.headCoachRequiredRole);
+  // Validate isHeadCoach: only COACH role can be head coach; force false for PLAYER
+  let effectiveIsHeadCoach: boolean;
+  if (data.isHeadCoach !== undefined) {
+    effectiveIsHeadCoach = data.isHeadCoach;
+  } else if (data.role !== undefined) {
+    effectiveIsHeadCoach = data.role === "COACH" ? member.isHeadCoach : false;
+  } else {
+    effectiveIsHeadCoach = member.isHeadCoach;
   }
 
-  // If setting as head coach, ensure no other head coach exists for this team/season
-  if (effectiveIsHeadCoach && !member.isHeadCoach) {
-    const existingHeadCoach = await prisma.teamSeasonMember.findFirst({
-      where: {
-        teamId,
-        seasonId: data.seasonId,
-        isHeadCoach: true,
-        id: { not: memberId },
-      },
-    });
-    if (existingHeadCoach) {
-      throw new AppError(409, messages.error.team.headCoachAlreadyExists);
-    }
+  if (effectiveIsHeadCoach && effectiveRole !== "COACH") {
+    throw new AppError(400, messages.error.team.headCoachRequiredRole);
   }
 
   // Determine effective jerseyNumber: only for PLAYERs, null for COACHs
@@ -456,13 +478,29 @@ async function updateRosterMember(
   }
 
   try {
-    const updated = await prisma.teamSeasonMember.update({
-      where: { id: memberId },
-      data: {
-        ...(data.role !== undefined && { role: data.role }),
-        ...(effectiveJerseyNumber !== undefined && { jerseyNumber: effectiveJerseyNumber }),
-        isHeadCoach: effectiveIsHeadCoach,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      // If becoming head coach (was not before), demote any existing head coach
+      if (effectiveIsHeadCoach && !member.isHeadCoach) {
+        await tx.teamSeasonMember.updateMany({
+          where: {
+            teamId,
+            seasonId: data.seasonId,
+            isHeadCoach: true,
+            status: "ACTIVE",
+            id: { not: memberId },
+          },
+          data: { isHeadCoach: false },
+        });
+      }
+
+      return tx.teamSeasonMember.update({
+        where: { id: memberId },
+        data: {
+          ...(data.role !== undefined && { role: data.role }),
+          ...(effectiveJerseyNumber !== undefined && { jerseyNumber: effectiveJerseyNumber }),
+          isHeadCoach: effectiveIsHeadCoach,
+        },
+      });
     });
     return updated;
   } catch (err: any) {
@@ -490,7 +528,7 @@ async function removeRosterMember(
   }
 
   const member = await prisma.teamSeasonMember.findFirst({
-    where: { id: memberId, teamId, seasonId },
+    where: { id: memberId, teamId, seasonId, status: "ACTIVE" },
   });
   if (!member) throw new AppError(404, messages.error.team.rosterMemberNotFound);
 
@@ -498,7 +536,7 @@ async function removeRosterMember(
   if (roles.includes("COACH") && !roles.includes("ADMIN") && !roles.includes("ORG_MANAGER")) {
     if (member.userId === callerUserId) {
       const coachCount = await prisma.teamSeasonMember.count({
-        where: { teamId, seasonId, role: "COACH" },
+        where: { teamId, seasonId, role: "COACH", status: "ACTIVE" },
       });
       if (coachCount <= 1) {
         throw new AppError(400, messages.error.team.cannotRemoveOwnHeadCoach);
@@ -506,7 +544,10 @@ async function removeRosterMember(
     }
   }
 
-  await prisma.teamSeasonMember.delete({ where: { id: memberId } });
+  await prisma.teamSeasonMember.update({
+    where: { id: memberId },
+    data: { status: "DELETED" },
+  });
   return member;
 }
 

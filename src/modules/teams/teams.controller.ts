@@ -103,6 +103,8 @@ async function getRoster(req: Request, res: Response, next: NextFunction) {
     const query = (req.validatedQuery ?? req.query) as {
       seasonId?: number;
       role?: string;
+      page: number;
+      pageSize: number;
     };
     const result = await teamsService.getRoster(Number(req.params.teamId), query);
     return apiResponse.sendResponse(res, 200, messages.success.team.rosterList, result);

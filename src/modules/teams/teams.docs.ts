@@ -11,6 +11,7 @@ import {
 } from "../../shared/schemas.validation.ts";
 import {
   teamIdParamSchema,
+  rosterMemberParamSchema,
   rosterQuerySchema,
   createTeamSchema,
   updateTeamSchema,
@@ -131,6 +132,9 @@ const rosterResponseSchema = z
       name: z.string().openapi({ example: "1405-1406" }),
     }),
     items: z.array(teamMemberSchema),
+    total: z.number().openapi({ example: 42 }),
+    page: z.number().openapi({ example: 1 }),
+    pageSize: z.number().openapi({ example: 20 }),
   })
   .openapi("TeamRoster");
 
@@ -489,7 +493,7 @@ registry.registerPath({
     "Update a team member's role, jersey number, or head coach status. Requires ORG_MANAGER, COACH, or ADMIN with team access. Only one head coach is allowed per team per season.",
   security: [{ bearerAuth: [] }],
   request: {
-    params: teamIdParamSchema,
+    params: rosterMemberParamSchema,
     body: {
       content: {
         "application/json": { schema: updateRosterMemberRequestSchema },
@@ -545,7 +549,7 @@ registry.registerPath({
     "Remove a member from the team roster for a given season. Requires ORG_MANAGER, COACH, or ADMIN with team access.",
   security: [{ bearerAuth: [] }],
   request: {
-    params: teamIdParamSchema,
+    params: rosterMemberParamSchema,
     body: {
       content: {
         "application/json": { schema: removeRosterMemberRequestSchema },

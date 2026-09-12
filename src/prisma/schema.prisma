@@ -43,6 +43,12 @@ enum TeamMemberRole {
   PLAYER
 }
 
+enum TeamMemberStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
 enum CoachDegree {
   LEVEL_1
   LEVEL_2
@@ -187,13 +193,15 @@ model Season {
 }
 
 model TeamSeasonMember {
-  id           Int            @id @default(autoincrement())
-  teamId       Int            @map("team_id")
-  seasonId     Int            @map("season_id")
-  userId       Int            @map("user_id")
+  id           Int                @id @default(autoincrement())
+  teamId       Int                @map("team_id")
+  seasonId     Int                @map("season_id")
+  userId       Int                @map("user_id")
   role         TeamMemberRole
-  jerseyNumber Int?           @map("jersey_number")
-  createdAt    DateTime       @default(now()) @map("created_at")
+  jerseyNumber Int?               @map("jersey_number")
+  isHeadCoach  Boolean            @default(false) @map("is_head_coach")
+  status       TeamMemberStatus   @default(ACTIVE)
+  createdAt    DateTime           @default(now()) @map("created_at")
 
   team   Team   @relation(fields: [teamId], references: [id])
   season Season @relation(fields: [seasonId], references: [id])
