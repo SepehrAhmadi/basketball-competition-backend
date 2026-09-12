@@ -378,6 +378,29 @@ async function addRosterMember(
     throw new AppError(400, messages.error.team.headCoachRequiredRole);
   }
 
+  // Check for a soft-deleted record with the same key — reactivate instead of creating
+  const existingDeletedMember = await prisma.teamSeasonMember.findFirst({
+    where: {
+      teamId,
+      seasonId: data.seasonId,
+      userId: data.userId,
+      role: data.role,
+      status: "DELETED",
+    },
+  });
+
+  if (existingDeletedMember) {
+    const reactivated = await prisma.teamSeasonMember.update({
+      where: { id: existingDeletedMember.id },
+      data: {
+        status: "ACTIVE",
+        jerseyNumber,
+        isHeadCoach,
+      },
+    });
+    return reactivated;
+  }
+
   // Create the roster member inside a transaction that handles head-coach demotion
   try {
     const member = await prisma.$transaction(async (tx) => {
