@@ -569,7 +569,7 @@ async function removeRosterMember(
 
   await prisma.teamSeasonMember.update({
     where: { id: memberId },
-    data: { status: "DELETED" },
+    data: { status: "DELETED", jerseyNumber: null, isHeadCoach: false },
   });
   return member;
 }
