@@ -6,10 +6,13 @@ import {
   successResponseSchema,
 } from "../../../swagger/helpers.ts";
 import { paginatedResponseSchema } from "../../../shared/schemas.validation.ts";
+import { idParamSchema } from "../../../shared/schemas.validation.ts";
 import {
   updateProfileSchema,
   changePasswordSchema,
   searchUsersQuerySchema,
+  updateUserByAdminSchema,
+  listUsersQuerySchema,
 } from "./user.validation.ts";
 
 const roleEnum = z
@@ -26,10 +29,7 @@ export const userProfileSchema = z
       description: "Absolute public URL built from PROJECT_URL",
       example: "http://localhost:8081/uploads/avatars/12.webp",
     }),
-    birthDate: z
-      .string()
-      .nullable()
-      .openapi({ example: "1381/05/20" }),
+    birthDate: z.string().nullable().openapi({ example: "1381/05/20" }),
     nationalId: z.string().nullable().openapi({ example: "0012345678" }),
     status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"]).openapi({
       example: "ACTIVE",
@@ -57,6 +57,7 @@ const avatarUploadRequestSchema = z
   .openapi("AvatarUploadRequest");
 
 const unauthorizedError = errorResponseSchema(401, "Unauthorized");
+const forbiddenError = errorResponseSchema(403, "Forbidden");
 const notFoundError = errorResponseSchema(404, messages.error.user.notFound);
 const conflictError = errorResponseSchema(
   409,
@@ -103,7 +104,7 @@ registry.registerPath({
   tags: ["Users"],
   summary: "Update own profile",
   description:
-    "Updates only self-service editable fields (fullName, phone, email, birthDate, nationalId). Roles, status, and passwords cannot be changed here.",
+    "Updates self-service editable fields (fullName, phone, email, birthDate, nationalId) and synchronizes roles with the provided array. Status and passwords cannot be changed here.",
   request: {
     body: {
       content: { "application/json": { schema: updateProfileSchema } },
@@ -315,12 +316,9 @@ const searchUserItemSchema = z
     id: z.number().openapi({ example: 12 }),
     fullName: z.string().openapi({ example: "Ali Rezaei" }),
     phone: z.string().openapi({ example: "09121234567" }),
-    avatarUrl: z
-      .string()
-      .nullable()
-      .openapi({
-        example: "http://localhost:8081/uploads/avatars/12.webp",
-      }),
+    avatarUrl: z.string().nullable().openapi({
+      example: "http://localhost:8081/uploads/avatars/12.webp",
+    }),
   })
   .openapi("SearchUserItem");
 
@@ -351,6 +349,147 @@ registry.registerPath({
       description: "Missing or invalid access token",
       content: {
         "application/json": { schema: unauthorizedError },
+      },
+    },
+  },
+});
+
+// ---- Admin user management ----
+
+const adminUsersResponseSchema = paginatedResponseSchema(userProfileSchema);
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/users",
+  tags: ["Users"],
+  summary: "List users (admin)",
+  description:
+    "Admin-only paginated user list for the user-management screen. Supports page/pageSize plus optional query, role, and status filters. Unlike /users/search, inactive/suspended/deleted users are included unless filtered.",
+  request: {
+    query: listUsersQuerySchema,
+  },
+  responses: {
+    "200": {
+      description: "Paginated list of users",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(adminUsersResponseSchema, {
+            messageExample: messages.success.user.profileFetched,
+          }),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "Admin role required",
+      content: {
+        "application/json": { schema: forbiddenError },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/users/{id}",
+  tags: ["Users"],
+  summary: "Get user by id (admin)",
+  description:
+    "Returns one user's safe profile including roles. Never includes password hashes or refresh tokens.",
+  request: {
+    params: idParamSchema,
+  },
+  responses: {
+    "200": {
+      description: "User profile",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(userProfileSchema, {
+            messageExample: messages.success.user.profileFetched,
+          }),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "Admin role required",
+      content: {
+        "application/json": { schema: forbiddenError },
+      },
+    },
+    "404": {
+      description: "User not found",
+      content: {
+        "application/json": { schema: notFoundError },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/admin/users/{id}",
+  tags: ["Users"],
+  summary: "Update user (admin)",
+  description:
+    "Admin-only edit of another user's profile fields and roles. The roles array is treated as the complete selection and synchronized exactly.",
+  request: {
+    params: idParamSchema,
+    body: {
+      content: { "application/json": { schema: updateUserByAdminSchema } },
+    },
+  },
+  responses: {
+    "200": {
+      description: "User updated",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(userProfileSchema, {
+            messageExample: messages.success.user.profileUpdated,
+          }),
+        },
+      },
+    },
+    "400": {
+      description: "Validation error",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(400, "Validation failed"),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "Admin role required",
+      content: {
+        "application/json": { schema: forbiddenError },
+      },
+    },
+    "404": {
+      description: "User not found",
+      content: {
+        "application/json": { schema: notFoundError },
+      },
+    },
+    "409": {
+      description: "Phone number or email already in use",
+      content: {
+        "application/json": { schema: conflictError },
       },
     },
   },

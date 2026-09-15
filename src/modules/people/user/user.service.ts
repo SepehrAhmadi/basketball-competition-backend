@@ -5,7 +5,13 @@ import { fileURLToPath } from "url";
 import prisma from "../../../config/db.config.ts";
 import { messages } from "../../../language/message.ts";
 import AppError from "../../../utils/appError.ts";
-import type { UpdateProfileInput, UserProfile } from "./user.types.ts";
+import type {
+  ListUsersQuery,
+  UpdateProfileInput,
+  UpdateUserByAdminInput,
+  UserProfile,
+} from "./user.types.ts";
+import type { Role } from "../../../prisma/generated/prisma/enums.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
 import { gregorianToJalali, jalaliToGregorian } from "../../../utils/date.util.ts";
 
@@ -73,12 +79,21 @@ async function updateOwnProfile(
   userId: number,
   data: UpdateProfileInput,
 ): Promise<UserProfile> {
+  return applyProfileUpdate(userId, data);
+}
+
+type ProfileUpdateData = UpdateProfileInput | UpdateUserByAdminInput;
+
+async function applyProfileUpdate(
+  userId: number,
+  data: ProfileUpdateData,
+): Promise<UserProfile> {
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) {
     throw new AppError(404, messages.error.user.notFound);
   }
 
-  // Explicit allow-list — roles/status/passwordHash can never be set here.
+  // Explicit allow-list — status/passwordHash can never be set here.
   const updateData: {
     fullName?: string;
     phone?: string;
@@ -94,7 +109,9 @@ if (data.birthDate !== undefined) {
   }
   if (data.nationalId !== undefined) updateData.nationalId = data.nationalId;
 
-  if (Object.keys(updateData).length === 0) {
+  const roles = data.roles !== undefined ? [...new Set(data.roles)] : undefined;
+
+  if (Object.keys(updateData).length === 0 && roles === undefined) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: { roles: true },
@@ -122,18 +139,114 @@ if (data.birthDate !== undefined) {
   }
 
   try {
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      include: { roles: true },
+    const user = await prisma.$transaction(async (tx) => {
+      if (Object.keys(updateData).length > 0) {
+        await tx.user.update({ where: { id: userId }, data: updateData });
+      }
+      if (roles !== undefined) {
+        await syncUserRoles(tx, userId, roles);
+      }
+      return tx.user.findUnique({
+        where: { id: userId },
+        include: { roles: true },
+      });
     });
-    return toUserProfile(user);
+    return toUserProfile(user!);
   } catch (err: any) {
     if (err?.code === "P2002") {
       throw new AppError(409, messages.error.auth.phoneOrEmailInUse);
     }
     throw err;
   }
+}
+
+type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+async function syncUserRoles(
+  tx: TransactionClient,
+  userId: number,
+  roles: Role[],
+): Promise<void> {
+  const current = await tx.userRole.findMany({
+    where: { userId },
+    select: { role: true },
+  });
+  const currentRoles = new Set(current.map((r) => r.role));
+  const nextRoles = new Set(roles);
+
+  const toRemove = [...currentRoles].filter((role) => !nextRoles.has(role));
+  const toAdd = [...nextRoles].filter((role) => !currentRoles.has(role));
+
+  if (toRemove.length > 0) {
+    await tx.userRole.deleteMany({
+      where: { userId, role: { in: toRemove } },
+    });
+  }
+  if (toAdd.length > 0) {
+    await tx.userRole.createMany({
+      data: toAdd.map((role) => ({ userId, role })),
+    });
+  }
+}
+
+async function updateUserByAdmin(
+  userId: number,
+  data: UpdateUserByAdminInput,
+): Promise<UserProfile> {
+  return applyProfileUpdate(userId, data);
+}
+
+async function getUserById(userId: number): Promise<UserProfile> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { roles: true },
+  });
+  if (!user) {
+    throw new AppError(404, messages.error.user.notFound);
+  }
+  return toUserProfile(user);
+}
+
+async function listUsers(query: ListUsersQuery) {
+  const where: {
+    roles?: { some: { role: Role } };
+    status?: ListUsersQuery["status"];
+    OR?: { fullName?: { contains: string }; phone?: { contains: string }; email?: { contains: string } }[];
+  } = {};
+
+  if (query.role) {
+    where.roles = { some: { role: query.role } };
+  }
+
+  if (query.status) {
+    where.status = query.status;
+  }
+
+  if (query.query) {
+    where.OR = [
+      { fullName: { contains: query.query } },
+      { phone: { contains: query.query } },
+      { email: { contains: query.query } },
+    ];
+  }
+
+  const [users, total] = await prisma.$transaction([
+    prisma.user.findMany({
+      where,
+      include: { roles: true },
+      orderBy: { createdAt: "desc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return {
+    items: users.map((user) => toUserProfile(user)),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
+  };
 }
 
 async function uploadOwnAvatar(
@@ -266,4 +379,7 @@ export default {
   changeOwnPassword,
   deleteOwnAccount,
   searchUsers,
+  getUserById,
+  listUsers,
+  updateUserByAdmin,
 };

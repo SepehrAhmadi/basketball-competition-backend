@@ -6,6 +6,24 @@ export interface UpdateProfileInput {
   email?: string;
   birthDate?: string | null;
   nationalId?: string;
+  roles?: Role[];
+}
+
+export interface UpdateUserByAdminInput {
+  fullName?: string;
+  phone?: string;
+  email?: string;
+  birthDate?: string | null;
+  nationalId?: string;
+  roles?: Role[];
+}
+
+export interface ListUsersQuery {
+  page: number;
+  pageSize: number;
+  query?: string;
+  role?: Role;
+  status?: UserStatus;
 }
 
 export interface ChangePasswordInput {
