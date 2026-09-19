@@ -16,6 +16,7 @@ export const idParamSchema = z.object({
 export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  total: z.coerce.number().int().min(0).optional(),
 });
 
 // Generic paginated list envelope, reused by every module's list schema.

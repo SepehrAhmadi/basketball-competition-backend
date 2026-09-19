@@ -91,7 +91,6 @@ export const updateUserByAdminSchema = z
     birthDate: jalaliBirthDate.openapi({ example: "1381/05/20" }),
     nationalId: z
       .string()
-      .min(10)
       .max(10)
       .optional()
       .openapi({ example: "0012345678" }),
