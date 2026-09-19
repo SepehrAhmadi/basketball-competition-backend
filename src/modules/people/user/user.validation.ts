@@ -99,6 +99,15 @@ export const updateUserByAdminSchema = z
   .partial()
   .strict();
 
+export const adminResetPasswordSchema = z
+  .object({
+    newPassword: z
+      .string()
+      .min(8, messages.error.auth.passwordMinLength)
+      .openapi({ format: "password", example: "newPassword123" }),
+  })
+  .strict();
+
 export const listUsersQuerySchema = paginationQuerySchema.extend({
   query: z.string().optional(),
   role: roleSchema.optional(),
@@ -111,4 +120,5 @@ export default {
   searchUsersQuerySchema,
   updateUserByAdminSchema,
   listUsersQuerySchema,
+  adminResetPasswordSchema,
 };

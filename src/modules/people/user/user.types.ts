@@ -31,6 +31,10 @@ export interface ChangePasswordInput {
   newPassword: string;
 }
 
+export interface AdminResetPasswordInput {
+  newPassword: string;
+}
+
 export interface UserProfile {
   id: number;
   fullName: string;

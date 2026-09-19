@@ -13,6 +13,7 @@ import {
   searchUsersQuerySchema,
   updateUserByAdminSchema,
   listUsersQuerySchema,
+  adminResetPasswordSchema,
 } from "./user.validation.ts";
 
 const roleEnum = z
@@ -490,6 +491,59 @@ registry.registerPath({
       description: "Phone number or email already in use",
       content: {
         "application/json": { schema: conflictError },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/admin/users/{id}/password",
+  tags: ["Users"],
+  summary: "Reset user password (admin)",
+  description:
+    "Admin-only endpoint to set a new password for any user without requiring the current password. Clears the user's refresh token, forcing re-login.",
+  request: {
+    params: idParamSchema,
+    body: {
+      content: { "application/json": { schema: adminResetPasswordSchema } },
+    },
+  },
+  responses: {
+    "200": {
+      description: "Password reset successfully",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(z.null(), {
+            messageExample: messages.success.user.passwordChanged,
+          }),
+        },
+      },
+    },
+    "400": {
+      description: "Validation error",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(400, "Validation failed"),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "Admin role required",
+      content: {
+        "application/json": { schema: forbiddenError },
+      },
+    },
+    "404": {
+      description: "User not found",
+      content: {
+        "application/json": { schema: notFoundError },
       },
     },
   },

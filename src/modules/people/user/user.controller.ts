@@ -4,6 +4,7 @@ import { messages } from "../../../language/message.ts";
 import apiResponse from "../../../utils/apiResponse.ts";
 import AppError from "../../../utils/appError.ts";
 import type {
+  AdminResetPasswordInput,
   ChangePasswordInput,
   ListUsersQuery,
   UpdateProfileInput,
@@ -139,6 +140,17 @@ async function updateUserByAdmin(req: Request, res: Response, next: NextFunction
   }
 }
 
+async function resetPasswordByAdmin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const params = (req.validatedParams ?? req.params) as { id: number };
+    const input = (req.validatedBody ?? req.body) as AdminResetPasswordInput;
+    await userService.resetUserPasswordByAdmin(params.id, input.newPassword);
+    return apiResponse.sendResponse(res, 200, messages.success.user.passwordChanged);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   getMe,
   updateMe,
@@ -150,4 +162,5 @@ export default {
   getUsers,
   getUserById,
   updateUserByAdmin,
+  resetPasswordByAdmin,
 };

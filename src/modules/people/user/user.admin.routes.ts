@@ -31,4 +31,11 @@ router.put(
   userController.updateUserByAdmin,
 );
 
+router.patch(
+  "/:id/password",
+  validate(idParamSchema, "params"),
+  validate(userValidation.adminResetPasswordSchema),
+  userController.resetPasswordByAdmin,
+);
+
 export default router;

@@ -371,6 +371,22 @@ async function searchUsers(searchQuery: SearchUsersQuery) {
   };
 }
 
+async function resetUserPasswordByAdmin(
+  userId: number,
+  newPassword: string,
+): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new AppError(404, messages.error.user.notFound);
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash, refreshToken: null },
+  });
+}
+
 export default {
   getOwnProfile,
   updateOwnProfile,
@@ -382,4 +398,5 @@ export default {
   getUserById,
   listUsers,
   updateUserByAdmin,
+  resetUserPasswordByAdmin,
 };
