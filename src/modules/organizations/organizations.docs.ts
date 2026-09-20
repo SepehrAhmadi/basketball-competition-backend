@@ -1,15 +1,15 @@
 import { z } from "zod";
-import { messages } from "../../../language/message.ts";
-import { registry } from "../../../swagger/registry.ts";
+import { messages } from "../../language/message.ts";
+import { registry } from "../../swagger/registry.ts";
 import {
   errorResponseSchema,
   successResponseSchema,
-} from "../../../swagger/helpers.ts";
+} from "../../swagger/helpers.ts";
 import {
   idParamSchema,
   paginatedResponseSchema,
   paginationQuerySchema,
-} from "../../../shared/schemas.validation.ts";
+} from "../../shared/schemas.validation.ts";
 import { organizationListQuerySchema } from "./organizations.validation.ts";
 
 const organizationLogoField = z.string().openapi({

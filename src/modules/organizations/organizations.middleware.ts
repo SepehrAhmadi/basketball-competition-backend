@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
-import prisma from "../../../config/db.config.ts";
-import AppError from "../../../utils/appError.ts";
-import { messages } from "../../../language/message.ts";
+import prisma from "../../config/db.config.ts";
+import AppError from "../../utils/appError.ts";
+import { messages } from "../../language/message.ts";
 
 async function verifyOrgAccess(req: Request, res: Response, next: NextFunction) {
   try {

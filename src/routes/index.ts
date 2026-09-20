@@ -5,7 +5,7 @@ import adminUsersRoutes from "../modules/people/admin-users/admin-users.routes.t
 import playersRoutes from "../modules/people/players/players.routes.ts";
 import coachesRoutes from "../modules/people/coaches/coaches.routes.ts";
 import refereesRoutes from "../modules/people/referees/referees.routes.ts";
-import organizationsRoutes from "../modules/competition/organizations/organizations.routes.ts";
+import organizationsRoutes from "../modules/organizations/organizations.routes.ts";
 import teamsRoutes from "../modules/teams/teams.routes.ts";
 import rolesRoutes from "../modules/shared/roles/roles.routes.ts";
 import coachDegreesRoutes from "../modules/shared/coach-degrees/coach-degrees.routes.ts";

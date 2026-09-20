@@ -1,10 +1,10 @@
 import { Router } from "express";
-import validate from "../../../middleware/validate.ts";
-import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
-import verifyRole from "../../../middleware/auth/verifyRole.middleware.ts";
-import createUploader from "../../../middleware/upload/createUploader.ts";
-import uploadConfig from "../../../config/upload.config.ts";
-import { idParamSchema } from "../../../shared/schemas.validation.ts";
+import validate from "../../middleware/validate.ts";
+import verifyJWT from "../../middleware/auth/verifyJWT.middleware.ts";
+import verifyRole from "../../middleware/auth/verifyRole.middleware.ts";
+import createUploader from "../../middleware/upload/createUploader.ts";
+import uploadConfig from "../../config/upload.config.ts";
+import { idParamSchema } from "../../shared/schemas.validation.ts";
 import organizationsValidation from "./organizations.validation.ts";
 import verifyOrgAccess from "./organizations.middleware.ts";
 import organizationsController from "./organizations.controller.ts";

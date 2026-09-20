@@ -3,8 +3,8 @@ import organizationsService, {
   type CreateOrganizationInput,
   type UpdateOrganizationInput,
 } from "./organizations.service.ts";
-import { messages } from "../../../language/message.ts";
-import apiResponse from "../../../utils/apiResponse.ts";
+import { messages } from "../../language/message.ts";
+import apiResponse from "../../utils/apiResponse.ts";
 
 async function getAll(
   req: Request,

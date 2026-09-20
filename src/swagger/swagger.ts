@@ -7,7 +7,7 @@ import "../modules/people/admin-users/admin-users.docs.ts";
 import "../modules/people/players/players.docs.ts";
 import "../modules/people/coaches/coaches.docs.ts";
 import "../modules/people/referees/referees.docs.ts";
-import "../modules/competition/organizations/organizations.docs.ts";
+import "../modules/organizations/organizations.docs.ts";
 import "../modules/teams/teams.docs.ts";
 import "../modules/shared/seasons/seasons.docs.ts";
 import "../modules/shared/roles/roles.docs.ts";

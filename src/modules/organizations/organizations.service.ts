@@ -1,17 +1,17 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import prisma from "../../../config/db.config.ts";
-import AppError from "../../../utils/appError.ts";
-import { messages } from "../../../language/message.ts";
-import getPublicFileUrl from "../../../utils/getFileUrl.ts";
+import prisma from "../../config/db.config.ts";
+import AppError from "../../utils/appError.ts";
+import { messages } from "../../language/message.ts";
+import getPublicFileUrl from "../../utils/getFileUrl.ts";
 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // resolves to src/uploads — same root used by createUploader
-const UPLOADS_ROOT = path.join(__dirname, "..", "..", "..", "uploads");
+const UPLOADS_ROOT = path.join(__dirname, "..", "..", "uploads");
 const ORGANIZATION_LOGO_URL_PREFIX = "/uploads/organizations/";
 
 export interface CreateOrganizationInput {

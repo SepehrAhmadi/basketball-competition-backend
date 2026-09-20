@@ -1,9 +1,9 @@
 // Must run before any schema below calls .openapi() — this file is imported
 // directly by route files, which can bypass server.ts (e.g. tests).
-import "../../../swagger/zod-extend.ts";
+import "../../swagger/zod-extend.ts";
 import { z } from "zod";
-import { messages } from "../../../language/message.ts";
-import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
+import { messages } from "../../language/message.ts";
+import { paginationQuerySchema } from "../../shared/schemas.validation.ts";
 
 // Multipart note: multer parses text fields into req.body (all strings) and the
 // logo file into req.file. File validation belongs to Multer — logoUrl is
