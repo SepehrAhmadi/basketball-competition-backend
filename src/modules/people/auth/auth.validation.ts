@@ -20,15 +20,6 @@ const jalaliBirthDate = z
 
 const selfRegisterRoles = ["ORG_MANAGER", "PLAYER", "COACH", "REFEREE"] as const;
 
-const adminAssignableRoles = [
-  "ADMIN",
-  "ORG_MANAGER",
-  "COACH",
-  "PLAYER",
-  "REFEREE",
-  "PUBLIC",
-] as const;
-
 export const registerSchema = z.object({
   fullName: z
     .string()
@@ -74,34 +65,4 @@ export const loginSchema = z.object({
     .openapi({ format: "password", example: "secret123" }),
 });
 
-export const adminCreateUserSchema = z.object({
-  fullName: z
-    .string()
-    .min(1, messages.error.auth.fullNameRequired)
-    .openapi({ example: "Ali Rezaei" }),
-  phone: z
-    .string()
-    .min(1, messages.error.auth.phoneRequired)
-    .openapi({ example: "09121234567" }),
-  email: z
-    .string()
-    .email(messages.error.auth.invalidEmail)
-    .openapi({ example: "ali@example.com" }),
-  birthDate: jalaliBirthDate.openapi({ example: "1381/05/20" }),
-  nationalId: z
-    .string()
-    .min(10)
-    .max(10)
-    .optional()
-    .openapi({ example: "0012345678" }),
-  password: z
-    .string()
-    .min(8, messages.error.auth.passwordMinLength)
-    .openapi({ format: "password", example: "secret123" }),
-  roles: z
-    .array(z.enum(adminAssignableRoles))
-    .min(1, messages.error.auth.atLeastOneRoleRequired)
-    .openapi({ example: ["COACH"] }),
-});
-
-export default { registerSchema, loginSchema, adminCreateUserSchema };
+export default { registerSchema, loginSchema };

@@ -19,7 +19,7 @@ const jalaliBirthDate = z
     }
   })(), "Birth date must be a valid Jalali date in YYYY/MM/DD format.");
 
-export const allRoles = [
+const adminAssignableRoles = [
   "ADMIN",
   "ORG_MANAGER",
   "COACH",
@@ -28,9 +28,45 @@ export const allRoles = [
   "PUBLIC",
 ] as const;
 
-export const roleSchema = z.enum(allRoles).openapi({ example: "PLAYER" });
+export const roleSchema = z.enum(adminAssignableRoles).openapi({ example: "PLAYER" });
 
-export const updateProfileSchema = z
+export const adminCreateUserSchema = z.object({
+  fullName: z
+    .string()
+    .min(1, messages.error.auth.fullNameRequired)
+    .openapi({ example: "Ali Rezaei" }),
+  phone: z
+    .string()
+    .min(1, messages.error.auth.phoneRequired)
+    .openapi({ example: "09121234567" }),
+  email: z
+    .string()
+    .email(messages.error.auth.invalidEmail)
+    .openapi({ example: "ali@example.com" }),
+  birthDate: jalaliBirthDate.openapi({ example: "1381/05/20" }),
+  nationalId: z
+    .string()
+    .min(10)
+    .max(10)
+    .optional()
+    .openapi({ example: "0012345678" }),
+  password: z
+    .string()
+    .min(8, messages.error.auth.passwordMinLength)
+    .openapi({ format: "password", example: "secret123" }),
+  roles: z
+    .array(z.enum(adminAssignableRoles))
+    .min(1, messages.error.auth.atLeastOneRoleRequired)
+    .openapi({ example: ["COACH"] }),
+});
+
+export const listUsersQuerySchema = paginationQuerySchema.extend({
+  query: z.string().optional(),
+  role: roleSchema.optional(),
+  status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"]).optional(),
+});
+
+export const updateUserByAdminSchema = z
   .object({
     fullName: z
       .string()
@@ -47,21 +83,16 @@ export const updateProfileSchema = z
     birthDate: jalaliBirthDate.openapi({ example: "1381/05/20" }),
     nationalId: z
       .string()
-      .min(10)
       .max(10)
       .optional()
       .openapi({ example: "0012345678" }),
-    roles: z.array(roleSchema).optional().openapi({ example: ["PLAYER"] }),
+    roles: z.array(roleSchema).optional().openapi({ example: ["COACH", "PLAYER"] }),
   })
   .partial()
   .strict();
 
-export const changePasswordSchema = z
+export const adminResetPasswordSchema = z
   .object({
-    currentPassword: z
-      .string()
-      .min(1, messages.error.auth.passwordRequired)
-      .openapi({ format: "password", example: "oldPassword123" }),
     newPassword: z
       .string()
       .min(8, messages.error.auth.passwordMinLength)
@@ -69,13 +100,9 @@ export const changePasswordSchema = z
   })
   .strict();
 
-export const searchUsersQuerySchema = paginationQuerySchema.extend({
-  role: z.enum(["COACH", "PLAYER", "REFEREE"]).optional(),
-  query: z.string().optional(),
-});
-
 export default {
-  updateProfileSchema,
-  changePasswordSchema,
-  searchUsersQuerySchema,
+  adminCreateUserSchema,
+  listUsersQuerySchema,
+  updateUserByAdminSchema,
+  adminResetPasswordSchema,
 };

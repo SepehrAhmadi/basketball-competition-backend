@@ -6,7 +6,6 @@ import prisma from "../../../config/db.config.ts";
 import { messages } from "../../../language/message.ts";
 import AppError from "../../../utils/appError.ts";
 import type {
-  ListUsersQuery,
   UpdateProfileInput,
   UpdateUserByAdminInput,
   UserProfile,
@@ -22,7 +21,7 @@ const __dirname = path.dirname(__filename);
 const UPLOADS_ROOT = path.join(__dirname, "..", "..", "..", "uploads");
 const AVATAR_URL_PREFIX = "/uploads/avatars/";
 
-function toUserProfile(user: {
+export function toUserProfile(user: {
   id: number;
   fullName: string;
   phone: string;
@@ -84,7 +83,7 @@ async function updateOwnProfile(
 
 type ProfileUpdateData = UpdateProfileInput | UpdateUserByAdminInput;
 
-async function applyProfileUpdate(
+export async function applyProfileUpdate(
   userId: number,
   data: ProfileUpdateData,
 ): Promise<UserProfile> {
@@ -189,13 +188,6 @@ async function syncUserRoles(
   }
 }
 
-async function updateUserByAdmin(
-  userId: number,
-  data: UpdateUserByAdminInput,
-): Promise<UserProfile> {
-  return applyProfileUpdate(userId, data);
-}
-
 async function getUserById(userId: number): Promise<UserProfile> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -205,48 +197,6 @@ async function getUserById(userId: number): Promise<UserProfile> {
     throw new AppError(404, messages.error.user.notFound);
   }
   return toUserProfile(user);
-}
-
-async function listUsers(query: ListUsersQuery) {
-  const where: {
-    roles?: { some: { role: Role } };
-    status?: ListUsersQuery["status"];
-    OR?: { fullName?: { contains: string }; phone?: { contains: string }; email?: { contains: string } }[];
-  } = {};
-
-  if (query.role) {
-    where.roles = { some: { role: query.role } };
-  }
-
-  if (query.status) {
-    where.status = query.status;
-  }
-
-  if (query.query) {
-    where.OR = [
-      { fullName: { contains: query.query } },
-      { phone: { contains: query.query } },
-      { email: { contains: query.query } },
-    ];
-  }
-
-  const [users, total] = await prisma.$transaction([
-    prisma.user.findMany({
-      where,
-      include: { roles: true },
-      orderBy: { createdAt: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-    }),
-    prisma.user.count({ where }),
-  ]);
-
-  return {
-    items: users.map((user) => toUserProfile(user)),
-    total,
-    page: query.page,
-    pageSize: query.pageSize,
-  };
 }
 
 async function uploadOwnAvatar(
@@ -371,22 +321,6 @@ async function searchUsers(searchQuery: SearchUsersQuery) {
   };
 }
 
-async function resetUserPasswordByAdmin(
-  userId: number,
-  newPassword: string,
-): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    throw new AppError(404, messages.error.user.notFound);
-  }
-
-  const passwordHash = await bcrypt.hash(newPassword, 10);
-  await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash, refreshToken: null },
-  });
-}
-
 export default {
   getOwnProfile,
   updateOwnProfile,
@@ -396,7 +330,4 @@ export default {
   deleteOwnAccount,
   searchUsers,
   getUserById,
-  listUsers,
-  updateUserByAdmin,
-  resetUserPasswordByAdmin,
 };

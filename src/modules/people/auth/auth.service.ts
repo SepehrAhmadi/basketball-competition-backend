@@ -3,7 +3,6 @@ import jwt from "jsonwebtoken";
 import prisma from "../../../config/db.config.ts";
 import { messages } from "../../../language/message.ts";
 import AppError from "../../../utils/appError.ts";
-import findOrFail from "../../../utils/findOrFail.ts";
 import userService from "../user/user.service.ts";
 import type { Role } from "../../../prisma/generated/prisma/enums.ts";
 import { jalaliToGregorian } from "../../../utils/date.util.ts";
@@ -173,47 +172,6 @@ async function deleteOwnAccount(userId: number) {
   return userService.deleteOwnAccount(userId);
 }
 
-interface AdminCreateUserInput {
-  fullName: string;
-  phone: string;
-  email: string;
-  password: string;
-  birthDate?: string | null;
-  nationalId?: string;
-  roles: Role[];
-}
-
-async function adminCreateUser(input: AdminCreateUserInput) {
-  const duplicate = await prisma.user.findFirst({
-    where: { OR: [{ phone: input.phone }, { email: input.email }] },
-  });
-  if (duplicate) {
-    throw new AppError(409, messages.error.auth.phoneOrEmailInUse);
-  }
-
-  const passwordHash = await bcrypt.hash(input.password, 10);
-
-  return prisma.user.create({
-    data: {
-      fullName: input.fullName,
-      phone: input.phone,
-      email: input.email,
-      passwordHash,
-      birthDate: input.birthDate == null ? input.birthDate : jalaliToGregorian(input.birthDate),
-      nationalId: input.nationalId,
-      roles: { create: input.roles.map((role) => ({ role })) },
-    },
-  });
-}
-
-async function adminDeleteUser(targetUserId: number) {
-  await findOrFail(prisma.user, targetUserId, messages.error.auth.userNotFound);
-  return prisma.user.update({
-    where: { id: targetUserId },
-    data: { status: "DELETED", refreshToken: null },
-  });
-}
-
 export default {
   register,
   login,
@@ -221,6 +179,4 @@ export default {
   refreshAccessToken,
   logout,
   deleteOwnAccount,
-  adminCreateUser,
-  adminDeleteUser,
 };

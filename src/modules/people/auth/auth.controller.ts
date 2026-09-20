@@ -76,24 +76,6 @@ async function deleteAccount(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-async function adminCreateUser(req: Request, res: Response, next: NextFunction) {
-  try {
-    const user = await authService.adminCreateUser(req.validatedBody ?? req.body);
-    return apiResponse.sendResponse(res, 201, messages.success.auth.userCreated, { id: user.id });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function adminDeleteUser(req: Request, res: Response, next: NextFunction) {
-  try {
-    await authService.adminDeleteUser(Number(req.params.id));
-    return apiResponse.sendResponse(res, 200, messages.success.auth.userDeleted);
-  } catch (err) {
-    next(err);
-  }
-}
-
 export default {
   register,
   login,
@@ -101,6 +83,4 @@ export default {
   refreshToken,
   logout,
   deleteAccount,
-  adminCreateUser,
-  adminDeleteUser,
 };

@@ -4,11 +4,8 @@ import { messages } from "../../../language/message.ts";
 import apiResponse from "../../../utils/apiResponse.ts";
 import AppError from "../../../utils/appError.ts";
 import type {
-  AdminResetPasswordInput,
   ChangePasswordInput,
-  ListUsersQuery,
   UpdateProfileInput,
-  UpdateUserByAdminInput,
 } from "./user.types.ts";
 
 const isProd = process.env.NODE_ENV === "production";
@@ -109,48 +106,6 @@ async function searchUsers(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-async function getUsers(req: Request, res: Response, next: NextFunction) {
-  try {
-    const query = (req.validatedQuery ?? req.query) as ListUsersQuery;
-    const result = await userService.listUsers(query);
-    return apiResponse.sendResponse(res, 200, messages.success.user.profileFetched, result);
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function getUserById(req: Request, res: Response, next: NextFunction) {
-  try {
-    const params = (req.validatedParams ?? req.params) as { id: number };
-    const profile = await userService.getUserById(params.id);
-    return apiResponse.sendResponse(res, 200, messages.success.user.profileFetched, profile);
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function updateUserByAdmin(req: Request, res: Response, next: NextFunction) {
-  try {
-    const params = (req.validatedParams ?? req.params) as { id: number };
-    const input = (req.validatedBody ?? req.body) as UpdateUserByAdminInput;
-    const profile = await userService.updateUserByAdmin(params.id, input);
-    return apiResponse.sendResponse(res, 200, messages.success.user.profileUpdated, profile);
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function resetPasswordByAdmin(req: Request, res: Response, next: NextFunction) {
-  try {
-    const params = (req.validatedParams ?? req.params) as { id: number };
-    const input = (req.validatedBody ?? req.body) as AdminResetPasswordInput;
-    await userService.resetUserPasswordByAdmin(params.id, input.newPassword);
-    return apiResponse.sendResponse(res, 200, messages.success.user.passwordChanged);
-  } catch (err) {
-    next(err);
-  }
-}
-
 export default {
   getMe,
   updateMe,
@@ -159,8 +114,4 @@ export default {
   changePassword,
   deleteMe,
   searchUsers,
-  getUsers,
-  getUserById,
-  updateUserByAdmin,
-  resetPasswordByAdmin,
 };

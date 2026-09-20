@@ -5,11 +5,9 @@ import {
   errorResponseSchema,
   successResponseSchema,
 } from "../../../swagger/helpers.ts";
-import { idParamSchema } from "../../../shared/schemas.validation.ts";
 import {
   registerSchema,
   loginSchema,
-  adminCreateUserSchema,
 } from "./auth.validation.ts";
 
 // ---- response models ----
@@ -284,105 +282,6 @@ registry.registerPath({
       description: "Missing or invalid access token",
       content: {
         "application/json": { schema: unauthorizedError },
-      },
-    },
-  },
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/auth/admin/users",
-  tags: ["Auth"],
-  summary: "Create a user as ADMIN",
-  description:
-    "Admin-only endpoint to create any kind of user, including ADMIN accounts. Returns the new user's id.",
-  request: {
-    body: {
-      content: { "application/json": { schema: adminCreateUserSchema } },
-    },
-  },
-  responses: {
-    "201": {
-      description: "User created",
-      content: {
-        "application/json": {
-          schema: successResponseSchema(createdUserSchema, {
-            statusCode: 201,
-            messageExample: messages.success.auth.userCreated,
-          }),
-        },
-      },
-    },
-    "400": {
-      description: "Validation error",
-      content: {
-        "application/json": {
-          schema: errorResponseSchema(
-            400,
-            `password: ${messages.error.auth.passwordMinLength}`,
-          ),
-        },
-      },
-    },
-    "401": {
-      description: "Missing or invalid access token",
-      content: {
-        "application/json": { schema: unauthorizedError },
-      },
-    },
-    "403": {
-      description: "Requires the ADMIN role",
-      content: {
-        "application/json": { schema: forbiddenError },
-      },
-    },
-    "409": {
-      description: "Phone number or email already registered",
-      content: {
-        "application/json": {
-          schema: errorResponseSchema(
-            409,
-            messages.error.auth.phoneOrEmailInUse,
-          ),
-        },
-      },
-    },
-  },
-});
-
-registry.registerPath({
-  method: "delete",
-  path: "/auth/admin/users/{id}",
-  tags: ["Auth"],
-  summary: "Delete a user as ADMIN",
-  description:
-    "Admin-only soft delete of the target user (status becomes DELETED).",
-  request: {
-    params: idParamSchema,
-  },
-  responses: {
-    "200": {
-      description: "User deleted",
-      content: {
-        "application/json": {
-          schema: successResponseSchema(z.null(), {
-            messageExample: messages.success.auth.userDeleted,
-          }),
-        },
-      },
-    },
-    "401": {
-      description: "Missing or invalid access token",
-      content: {
-        "application/json": { schema: unauthorizedError },
-      },
-    },
-    "404": {
-      description: "User not found",
-      content: {
-        "application/json": {
-          schema: errorResponseSchema(404, messages.error.auth.userNotFound),
-        },
       },
     },
   },
