@@ -36,8 +36,15 @@ export const messages = {
       rosterMemberNotFound: "عضو تیم یافت نشد",
       cannotRemoveOwnHeadCoach: "مربی اصلی نمی‌تواند خود را حذف کند",
       userMissingRole: "کاربر مورد نظر نقش مورد نیاز را ندارد",
-      headCoachAlreadyExists: "مربی اصلی این تیم در فصل مورد نظر قبلاً تعیین شده است",
+      headCoachAlreadyExists:
+        "مربی اصلی این تیم در فصل مورد نظر قبلاً تعیین شده است",
       headCoachRequiredRole: "فقط مربیان می‌توانند سر مربی باشند",
+    },
+    season: {
+      nameRequired: "نام فصل الزامی است",
+      notFound: "فصل یافت نشد",
+      hasDependents:
+        "این فصل هنوز رکوردهای وابسته (مانند لیست تیم‌ها) دارد و قابل حذف نیست.",
     },
     player: {
       notFound: "بازیکن یافت نشد",
@@ -87,6 +94,13 @@ export const messages = {
       rosterMemberUpdated: "عضو تیم با موفقیت به‌روزرسانی شد",
       rosterMemberRemoved: "عضو با موفقیت از تیم حذف شد",
     },
+    season: {
+      list: "لیست فصل‌ها با موفقیت دریافت شد",
+      found: "فصل با موفقیت دریافت شد",
+      created: "فصل با موفقیت ایجاد شد",
+      updated: "فصل با موفقیت به‌روزرسانی شد",
+      deleted: "فصل با موفقیت حذف شد",
+    },
     player: {
       found: "اطلاعات بازیکن با موفقیت دریافت شد",
       updated: "اطلاعات بازیکن با موفقیت به‌روزرسانی شد",
@@ -107,9 +121,6 @@ export const messages = {
     },
     refereeLevels: {
       fetched: "درجات داوری با موفقیت دریافت شد",
-    },
-    seasons: {
-      list: "لیست فصل‌ها با موفقیت دریافت شد",
     },
     user: {
       profileFetched: "اطلاعات کاربری با موفقیت دریافت شد",
