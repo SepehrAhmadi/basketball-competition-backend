@@ -6,19 +6,15 @@ import { jalaliToGregorian } from "../../utils/date.util.ts";
 
 const jalaliDateSchema = z
   .string()
-  .nullable()
-  .optional()
   .refine(
-    (value) =>
-      value == null ||
-      (() => {
-        try {
-          jalaliToGregorian(value);
-          return true;
-        } catch {
-          return false;
-        }
-      })(),
+    (value) => {
+      try {
+        jalaliToGregorian(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
     "Season date must be a valid Jalali date in YYYY/MM/DD format.",
   );
 
@@ -33,7 +29,7 @@ const seasonBaseFields = {
 };
 
 const dateOrderRefine = {
-  refine: (data: { startDate?: string | null; endDate?: string | null }) => {
+  refine: (data: { startDate?: string; endDate?: string }) => {
     if (data.startDate && data.endDate) {
       return data.endDate >= data.startDate;
     }

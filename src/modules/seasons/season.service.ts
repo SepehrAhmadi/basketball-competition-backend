@@ -8,13 +8,13 @@ import {
 } from "../../utils/date.util.ts";
 
 /** Convert a season's date fields from Gregorian (DB) to Jalali (response). */
-function toJalaliResponse<T extends { startDate: Date | null; endDate: Date | null }>(
+function toJalaliResponse<T extends { startDate: Date; endDate: Date }>(
   season: T,
-): T {
+): Omit<T, "startDate" | "endDate"> & { startDate: string; endDate: string } {
   return {
     ...season,
-    startDate: gregorianToJalali(season.startDate),
-    endDate: gregorianToJalali(season.endDate),
+    startDate: gregorianToJalali(season.startDate)!,
+    endDate: gregorianToJalali(season.endDate)!,
   };
 }
 
@@ -43,27 +43,21 @@ async function getSeasonById(seasonId: number) {
 
 interface CreateSeasonInput {
   name: string;
-  startDate?: string | null;
-  endDate?: string | null;
+  startDate: string;
+  endDate: string;
   isActive: boolean;
 }
 
 async function createSeason(input: CreateSeasonInput) {
-  if (input.startDate && input.endDate && input.endDate < input.startDate) {
+  if (input.endDate < input.startDate) {
     throw new AppError(400, messages.error.season.endDateBeforeStartDate);
   }
 
   const season = await prisma.season.create({
     data: {
       name: input.name,
-      startDate:
-        input.startDate == null
-          ? input.startDate
-          : jalaliToGregorian(input.startDate),
-      endDate:
-        input.endDate == null
-          ? input.endDate
-          : jalaliToGregorian(input.endDate),
+      startDate: jalaliToGregorian(input.startDate),
+      endDate: jalaliToGregorian(input.endDate),
       isActive: input.isActive,
     },
   });
@@ -72,8 +66,8 @@ async function createSeason(input: CreateSeasonInput) {
 
 interface UpdateSeasonInput {
   name?: string;
-  startDate?: string | null;
-  endDate?: string | null;
+  startDate?: string;
+  endDate?: string;
   isActive?: boolean;
 }
 
@@ -81,10 +75,10 @@ async function updateSeason(seasonId: number, input: UpdateSeasonInput) {
   const existingSeason = await findOrFail(prisma.season, seasonId, messages.error.season.notFound);
 
   const { startDate, endDate, ...rest } = input;
-  const finalStartDate = startDate !== undefined ? startDate : existingSeason.startDate ? gregorianToJalali(existingSeason.startDate) : null;
-  const finalEndDate = endDate !== undefined ? endDate : existingSeason.endDate ? gregorianToJalali(existingSeason.endDate) : null;
+  const finalStartDate = startDate ?? gregorianToJalali(existingSeason.startDate)!;
+  const finalEndDate = endDate ?? gregorianToJalali(existingSeason.endDate)!;
 
-  if (finalStartDate && finalEndDate && finalEndDate < finalStartDate) {
+  if (finalEndDate < finalStartDate) {
     throw new AppError(400, messages.error.season.endDateBeforeStartDate);
   }
 
@@ -93,10 +87,10 @@ async function updateSeason(seasonId: number, input: UpdateSeasonInput) {
     data: {
       ...rest,
       ...(startDate !== undefined
-        ? { startDate: startDate == null ? null : jalaliToGregorian(startDate) }
+        ? { startDate: jalaliToGregorian(startDate) }
         : {}),
       ...(endDate !== undefined
-        ? { endDate: endDate == null ? null : jalaliToGregorian(endDate) }
+        ? { endDate: jalaliToGregorian(endDate) }
         : {}),
     },
   });
