@@ -2,7 +2,21 @@ import prisma from "../../config/db.config.ts";
 import AppError from "../../utils/appError.ts";
 import findOrFail from "../../utils/findOrFail.ts";
 import { messages } from "../../language/message.ts";
-import { jalaliToGregorian } from "../../utils/date.util.ts";
+import {
+  jalaliToGregorian,
+  gregorianToJalali,
+} from "../../utils/date.util.ts";
+
+/** Convert a season's date fields from Gregorian (DB) to Jalali (response). */
+function toJalaliResponse<T extends { startDate: Date | null; endDate: Date | null }>(
+  season: T,
+): T {
+  return {
+    ...season,
+    startDate: gregorianToJalali(season.startDate),
+    endDate: gregorianToJalali(season.endDate),
+  };
+}
 
 interface ListSeasonsQuery {
   page: number;
@@ -19,11 +33,12 @@ async function listSeasons({ page, pageSize }: ListSeasonsQuery) {
     prisma.season.count(),
   ]);
 
-  return { items, total, page, pageSize };
+  return { items: items.map(toJalaliResponse), total, page, pageSize };
 }
 
 async function getSeasonById(seasonId: number) {
-  return findOrFail(prisma.season, seasonId, messages.error.season.notFound);
+  const season = await findOrFail(prisma.season, seasonId, messages.error.season.notFound);
+  return toJalaliResponse(season);
 }
 
 interface CreateSeasonInput {
@@ -34,7 +49,11 @@ interface CreateSeasonInput {
 }
 
 async function createSeason(input: CreateSeasonInput) {
-  return prisma.season.create({
+  if (input.startDate && input.endDate && input.endDate < input.startDate) {
+    throw new AppError(400, messages.error.season.endDateBeforeStartDate);
+  }
+
+  const season = await prisma.season.create({
     data: {
       name: input.name,
       startDate:
@@ -48,6 +67,7 @@ async function createSeason(input: CreateSeasonInput) {
       isActive: input.isActive,
     },
   });
+  return toJalaliResponse(season);
 }
 
 interface UpdateSeasonInput {
@@ -58,11 +78,17 @@ interface UpdateSeasonInput {
 }
 
 async function updateSeason(seasonId: number, input: UpdateSeasonInput) {
-  await findOrFail(prisma.season, seasonId, messages.error.season.notFound);
+  const existingSeason = await findOrFail(prisma.season, seasonId, messages.error.season.notFound);
 
   const { startDate, endDate, ...rest } = input;
+  const finalStartDate = startDate !== undefined ? startDate : existingSeason.startDate ? gregorianToJalali(existingSeason.startDate) : null;
+  const finalEndDate = endDate !== undefined ? endDate : existingSeason.endDate ? gregorianToJalali(existingSeason.endDate) : null;
 
-  return prisma.season.update({
+  if (finalStartDate && finalEndDate && finalEndDate < finalStartDate) {
+    throw new AppError(400, messages.error.season.endDateBeforeStartDate);
+  }
+
+  const updated = await prisma.season.update({
     where: { id: seasonId },
     data: {
       ...rest,
@@ -74,13 +100,15 @@ async function updateSeason(seasonId: number, input: UpdateSeasonInput) {
         : {}),
     },
   });
+  return toJalaliResponse(updated);
 }
 
 async function deleteSeason(seasonId: number) {
   await findOrFail(prisma.season, seasonId, messages.error.season.notFound);
 
   try {
-    return await prisma.season.delete({ where: { id: seasonId } });
+    const deleted = await prisma.season.delete({ where: { id: seasonId } });
+    return toJalaliResponse(deleted);
   } catch (err: any) {
     // Prisma/MySQL blocks the delete with a foreign-key error (P2003) whenever
     // anything still references this season — team rosters today, league/game

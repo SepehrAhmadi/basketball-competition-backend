@@ -45,6 +45,7 @@ export const messages = {
       notFound: "فصل یافت نشد",
       hasDependents:
         "این فصل هنوز رکوردهای وابسته (مانند لیست تیم‌ها) دارد و قابل حذف نیست.",
+      endDateBeforeStartDate: "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.",
     },
     player: {
       notFound: "بازیکن یافت نشد",

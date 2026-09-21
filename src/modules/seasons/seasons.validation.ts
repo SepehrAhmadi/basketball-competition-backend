@@ -22,7 +22,7 @@ const jalaliDateSchema = z
     "Season date must be a valid Jalali date in YYYY/MM/DD format.",
   );
 
-export const createSeasonSchema = z.object({
+const seasonBaseFields = {
   name: z
     .string()
     .min(2, messages.error.season.nameRequired)
@@ -30,12 +30,35 @@ export const createSeasonSchema = z.object({
   startDate: jalaliDateSchema.openapi({ example: "1403/06/01" }),
   endDate: jalaliDateSchema.openapi({ example: "1404/03/01" }),
   isActive: z.boolean().default(true),
-});
+};
 
-export const updateSeasonSchema = createSeasonSchema
+const dateOrderRefine = {
+  refine: (data: { startDate?: string | null; endDate?: string | null }) => {
+    if (data.startDate && data.endDate) {
+      return data.endDate >= data.startDate;
+    }
+    return true;
+  },
+  message: messages.error.season.endDateBeforeStartDate,
+  path: ["endDate"],
+};
+
+export const createSeasonSchema = z
+  .object(seasonBaseFields)
+  .refine(dateOrderRefine.refine, {
+    message: dateOrderRefine.message,
+    path: dateOrderRefine.path,
+  });
+
+export const updateSeasonSchema = z
+  .object(seasonBaseFields)
   .partial()
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided",
+  })
+  .refine(dateOrderRefine.refine, {
+    message: dateOrderRefine.message,
+    path: dateOrderRefine.path,
   });
 
 export const seasonListQuerySchema = paginationQuerySchema.extend({});
