@@ -17,6 +17,9 @@ export const messages = {
       passwordRequired: "رمز عبور الزامی است",
       atLeastOneRoleRequired: "حداقل یک نقش الزامی است",
       phoneNumberLength: "شماره تلفن باید ۱۱ رقم باشد",
+      userNotAdmin: "کاربر مورد نظر ادمین نیست",
+      cannotRevokeAdminFromSuperAdmin: "نمی‌توان دسترسی ادمین را از سوپر ادمین گرفت",
+      forbidden: "شما مجاز به انجام این عملیات نیستید",
     },
     organization: {
       nameRequired: "نام باشگاه الزامی است",
@@ -75,6 +78,10 @@ export const messages = {
       accountDeleted: "حساب کاربری با موفقیت حذف شد",
       userCreated: "کاربر با موفقیت ایجاد شد",
       userDeleted: "کاربر با موفقیت حذف شد",
+      adminStatusUpdated: "وضعیت مدیریت کاربر با موفقیت به‌روزرسانی شد",
+      permissionsUpdated: "دسترسی‌ها با موفقیت به‌روزرسانی شد",
+      permissionsFetched: "دسترسی‌ها با موفقیت دریافت شد",
+      permissionCatalogFetched: "فهرست دسترسی‌ها با موفقیت دریافت شد",
     },
     organization: {
       list: "لیست باشگاه‌ها با موفقیت دریافت شد",

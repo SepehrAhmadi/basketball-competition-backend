@@ -12,11 +12,24 @@ import {
   listUsersQuerySchema,
   updateUserByAdminSchema,
   adminResetPasswordSchema,
-  roleSchema,
+  setAdminStatusSchema,
+  replacePermissionsSchema,
 } from "./admin-users.validation.ts";
+import { PERMISSION_CODES } from "../../../shared/permissions.ts";
 
 // ---- response models ----
-const roleEnum = roleSchema;
+// Display-only: broader than `roleSchema` (which only covers roles the admin
+// endpoints let you *assign*), since a listed user's roles can include
+// ADMIN/SUPER_ADMIN even though those aren't assignable via this schema.
+const roleEnum = z.enum([
+  "SUPER_ADMIN",
+  "ADMIN",
+  "ORG_MANAGER",
+  "COACH",
+  "PLAYER",
+  "REFEREE",
+  "PUBLIC",
+]).openapi("Role");
 
 const userProfileSchema = z
   .object({
@@ -60,7 +73,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "Create a user",
   description:
-    "Admin-only endpoint to create any kind of user, including ADMIN accounts. Returns the new user's id.",
+    "Admin-only endpoint to create a user with any non-admin role (ORG_MANAGER, COACH, PLAYER, REFEREE, PUBLIC). ADMIN/SUPER_ADMIN cannot be granted here — use PUT /admin/users/{id}/admin-status. Returns the new user's id.",
   request: {
     body: {
       content: { "application/json": { schema: adminCreateUserSchema } },
@@ -116,7 +129,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "List users",
   description:
-    "Admin-only paginated user list for the user-management screen. Supports page/pageSize plus optional query, role, and status filters. Unlike /users/search, inactive/suspended/deleted users are included unless filtered.",
+    "Admin-only paginated user list for the user-management screen. Supports page/pageSize plus optional query, role, and status filters. Unlike /users/search, inactive/suspended/deleted users are included unless filtered. Regular ADMINs only see users with non-admin roles (ORG_MANAGER, COACH, PLAYER, REFEREE, PUBLIC) — ADMIN and SUPER_ADMIN users are hidden. SUPER_ADMIN sees all users.",
   request: {
     query: listUsersQuerySchema,
   },
@@ -152,7 +165,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "Get user by id",
   description:
-    "Returns one user's safe profile including roles. Never includes password hashes or refresh tokens.",
+    "Returns one user's safe profile including roles. Never includes password hashes or refresh tokens. Regular ADMINs cannot view ADMIN or SUPER_ADMIN users (403).",
   request: {
     params: idParamSchema,
   },
@@ -194,7 +207,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "Update user",
   description:
-    "Admin-only edit of another user's profile fields and roles. The roles array is treated as the complete selection and synchronized exactly.",
+    "Admin-only edit of another user's profile fields and non-admin roles. The roles array is treated as the complete selection and synchronized exactly; it cannot contain ADMIN or SUPER_ADMIN — use PUT /admin/users/{id}/admin-status for that. Regular ADMINs cannot edit ADMIN or SUPER_ADMIN users (403).",
   request: {
     params: idParamSchema,
     body: {
@@ -253,7 +266,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "Delete a user",
   description:
-    "Admin-only soft delete of the target user (status becomes DELETED).",
+    "Admin-only soft delete of the target user (status becomes DELETED). Regular ADMINs cannot delete ADMIN or SUPER_ADMIN users (403).",
   request: {
     params: idParamSchema,
   },
@@ -274,6 +287,12 @@ registry.registerPath({
         "application/json": { schema: unauthorizedError },
       },
     },
+    "403": {
+      description: "Forbidden — target user is an admin/super-admin",
+      content: {
+        "application/json": { schema: forbiddenError },
+      },
+    },
     "404": {
       description: "User not found",
       content: {
@@ -285,13 +304,35 @@ registry.registerPath({
   },
 });
 
+const adminStatusUserSchema = userProfileSchema;
+
+const permissionEnum = z.enum(PERMISSION_CODES).openapi("Permission");
+
+// Grouped catalog returned by GET /admin/users/permissions — titles/labels are
+// for the frontend UI to render; only `code` values are ever stored or sent back.
+const permissionGroupSchema = z.object({
+  title: z.string().openapi({ example: "تیم‌ها" }),
+  permissions: z.array(
+    z.object({
+      code: permissionEnum,
+      label: z.string().openapi({ example: "ایجاد تیم" }),
+    }),
+  ),
+});
+
+const permissionCatalogSchema = z.array(permissionGroupSchema);
+
+const userPermissionsSchema = z.object({
+  permissions: z.array(permissionEnum).openapi({ example: ["teams.create", "teams.update"] }),
+});
+
 registry.registerPath({
   method: "patch",
   path: "/admin/users/{id}/password",
   tags: ["Admin Users"],
   summary: "Reset user password",
   description:
-    "Admin-only endpoint to set a new password for any user without requiring the current password. Clears the user's refresh token, forcing re-login.",
+    "Admin-only endpoint to set a new password for any user without requiring the current password. Clears the user's refresh token, forcing re-login. Regular ADMINs cannot reset passwords for ADMIN or SUPER_ADMIN users (403).",
   request: {
     params: idParamSchema,
     body: {
@@ -327,6 +368,192 @@ registry.registerPath({
       description: "Admin role required",
       content: {
         "application/json": { schema: forbiddenError },
+      },
+    },
+    "404": {
+      description: "User not found",
+      content: {
+        "application/json": { schema: notFoundError },
+      },
+    },
+  },
+});
+
+const superAdminForbiddenError = errorResponseSchema(403, "Forbidden");
+
+registry.registerPath({
+  method: "put",
+  path: "/admin/users/{id}/admin-status",
+  tags: ["Admin Users"],
+  summary: "Grant or revoke ADMIN",
+  description:
+    "SUPER_ADMIN-only endpoint to make a user an ADMIN or revoke ADMIN from them. Revoking ADMIN also clears the user's fine-grained permissions. SUPER_ADMIN accounts can never be revoked.",
+  request: {
+    params: idParamSchema,
+    body: {
+      content: { "application/json": { schema: setAdminStatusSchema } },
+    },
+  },
+  responses: {
+    "200": {
+      description: "Admin status updated",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(adminStatusUserSchema, {
+            messageExample: messages.success.auth.adminStatusUpdated,
+          }),
+        },
+      },
+    },
+    "400": {
+      description: "Cannot revoke ADMIN from a SUPER_ADMIN",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(
+            400,
+            messages.error.auth.cannotRevokeAdminFromSuperAdmin,
+          ),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "SUPER_ADMIN role required",
+      content: {
+        "application/json": { schema: superAdminForbiddenError },
+      },
+    },
+    "404": {
+      description: "User not found",
+      content: {
+        "application/json": { schema: notFoundError },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/users/permissions",
+  tags: ["Admin Users"],
+  summary: "List the permission catalog",
+  description:
+    "SUPER_ADMIN-only endpoint returning every permission that exists in the code, grouped by section with Persian titles and labels, for building the permission-assignment UI. Only the `code` values are ever submitted back.",
+  responses: {
+    "200": {
+      description: "Permission catalog",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(permissionCatalogSchema, {
+            messageExample: messages.success.auth.permissionCatalogFetched,
+          }),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "SUPER_ADMIN role required",
+      content: {
+        "application/json": { schema: superAdminForbiddenError },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/admin/users/{id}/permissions",
+  tags: ["Admin Users"],
+  summary: "Get a user's permissions",
+  description:
+    "SUPER_ADMIN-only endpoint returning the fine-grained permissions currently assigned to an ADMIN user.",
+  request: {
+    params: idParamSchema,
+  },
+  responses: {
+    "200": {
+      description: "User's assigned permissions",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(userPermissionsSchema, {
+            messageExample: messages.success.auth.permissionsFetched,
+          }),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "SUPER_ADMIN role required",
+      content: {
+        "application/json": { schema: superAdminForbiddenError },
+      },
+    },
+    "404": {
+      description: "User not found",
+      content: {
+        "application/json": { schema: notFoundError },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/admin/users/{id}/permissions",
+  tags: ["Admin Users"],
+  summary: "Replace a user's permissions",
+  description:
+    "SUPER_ADMIN-only endpoint that replaces the complete set of fine-grained permissions for an ADMIN user. The target user must already hold the ADMIN role.",
+  request: {
+    params: idParamSchema,
+    body: {
+      content: { "application/json": { schema: replacePermissionsSchema } },
+    },
+  },
+  responses: {
+    "200": {
+      description: "Permissions replaced",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(userPermissionsSchema, {
+            messageExample: messages.success.auth.permissionsUpdated,
+          }),
+        },
+      },
+    },
+    "400": {
+      description: "Target user is not an ADMIN",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(400, messages.error.auth.userNotAdmin),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "SUPER_ADMIN role required",
+      content: {
+        "application/json": { schema: superAdminForbiddenError },
       },
     },
     "404": {

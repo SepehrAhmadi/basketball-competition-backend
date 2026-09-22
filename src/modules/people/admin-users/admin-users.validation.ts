@@ -5,6 +5,7 @@ import { z } from "zod";
 import { messages } from "../../../language/message.ts";
 import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
 import { jalaliToGregorian } from "../../../utils/date.util.ts";
+import { PERMISSION_CODES } from "../../../shared/permissions.ts";
 
 const jalaliBirthDate = z
   .string()
@@ -20,7 +21,6 @@ const jalaliBirthDate = z
   })(), "Birth date must be a valid Jalali date in YYYY/MM/DD format.");
 
 const adminAssignableRoles = [
-  "ADMIN",
   "ORG_MANAGER",
   "COACH",
   "PLAYER",
@@ -100,9 +100,25 @@ export const adminResetPasswordSchema = z
   })
   .strict();
 
+export const setAdminStatusSchema = z
+  .object({
+    isAdmin: z.boolean().openapi({ example: true }),
+  })
+  .strict();
+
+export const replacePermissionsSchema = z
+  .object({
+    permissions: z.array(z.enum(PERMISSION_CODES)).openapi({
+      example: ["teams.create", "teams.update"],
+    }),
+  })
+  .strict();
+
 export default {
   adminCreateUserSchema,
   listUsersQuerySchema,
   updateUserByAdminSchema,
   adminResetPasswordSchema,
+  setAdminStatusSchema,
+  replacePermissionsSchema,
 };

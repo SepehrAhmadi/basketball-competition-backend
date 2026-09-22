@@ -17,7 +17,10 @@ async function main() {
       phone: ADMIN_PHONE,
       email: ADMIN_EMAIL,
       passwordHash,
-      roles: { create: { role: "ADMIN" } },
+      // SUPER_ADMIN is seed-only and never assignable through any endpoint.
+      // Also granting ADMIN keeps every existing verifyRole("ADMIN") gate
+      // working for this user with zero changes to verifyRole itself.
+      roles: { create: [{ role: "SUPER_ADMIN" }, { role: "ADMIN" }] },
     },
     include: { roles: true },
   });
@@ -25,6 +28,12 @@ async function main() {
   if (!admin.roles.some((role) => role.role === "ADMIN")) {
     await prisma.userRole.create({
       data: { userId: admin.id, role: "ADMIN" },
+    });
+  }
+
+  if (!admin.roles.some((role) => role.role === "SUPER_ADMIN")) {
+    await prisma.userRole.create({
+      data: { userId: admin.id, role: "SUPER_ADMIN" },
     });
   }
 

@@ -6,6 +6,7 @@ import type { Role } from "../../prisma/generated/prisma/enums.ts";
 interface AccessTokenPayload {
   userId: number;
   roles: Role[];
+  permissions: string[];
 }
 
 const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
@@ -30,6 +31,7 @@ const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
     const payload = decoded as AccessTokenPayload;
     req.userId = payload.userId;
     req.roles = payload.roles;
+    req.permissions = payload.permissions;
     next();
   });
 };

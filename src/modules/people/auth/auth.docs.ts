@@ -12,6 +12,7 @@ import {
 
 // ---- response models ----
 const roleEnum = z.enum([
+  "SUPER_ADMIN",
   "ADMIN",
   "ORG_MANAGER",
   "COACH",
@@ -25,6 +26,7 @@ const userInfoSchema = z
     id: z.number().openapi({ example: 10 }),
     fullName: z.string().openapi({ example: "Ali Rezaei" }),
     roles: z.array(roleEnum).openapi({ example: ["PLAYER"] }),
+    permissions: z.array(z.string()).openapi({ example: ["teams.create"] }),
   })
   .openapi("UserInfo");
 
@@ -150,7 +152,7 @@ registry.registerPath({
   tags: ["Auth"],
   summary: "Log in to the admin panel",
   description:
-    "Same credentials as /auth/login but requires the ADMIN role. Sets the refresh token as an httpOnly cookie (`jwt`).",
+    "Same credentials as /auth/login but requires the ADMIN or SUPER_ADMIN role. Sets the refresh token as an httpOnly cookie (`jwt`).",
   security: [],
   request: {
     body: { content: { "application/json": { schema: loginSchema } } },

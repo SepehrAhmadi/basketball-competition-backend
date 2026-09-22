@@ -14,9 +14,17 @@ const SELF_REGISTER_ROLES: Role[] = [
   "REFEREE",
 ];
 
-function signAccessToken(userId: number, roles: Role[]) {
+// SUPER_ADMIN bypasses permission checks entirely at check-time (see
+// verifyPermission), so there's no need to enumerate "all permissions" here.
+async function getPermissionsForUser(userId: number, roles: Role[]): Promise<string[]> {
+  if (roles.includes("SUPER_ADMIN") || !roles.includes("ADMIN")) return [];
+  const rows = await prisma.adminPermission.findMany({ where: { userId } });
+  return rows.map((r) => r.permission);
+}
+
+function signAccessToken(userId: number, roles: Role[], permissions: string[]) {
   return jwt.sign(
-    { userId, roles },
+    { userId, roles, permissions },
     process.env.ACCESS_TOKEN_SECRET as string,
     {
       expiresIn: "15m",
@@ -96,12 +104,13 @@ async function authenticateUser({ identifier, password }: LoginInput) {
   }
 
   const roles = user.roles.map((r) => r.role);
-  const accessToken = signAccessToken(user.id, roles);
+  const permissions = await getPermissionsForUser(user.id, roles);
+  const accessToken = signAccessToken(user.id, roles, permissions);
   const refreshToken = signRefreshToken(user.id);
 
   await prisma.user.update({ where: { id: user.id }, data: { refreshToken } });
 
-  return { user, roles, accessToken, refreshToken };
+  return { user, roles, permissions, accessToken, refreshToken };
 }
 
 async function login(input: LoginInput) {
@@ -111,7 +120,7 @@ async function login(input: LoginInput) {
 // admin-panel-only — same credentials check, plus a hard role gate
 async function adminLogin(input: LoginInput) {
   const result = await authenticateUser(input);
-  if (!result.roles.includes("ADMIN")) {
+  if (!result.roles.includes("ADMIN") && !result.roles.includes("SUPER_ADMIN")) {
     throw new AppError(403, messages.error.auth.notAuthorizedAdminPanel);
   }
   return result;
@@ -144,7 +153,8 @@ async function refreshAccessToken(refreshTokenFromCookie: string | undefined) {
   }
 
   const roles = user.roles.map((r) => r.role);
-  return { accessToken: signAccessToken(user.id, roles) };
+  const permissions = await getPermissionsForUser(user.id, roles);
+  return { accessToken: signAccessToken(user.id, roles, permissions) };
 }
 
 async function logout(refreshTokenFromCookie: string | undefined) {

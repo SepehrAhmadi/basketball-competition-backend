@@ -10,6 +10,7 @@ import type {
   UserProfile,
 } from "../user/user.types.ts";
 import { toUserProfile, applyProfileUpdate } from "../user/user.service.ts";
+import { PERMISSION_CATALOG, type Permission } from "../../../shared/permissions.ts";
 
 interface AdminCreateUserInput {
   fullName: string;
@@ -52,14 +53,42 @@ async function adminDeleteUser(targetUserId: number) {
   });
 }
 
-async function listUsers(query: ListUsersQuery) {
+// Roles whose holders are invisible to a regular ADMIN in user listings.
+const ADMIN_LEVEL_ROLES: Role[] = ["ADMIN", "SUPER_ADMIN"];
+
+/**
+ * Check whether a target user (by their roles) should be accessible to the
+ * requester.  A plain ADMIN may not act on anyone who holds ADMIN or
+ * SUPER_ADMIN.  A SUPER_ADMIN may act on everyone.
+ */
+async function assertTargetAccessible(
+  targetUserId: number,
+  requesterRoles: Role[],
+) {
+  if (requesterRoles.includes("SUPER_ADMIN")) return; // full access
+
+  const target = await prisma.userRole.findFirst({
+    where: { userId: targetUserId, role: { in: ADMIN_LEVEL_ROLES } },
+  });
+  if (target) {
+    throw new AppError(403, messages.error.auth.forbidden);
+  }
+}
+
+async function listUsers(
+  query: ListUsersQuery,
+  requesterRoles: Role[],
+) {
   const where: {
-    roles?: { some: { role: Role } };
+    roles?: { some: { role: Role } } | { none: { role: { in: Role[] } } };
     status?: ListUsersQuery["status"];
     OR?: { fullName?: { contains: string }; phone?: { contains: string }; email?: { contains: string } }[];
   } = {};
 
-  if (query.role) {
+  // Regular ADMINs must not see ADMIN or SUPER_ADMIN users.
+  if (!requesterRoles.includes("SUPER_ADMIN")) {
+    where.roles = { none: { role: { in: ADMIN_LEVEL_ROLES } } };
+  } else if (query.role) {
     where.roles = { some: { role: query.role } };
   }
 
@@ -128,11 +157,76 @@ async function resetUserPasswordByAdmin(
   });
 }
 
+async function setAdminStatus(targetUserId: number, isAdmin: boolean) {
+  const target = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    include: { roles: true },
+  });
+  if (!target) throw new AppError(404, messages.error.auth.userNotFound);
+
+  const isSuperAdmin = target.roles.some((r) => r.role === "SUPER_ADMIN");
+  if (isSuperAdmin && !isAdmin) {
+    throw new AppError(400, messages.error.auth.cannotRevokeAdminFromSuperAdmin);
+  }
+
+  const hasAdminRole = target.roles.some((r) => r.role === "ADMIN");
+
+  if (isAdmin && !hasAdminRole) {
+    await prisma.userRole.create({ data: { userId: targetUserId, role: "ADMIN" } });
+  }
+
+  if (!isAdmin && hasAdminRole) {
+    await prisma.userRole.deleteMany({ where: { userId: targetUserId, role: "ADMIN" } });
+    // fine-grained permissions are meaningless without ADMIN — clear them too
+    await prisma.adminPermission.deleteMany({ where: { userId: targetUserId } });
+  }
+
+  return prisma.user.findUnique({ where: { id: targetUserId }, include: { roles: true } });
+}
+
+function listPermissionCatalog() {
+  return PERMISSION_CATALOG;
+}
+
+async function getUserPermissions(targetUserId: number) {
+  await findOrFail(prisma.user, targetUserId, messages.error.auth.userNotFound);
+  const rows = await prisma.adminPermission.findMany({ where: { userId: targetUserId } });
+  return rows.map((r) => r.permission);
+}
+
+async function replaceUserPermissions(targetUserId: number, permissions: Permission[]) {
+  const target = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    include: { roles: true },
+  });
+  if (!target) throw new AppError(404, messages.error.auth.userNotFound);
+
+  const isAdmin = target.roles.some((r) => r.role === "ADMIN");
+  if (!isAdmin) {
+    throw new AppError(400, messages.error.auth.userNotAdmin);
+  }
+
+  const uniquePermissions = [...new Set(permissions)];
+
+  return prisma.$transaction(async (tx) => {
+    await tx.adminPermission.deleteMany({ where: { userId: targetUserId } });
+    await tx.adminPermission.createMany({
+      data: uniquePermissions.map((permission) => ({ userId: targetUserId, permission })),
+    });
+    return tx.adminPermission.findMany({ where: { userId: targetUserId } });
+  });
+}
+
 export default {
   adminCreateUser,
   adminDeleteUser,
+  assertTargetAccessible,
   listUsers,
   getUserById,
   updateUserByAdmin,
   resetUserPasswordByAdmin,
+  setAdminStatus,
+  listPermissionCatalog,
+  getUserPermissions,
+  replaceUserPermissions,
 };

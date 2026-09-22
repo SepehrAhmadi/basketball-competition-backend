@@ -23,11 +23,11 @@ async function register(req: Request, res: Response, next: NextFunction) {
 
 async function login(req: Request, res: Response, next: NextFunction) {
   try {
-    const { user, roles, accessToken, refreshToken } = await authService.login(req.body);
+    const { user, roles, permissions, accessToken, refreshToken } = await authService.login(req.body);
     res.cookie("jwt", refreshToken, refreshCookieOptions);
     return apiResponse.sendResponse(res, 200, messages.success.auth.loginSuccessful, {
       accessToken,
-      user: { id: user.id, fullName: user.fullName, roles },
+      user: { id: user.id, fullName: user.fullName, roles, permissions },
     });
   } catch (err) {
     next(err);
@@ -36,11 +36,11 @@ async function login(req: Request, res: Response, next: NextFunction) {
 
 async function adminLogin(req: Request, res: Response, next: NextFunction) {
   try {
-    const { user, roles, accessToken, refreshToken } = await authService.adminLogin(req.body);
+    const { user, roles, permissions, accessToken, refreshToken } = await authService.adminLogin(req.body);
     res.cookie("jwt", refreshToken, refreshCookieOptions);
     return apiResponse.sendResponse(res, 200, messages.success.auth.loginSuccessful, {
       accessToken,
-      user: { id: user.id, fullName: user.fullName, roles },
+      user: { id: user.id, fullName: user.fullName, roles, permissions },
     });
   } catch (err) {
     next(err);

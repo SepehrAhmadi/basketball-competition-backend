@@ -24,6 +24,14 @@ router.get(
   adminUsersController.listUsers,
 );
 
+// Must be registered before "/:id" so Express doesn't try to match
+// "permissions" as an :id value.
+router.get(
+  "/permissions",
+  verifyRole("SUPER_ADMIN"),
+  adminUsersController.listPermissionCatalog,
+);
+
 router.get(
   "/:id",
   validate(idParamSchema, "params"),
@@ -48,6 +56,31 @@ router.patch(
   validate(idParamSchema, "params"),
   validate(adminUsersValidation.adminResetPasswordSchema),
   adminUsersController.resetPassword,
+);
+
+// SUPER_ADMIN-only: granting/revoking ADMIN and managing fine-grained
+// permissions must never be reachable by a plain ADMIN.
+router.put(
+  "/:id/admin-status",
+  verifyRole("SUPER_ADMIN"),
+  validate(idParamSchema, "params"),
+  validate(adminUsersValidation.setAdminStatusSchema),
+  adminUsersController.setAdminStatus,
+);
+
+router.get(
+  "/:id/permissions",
+  verifyRole("SUPER_ADMIN"),
+  validate(idParamSchema, "params"),
+  adminUsersController.getUserPermissions,
+);
+
+router.put(
+  "/:id/permissions",
+  verifyRole("SUPER_ADMIN"),
+  validate(idParamSchema, "params"),
+  validate(adminUsersValidation.replacePermissionsSchema),
+  adminUsersController.replaceUserPermissions,
 );
 
 export default router;
