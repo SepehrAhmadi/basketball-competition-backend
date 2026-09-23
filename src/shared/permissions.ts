@@ -6,15 +6,17 @@ export const PERMISSION_CATALOG = [
   {
     title: "کاربران",
     permissions: [
+      { code: "users.view", label: "مشاهده کاربران" },
       { code: "users.create", label: "ایجاد کاربر" },
       { code: "users.update", label: "ویرایش کاربر" },
       { code: "users.delete", label: "حذف کاربر" },
-      { code: "users.assign_roles", label: "تخصیص نقش" },
+      { code: "users.reset_password", label: "بازنشانی رمز عبور" }, 
     ],
   },
   {
     title: "تیم‌ها",
     permissions: [
+      { code: "teams.view", label: "مشاهده تیم‌ها" },
       { code: "teams.create", label: "ایجاد تیم" },
       { code: "teams.update", label: "ویرایش تیم" },
       { code: "teams.delete", label: "حذف تیم" },
@@ -23,6 +25,7 @@ export const PERMISSION_CATALOG = [
   {
     title: "فصل‌ها",
     permissions: [
+      { code: "seasons.view", label: "مشاهده فصل‌ها" },
       { code: "seasons.create", label: "ایجاد فصل" },
       { code: "seasons.update", label: "ویرایش فصل" },
       { code: "seasons.delete", label: "حذف فصل" },

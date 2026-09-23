@@ -2,6 +2,7 @@ import { Router } from "express";
 import validate from "../../../middleware/validate.ts";
 import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
 import verifyRole from "../../../middleware/auth/verifyRole.middleware.ts";
+import verifyPermission from "../../../middleware/auth/verifyPermission.middleware.ts";
 import { idParamSchema } from "../../../shared/schemas.validation.ts";
 import adminUsersValidation from "./admin-users.validation.ts";
 import adminUsersController from "./admin-users.controller.ts";
@@ -14,12 +15,14 @@ router.use(verifyRole("ADMIN"));
 
 router.post(
   "/",
+  verifyPermission("users.create"),
   validate(adminUsersValidation.adminCreateUserSchema),
   adminUsersController.createUser,
 );
 
 router.get(
   "/",
+  verifyPermission("users.view"),
   validate(adminUsersValidation.listUsersQuerySchema, "query"),
   adminUsersController.listUsers,
 );
@@ -34,12 +37,14 @@ router.get(
 
 router.get(
   "/:id",
+  verifyPermission("users.view"),
   validate(idParamSchema, "params"),
   adminUsersController.getUserById,
 );
 
 router.put(
   "/:id",
+  verifyPermission("users.update"),
   validate(idParamSchema, "params"),
   validate(adminUsersValidation.updateUserByAdminSchema),
   adminUsersController.updateUser,
@@ -47,12 +52,14 @@ router.put(
 
 router.delete(
   "/:id",
+  verifyPermission("users.delete"),
   validate(idParamSchema, "params"),
   adminUsersController.deleteUser,
 );
 
 router.patch(
   "/:id/password",
+  verifyPermission("users.reset_password"),
   validate(idParamSchema, "params"),
   validate(adminUsersValidation.adminResetPasswordSchema),
   adminUsersController.resetPassword,
