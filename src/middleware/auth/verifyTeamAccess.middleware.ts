@@ -5,7 +5,7 @@ import { messages } from "../../language/message.ts";
 
 async function verifyTeamAccess(req: Request, res: Response, next: NextFunction) {
   try {
-    if (req.roles?.includes("ADMIN")) return next();
+    if (req.adminLevel) return next(); // any admin level gets full access
 
     const teamId = Number(req.params.teamId);
     const userId = req.userId as number;

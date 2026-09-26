@@ -34,7 +34,7 @@ router.get(
 router.post(
   "/",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "ADMIN"),
+  verifyRole("ORG_MANAGER"),
   organizationLogoUploader.single("logo"),
   validate(organizationsValidation.createOrganizationSchema),
   organizationsController.create,
@@ -43,7 +43,7 @@ router.post(
 router.put(
   "/:id",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "ADMIN"),
+  verifyRole("ORG_MANAGER"),
   validate(idParamSchema, "params"),
   verifyOrgAccess,
   organizationLogoUploader.single("logo"),
@@ -54,7 +54,7 @@ router.put(
 router.delete(
   "/:id",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "ADMIN"),
+  verifyRole("ORG_MANAGER"),
   validate(idParamSchema, "params"),
   verifyOrgAccess,
   organizationsController.remove,

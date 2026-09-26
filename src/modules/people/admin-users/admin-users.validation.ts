@@ -25,7 +25,6 @@ const adminAssignableRoles = [
   "COACH",
   "PLAYER",
   "REFEREE",
-  "PUBLIC",
 ] as const;
 
 export const roleSchema = z.enum(adminAssignableRoles).openapi({ example: "PLAYER" });

@@ -46,7 +46,7 @@ router.get(
 router.post(
   "/",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "ADMIN"),
+  verifyRole("ORG_MANAGER"),
   teamLogoUploader.single("logo"),
   validate(teamsValidation.createTeamSchema),
   teamsController.createTeam,
@@ -55,7 +55,7 @@ router.post(
 router.put(
   "/:teamId",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "ADMIN"),
+  verifyRole("ORG_MANAGER"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   verifyTeamAccess,
   teamLogoUploader.single("logo"),
@@ -66,7 +66,7 @@ router.put(
 router.delete(
   "/:teamId",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "ADMIN"),
+  verifyRole("ORG_MANAGER"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   verifyTeamAccess,
   teamsController.deleteTeam,
@@ -75,7 +75,7 @@ router.delete(
 router.put(
   "/:teamId/logo",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "ADMIN"),
+  verifyRole("ORG_MANAGER"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   verifyTeamAccess,
   teamLogoUploader.single("logo"),
@@ -85,7 +85,7 @@ router.put(
 router.post(
   "/:teamId/roster",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "COACH", "ADMIN"),
+  verifyRole("ORG_MANAGER", "COACH"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   verifyTeamAccess,
   validate(teamsValidation.addRosterMemberSchema),
@@ -95,7 +95,7 @@ router.post(
 router.put(
   "/:teamId/roster/:memberId",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "COACH", "ADMIN"),
+  verifyRole("ORG_MANAGER", "COACH"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   verifyTeamAccess,
   validate(teamsValidation.updateRosterMemberSchema),
@@ -105,7 +105,7 @@ router.put(
 router.delete(
   "/:teamId/roster/:memberId",
   verifyJWT,
-  verifyRole("ORG_MANAGER", "COACH", "ADMIN"),
+  verifyRole("ORG_MANAGER", "COACH"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   verifyTeamAccess,
   validate(teamsValidation.removeRosterMemberSchema),

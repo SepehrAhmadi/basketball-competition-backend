@@ -27,7 +27,7 @@ async function createUser(req: Request, res: Response, next: NextFunction) {
 async function listUsers(req: Request, res: Response, next: NextFunction) {
   try {
     const query = (req.validatedQuery ?? req.query) as ListUsersQuery;
-    const result = await adminUsersService.listUsers(query, req.roles ?? []);
+    const result = await adminUsersService.listUsers(query, req.adminLevel ?? null);
     return apiResponse.sendResponse(
       res,
       200,
@@ -42,7 +42,7 @@ async function listUsers(req: Request, res: Response, next: NextFunction) {
 async function getUserById(req: Request, res: Response, next: NextFunction) {
   try {
     const params = (req.validatedParams ?? req.params) as { id: number };
-    await adminUsersService.assertTargetAccessible(params.id, req.roles ?? []);
+    await adminUsersService.assertTargetAccessible(params.id, req.adminLevel ?? null);
     const profile = await adminUsersService.getUserById(params.id);
     return apiResponse.sendResponse(
       res,
@@ -58,7 +58,7 @@ async function getUserById(req: Request, res: Response, next: NextFunction) {
 async function updateUser(req: Request, res: Response, next: NextFunction) {
   try {
     const params = (req.validatedParams ?? req.params) as { id: number };
-    await adminUsersService.assertTargetAccessible(params.id, req.roles ?? []);
+    await adminUsersService.assertTargetAccessible(params.id, req.adminLevel ?? null);
     const input = (req.validatedBody ?? req.body) as UpdateUserByAdminInput;
     const profile = await adminUsersService.updateUserByAdmin(params.id, input);
     return apiResponse.sendResponse(
@@ -75,7 +75,7 @@ async function updateUser(req: Request, res: Response, next: NextFunction) {
 async function deleteUser(req: Request, res: Response, next: NextFunction) {
   try {
     const params = (req.validatedParams ?? req.params) as { id: number };
-    await adminUsersService.assertTargetAccessible(params.id, req.roles ?? []);
+    await adminUsersService.assertTargetAccessible(params.id, req.adminLevel ?? null);
     await adminUsersService.adminDeleteUser(Number(req.params.id));
     return apiResponse.sendResponse(
       res,
@@ -94,7 +94,7 @@ async function resetPassword(
 ) {
   try {
     const params = (req.validatedParams ?? req.params) as { id: number };
-    await adminUsersService.assertTargetAccessible(params.id, req.roles ?? []);
+    await adminUsersService.assertTargetAccessible(params.id, req.adminLevel ?? null);
     const input = (req.validatedBody ?? req.body) as { newPassword: string };
     await adminUsersService.resetUserPasswordByAdmin(
       params.id,
@@ -186,3 +186,4 @@ export default {
   getUserPermissions,
   replaceUserPermissions,
 };
+

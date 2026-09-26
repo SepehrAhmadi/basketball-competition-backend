@@ -12,20 +12,20 @@ import {
 
 // ---- response models ----
 const roleEnum = z.enum([
-  "SUPER_ADMIN",
-  "ADMIN",
   "ORG_MANAGER",
   "COACH",
   "PLAYER",
   "REFEREE",
-  "PUBLIC",
 ]).openapi("Role");
+
+const adminLevelEnum = z.enum(["ADMIN", "SUPER_ADMIN"]).nullable().openapi("AdminLevel");
 
 const userInfoSchema = z
   .object({
     id: z.number().openapi({ example: 10 }),
     fullName: z.string().openapi({ example: "Ali Rezaei" }),
     roles: z.array(roleEnum).openapi({ example: ["PLAYER"] }),
+    adminLevel: adminLevelEnum.openapi({ example: "ADMIN" }),
     permissions: z.array(z.string()).openapi({ example: ["teams.create"] }),
   })
   .openapi("UserInfo");

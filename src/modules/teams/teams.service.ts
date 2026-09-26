@@ -119,9 +119,10 @@ async function createTeam(
   data: CreateTeamInput,
   userId: number,
   roles: string[],
+  adminLevel: string | null,
   file?: Express.Multer.File,
 ) {
-  if (!roles.includes("ADMIN")) {
+  if (!adminLevel) {
     await assertOrgManager(data.organizationId, userId);
   }
 
@@ -153,6 +154,7 @@ async function updateTeam(
   teamId: number,
   data: UpdateTeamInput,
   roles: string[],
+  adminLevel: string | null,
   userId: number,
   file?: Express.Multer.File,
 ) {
@@ -164,7 +166,7 @@ async function updateTeam(
     throw new AppError(404, messages.error.team.notFound);
   }
 
-  if (!roles.includes("ADMIN")) {
+  if (!adminLevel) {
     await assertOrgManager(team.organizationId, userId);
   }
 
@@ -206,13 +208,13 @@ async function updateTeam(
   return withPublicLogoUrl(updated);
 }
 
-async function deleteTeam(teamId: number, roles: string[], userId: number) {
+async function deleteTeam(teamId: number, roles: string[], adminLevel: string | null, userId: number) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
 
-  if (!roles.includes("ADMIN")) {
+  if (!adminLevel) {
     await assertOrgManager(team.organizationId, userId);
   }
 
@@ -226,6 +228,7 @@ async function updateLogo(
   teamId: number,
   file: Express.Multer.File,
   roles: string[],
+  adminLevel: string | null,
   userId: number,
 ) {
   const team = await prisma.team.findFirst({
@@ -236,7 +239,7 @@ async function updateLogo(
     throw new AppError(404, messages.error.team.notFound);
   }
 
-  if (!roles.includes("ADMIN")) {
+  if (!adminLevel) {
     await assertOrgManager(team.organizationId, userId);
   }
 
@@ -329,6 +332,7 @@ async function addRosterMember(
     isHeadCoach?: boolean;
   },
   roles: string[],
+  adminLevel: string | null,
   callerUserId: number,
 ) {
   const team = await prisma.team.findFirst({
@@ -336,8 +340,8 @@ async function addRosterMember(
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
 
-  // Caller privilege: ADMIN or manager of this team's org
-  if (!roles.includes("ADMIN")) {
+  // Caller privilege: any admin or manager of this team's org
+  if (!adminLevel) {
     await assertOrgManager(team.organizationId, callerUserId);
   }
 
@@ -363,7 +367,7 @@ async function addRosterMember(
   }
 
   // COACH can only add PLAYERs
-  if (roles.includes("COACH") && !roles.includes("ADMIN") && !roles.includes("ORG_MANAGER")) {
+  if (roles.includes("COACH") && !adminLevel && !roles.includes("ORG_MANAGER")) {
     if (data.role !== "PLAYER") {
       throw new AppError(403, messages.error.team.coachOnlyAddsPlayer);
     }
@@ -452,6 +456,7 @@ async function updateRosterMember(
     isHeadCoach?: boolean;
   },
   roles: string[],
+  adminLevel: string | null,
   callerUserId: number,
 ) {
   const team = await prisma.team.findFirst({
@@ -459,8 +464,8 @@ async function updateRosterMember(
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
 
-  // Caller privilege: ADMIN or manager of this team's org
-  if (!roles.includes("ADMIN")) {
+  // Caller privilege: any admin or manager of this team's org
+  if (!adminLevel) {
     await assertOrgManager(team.organizationId, callerUserId);
   }
 
@@ -539,6 +544,7 @@ async function removeRosterMember(
   memberId: number,
   seasonId: number,
   roles: string[],
+  adminLevel: string | null,
   callerUserId: number,
 ) {
   const team = await prisma.team.findFirst({
@@ -546,7 +552,7 @@ async function removeRosterMember(
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
 
-  if (!roles.includes("ADMIN")) {
+  if (!adminLevel) {
     await assertOrgManager(team.organizationId, callerUserId);
   }
 
@@ -556,7 +562,7 @@ async function removeRosterMember(
   if (!member) throw new AppError(404, messages.error.team.rosterMemberNotFound);
 
   // COACH cannot remove themselves if they are the only COACH for that team/season
-  if (roles.includes("COACH") && !roles.includes("ADMIN") && !roles.includes("ORG_MANAGER")) {
+  if (roles.includes("COACH") && !adminLevel && !roles.includes("ORG_MANAGER")) {
     if (member.userId === callerUserId) {
       const coachCount = await prisma.teamSeasonMember.count({
         where: { teamId, seasonId, role: "COACH", status: "ACTIVE" },

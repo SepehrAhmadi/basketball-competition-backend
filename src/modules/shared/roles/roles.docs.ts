@@ -29,7 +29,7 @@ registry.registerPath({
   tags: ["Roles"],
   summary: "Get all assignable system roles with Persian labels",
   description:
-    "Returns the list of assignable roles (excludes ADMIN and PUBLIC), each with its enum value and a Persian display label. Intended for dropdown / reference-data usage on the admin panel and PWA.",
+    "Returns the list of domain roles, each with its enum value and a Persian display label. Intended for dropdown / reference-data usage on the admin panel and PWA.",
   security: [{ bearerAuth: [] }],
   responses: {
     "200": {

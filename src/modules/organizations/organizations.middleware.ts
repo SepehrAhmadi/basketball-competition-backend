@@ -5,7 +5,7 @@ import { messages } from "../../language/message.ts";
 
 async function verifyOrgAccess(req: Request, res: Response, next: NextFunction) {
   try {
-    if (req.roles?.includes("ADMIN")) return next();
+    if (req.adminLevel) return next();
 
     const organizationId = Number(req.params.id);
     const membership = await prisma.organizationManager.findFirst({

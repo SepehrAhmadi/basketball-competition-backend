@@ -10,7 +10,7 @@ import type {
   UpdateUserByAdminInput,
   UserProfile,
 } from "./user.types.ts";
-import type { Role } from "../../../prisma/generated/prisma/enums.ts";
+import type { AdminLevel, Role } from "../../../prisma/generated/prisma/enums.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
 import { gregorianToJalali, jalaliToGregorian } from "../../../utils/date.util.ts";
 
@@ -32,6 +32,7 @@ export function toUserProfile(user: {
   status: UserProfile["status"];
   createdAt: Date;
   roles: { role: UserProfile["roles"][number] }[];
+  userAdmin: { level: AdminLevel } | null;
 }): UserProfile {
   return {
     id: user.id,
@@ -43,6 +44,7 @@ export function toUserProfile(user: {
     nationalId: user.nationalId,
     status: user.status,
     roles: user.roles.map((r) => r.role),
+    adminLevel: user.userAdmin?.level ?? null,
     createdAt: user.createdAt,
   };
 }
@@ -66,7 +68,7 @@ function removeFileIfExists(filePath: string | null) {
 async function getOwnProfile(userId: number): Promise<UserProfile> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { roles: true },
+    include: { roles: true, userAdmin: true },
   });
   if (!user) {
     throw new AppError(404, messages.error.user.notFound);
@@ -113,7 +115,7 @@ if (data.birthDate !== undefined) {
   if (Object.keys(updateData).length === 0 && roles === undefined) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { roles: true },
+      include: { roles: true, userAdmin: true },
     });
     return toUserProfile(user!);
   }
@@ -147,7 +149,7 @@ if (data.birthDate !== undefined) {
       }
       return tx.user.findUnique({
         where: { id: userId },
-        include: { roles: true },
+        include: { roles: true, userAdmin: true },
       });
     });
     return toUserProfile(user!);
@@ -191,7 +193,7 @@ async function syncUserRoles(
 async function getUserById(userId: number): Promise<UserProfile> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { roles: true },
+    include: { roles: true, userAdmin: true },
   });
   if (!user) {
     throw new AppError(404, messages.error.user.notFound);

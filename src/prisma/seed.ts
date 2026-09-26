@@ -2,42 +2,58 @@ import "dotenv/config";
 import bcrypt from "bcrypt";
 import prisma from "../config/db.config.ts";
 
-const ADMIN_EMAIL = "admin@example.com";
-const ADMIN_PHONE = "09120000000";
+const SUPER_ADMIN_EMAIL = "admin@example.com";
+const SUPER_ADMIN_PHONE = "09120000000";
+const SUPER_ADMIN_PASSWORD = "Admin@1234";
+
+const ADMIN_EMAIL = "admin2@example.com";
+const ADMIN_PHONE = "09120000001";
 const ADMIN_PASSWORD = "Admin@1234";
 
-async function main() {
-  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+async function upsertAdmin(
+  email: string,
+  phone: string,
+  fullName: string,
+  password: string,
+  level: "ADMIN" | "SUPER_ADMIN",
+) {
+  const passwordHash = await bcrypt.hash(password, 10);
 
-  const admin = await prisma.user.upsert({
-    where: { email: ADMIN_EMAIL },
+  const user = await prisma.user.upsert({
+    where: { email },
     update: {},
     create: {
-      fullName: "Admin",
-      phone: ADMIN_PHONE,
-      email: ADMIN_EMAIL,
+      fullName,
+      phone,
+      email,
       passwordHash,
-      // SUPER_ADMIN is seed-only and never assignable through any endpoint.
-      // Also granting ADMIN keeps every existing verifyRole("ADMIN") gate
-      // working for this user with zero changes to verifyRole itself.
-      roles: { create: [{ role: "SUPER_ADMIN" }, { role: "ADMIN" }] },
     },
-    include: { roles: true },
   });
 
-  if (!admin.roles.some((role) => role.role === "ADMIN")) {
-    await prisma.userRole.create({
-      data: { userId: admin.id, role: "ADMIN" },
-    });
-  }
+  await prisma.userAdmin.upsert({
+    where: { userId: user.id },
+    update: { level },
+    create: { userId: user.id, level },
+  });
 
-  if (!admin.roles.some((role) => role.role === "SUPER_ADMIN")) {
-    await prisma.userRole.create({
-      data: { userId: admin.id, role: "SUPER_ADMIN" },
-    });
-  }
+  console.log(`${level} user ready: ${email}`);
+}
 
-  console.log(`Admin user ready: ${admin.email}`);
+async function main() {
+  await upsertAdmin(
+    SUPER_ADMIN_EMAIL,
+    SUPER_ADMIN_PHONE,
+    "Super Admin",
+    SUPER_ADMIN_PASSWORD,
+    "SUPER_ADMIN",
+  );
+  await upsertAdmin(
+    ADMIN_EMAIL,
+    ADMIN_PHONE,
+    "Admin",
+    ADMIN_PASSWORD,
+    "ADMIN",
+  );
 }
 
 main()

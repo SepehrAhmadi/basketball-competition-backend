@@ -3,7 +3,7 @@ import prisma from "../../../config/db.config.ts";
 import { messages } from "../../../language/message.ts";
 import AppError from "../../../utils/appError.ts";
 import findOrFail from "../../../utils/findOrFail.ts";
-import type { Role } from "../../../prisma/generated/prisma/enums.ts";
+import type { AdminLevel, Role } from "../../../prisma/generated/prisma/enums.ts";
 import type {
   ListUsersQuery,
   UpdateUserByAdminInput,
@@ -53,22 +53,19 @@ async function adminDeleteUser(targetUserId: number) {
   });
 }
 
-// Roles whose holders are invisible to a regular ADMIN in user listings.
-const ADMIN_LEVEL_ROLES: Role[] = ["ADMIN", "SUPER_ADMIN"];
-
 /**
- * Check whether a target user (by their roles) should be accessible to the
- * requester.  A plain ADMIN may not act on anyone who holds ADMIN or
- * SUPER_ADMIN.  A SUPER_ADMIN may act on everyone.
+ * Check whether a target user should be accessible to the requester.
+ * A plain ADMIN may not act on anyone who holds any admin level.
+ * A SUPER_ADMIN may act on everyone.
  */
 async function assertTargetAccessible(
   targetUserId: number,
-  requesterRoles: Role[],
+  requesterAdminLevel: AdminLevel | null,
 ) {
-  if (requesterRoles.includes("SUPER_ADMIN")) return; // full access
+  if (requesterAdminLevel === "SUPER_ADMIN") return; // full access
 
-  const target = await prisma.userRole.findFirst({
-    where: { userId: targetUserId, role: { in: ADMIN_LEVEL_ROLES } },
+  const target = await prisma.userAdmin.findUnique({
+    where: { userId: targetUserId },
   });
   if (target) {
     throw new AppError(403, messages.error.auth.forbidden);
@@ -77,17 +74,18 @@ async function assertTargetAccessible(
 
 async function listUsers(
   query: ListUsersQuery,
-  requesterRoles: Role[],
+  requesterAdminLevel: AdminLevel | null,
 ) {
   const where: {
-    roles?: { some: { role: Role } } | { none: { role: { in: Role[] } } };
+    userAdmin?: null;
+    roles?: { some: { role: Role } };
     status?: ListUsersQuery["status"];
     OR?: { fullName?: { contains: string }; phone?: { contains: string }; email?: { contains: string } }[];
   } = {};
 
-  // Regular ADMINs must not see ADMIN or SUPER_ADMIN users.
-  if (!requesterRoles.includes("SUPER_ADMIN")) {
-    where.roles = { none: { role: { in: ADMIN_LEVEL_ROLES } } };
+  // Regular ADMINs must not see users holding any admin level.
+  if (requesterAdminLevel !== "SUPER_ADMIN") {
+    where.userAdmin = null;
   } else if (query.role) {
     where.roles = { some: { role: query.role } };
   }
@@ -107,7 +105,7 @@ async function listUsers(
   const [users, total] = await prisma.$transaction([
     prisma.user.findMany({
       where,
-      include: { roles: true },
+      include: { roles: true, userAdmin: true },
       orderBy: { createdAt: "desc" },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
@@ -126,7 +124,7 @@ async function listUsers(
 async function getUserById(userId: number): Promise<UserProfile> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { roles: true },
+    include: { roles: true, userAdmin: true },
   });
   if (!user) {
     throw new AppError(404, messages.error.user.notFound);
@@ -158,30 +156,32 @@ async function resetUserPasswordByAdmin(
 }
 
 async function setAdminStatus(targetUserId: number, isAdmin: boolean) {
-  const target = await prisma.user.findUnique({
-    where: { id: targetUserId },
-    include: { roles: true },
+  await findOrFail(prisma.user, targetUserId, messages.error.auth.userNotFound);
+  const target = await prisma.userAdmin.findUnique({
+    where: { userId: targetUserId },
   });
-  if (!target) throw new AppError(404, messages.error.auth.userNotFound);
 
-  const isSuperAdmin = target.roles.some((r) => r.role === "SUPER_ADMIN");
-  if (isSuperAdmin && !isAdmin) {
+  if (target?.level === "SUPER_ADMIN" && !isAdmin) {
     throw new AppError(400, messages.error.auth.cannotRevokeAdminFromSuperAdmin);
   }
 
-  const hasAdminRole = target.roles.some((r) => r.role === "ADMIN");
-
-  if (isAdmin && !hasAdminRole) {
-    await prisma.userRole.create({ data: { userId: targetUserId, role: "ADMIN" } });
+  if (isAdmin && !target) {
+    await prisma.userAdmin.create({
+      data: { userId: targetUserId, level: "ADMIN" },
+    });
   }
 
-  if (!isAdmin && hasAdminRole) {
-    await prisma.userRole.deleteMany({ where: { userId: targetUserId, role: "ADMIN" } });
-    // fine-grained permissions are meaningless without ADMIN — clear them too
-    await prisma.adminPermission.deleteMany({ where: { userId: targetUserId } });
+  if (!isAdmin && target) {
+    await prisma.$transaction([
+      prisma.adminPermission.deleteMany({ where: { userAdminId: target.id } }),
+      prisma.userAdmin.delete({ where: { id: target.id } }),
+    ]);
   }
 
-  return prisma.user.findUnique({ where: { id: targetUserId }, include: { roles: true } });
+  return prisma.user.findUnique({
+    where: { id: targetUserId },
+    include: { roles: true, userAdmin: true },
+  });
 }
 
 function listPermissionCatalog() {
@@ -190,30 +190,35 @@ function listPermissionCatalog() {
 
 async function getUserPermissions(targetUserId: number) {
   await findOrFail(prisma.user, targetUserId, messages.error.auth.userNotFound);
-  const rows = await prisma.adminPermission.findMany({ where: { userId: targetUserId } });
+  const userAdmin = await prisma.userAdmin.findUnique({
+    where: { userId: targetUserId },
+  });
+  if (!userAdmin) {
+    throw new AppError(400, messages.error.auth.userNotAdmin);
+  }
+  const rows = await prisma.adminPermission.findMany({
+    where: { userAdminId: userAdmin.id },
+  });
   return rows.map((r) => r.permission);
 }
 
 async function replaceUserPermissions(targetUserId: number, permissions: Permission[]) {
-  const target = await prisma.user.findUnique({
-    where: { id: targetUserId },
-    include: { roles: true },
+  await findOrFail(prisma.user, targetUserId, messages.error.auth.userNotFound);
+  const userAdmin = await prisma.userAdmin.findUnique({
+    where: { userId: targetUserId },
   });
-  if (!target) throw new AppError(404, messages.error.auth.userNotFound);
-
-  const isAdmin = target.roles.some((r) => r.role === "ADMIN");
-  if (!isAdmin) {
+  if (!userAdmin) {
     throw new AppError(400, messages.error.auth.userNotAdmin);
   }
 
   const uniquePermissions = [...new Set(permissions)];
 
   return prisma.$transaction(async (tx) => {
-    await tx.adminPermission.deleteMany({ where: { userId: targetUserId } });
+    await tx.adminPermission.deleteMany({ where: { userAdminId: userAdmin.id } });
     await tx.adminPermission.createMany({
-      data: uniquePermissions.map((permission) => ({ userId: targetUserId, permission })),
+      data: uniquePermissions.map((permission) => ({ userAdminId: userAdmin.id, permission })),
     });
-    return tx.adminPermission.findMany({ where: { userId: targetUserId } });
+    return tx.adminPermission.findMany({ where: { userAdminId: userAdmin.id } });
   });
 }
 

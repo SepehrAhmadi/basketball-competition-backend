@@ -11,13 +11,15 @@ datasource db {
 }
 
 enum Role {
-  SUPER_ADMIN
-  ADMIN
   ORG_MANAGER
   COACH
   PLAYER
   REFEREE
-  PUBLIC
+}
+
+enum AdminLevel {
+  ADMIN
+  SUPER_ADMIN
 }
 
 enum UserStatus {
@@ -83,7 +85,7 @@ model User {
   coach                Coach?
   referee              Referee?
   teamMemberships      TeamSeasonMember[]
-  adminPermissions     AdminPermission[]
+  userAdmin            UserAdmin?
 
   @@map("users")
 }
@@ -99,15 +101,26 @@ model UserRole {
   @@map("user_roles")
 }
 
+model UserAdmin {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique @map("user_id")
+  level     AdminLevel
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  user        User              @relation(fields: [userId], references: [id])
+  permissions AdminPermission[]
+
+  @@map("user_admins")
+}
+
 model AdminPermission {
-  id         Int      @id @default(autoincrement())
-  userId     Int      @map("user_id")
-  permission String
-  createdAt  DateTime @default(now()) @map("created_at")
+  id          Int    @id @default(autoincrement())
+  userAdminId Int    @map("user_admin_id")
+  permission  String
 
-  user User @relation(fields: [userId], references: [id])
+  userAdmin UserAdmin @relation(fields: [userAdminId], references: [id])
 
-  @@unique([userId, permission])
+  @@unique([userAdminId, permission])
   @@map("admin_permissions")
 }
 

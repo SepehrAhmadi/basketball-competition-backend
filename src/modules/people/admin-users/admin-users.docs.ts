@@ -18,18 +18,16 @@ import {
 import { PERMISSION_CODES } from "../../../shared/permissions.ts";
 
 // ---- response models ----
-// Display-only: broader than `roleSchema` (which only covers roles the admin
-// endpoints let you *assign*), since a listed user's roles can include
-// ADMIN/SUPER_ADMIN even though those aren't assignable via this schema.
+// Display-only: roles are domain-only now; admin standing is exposed
+// separately via adminLevel.
 const roleEnum = z.enum([
-  "SUPER_ADMIN",
-  "ADMIN",
   "ORG_MANAGER",
   "COACH",
   "PLAYER",
   "REFEREE",
-  "PUBLIC",
 ]).openapi("Role");
+
+const adminLevelEnum = z.enum(["ADMIN", "SUPER_ADMIN"]).nullable().openapi("AdminLevel");
 
 const userProfileSchema = z
   .object({
@@ -47,6 +45,7 @@ const userProfileSchema = z
       example: "ACTIVE",
     }),
     roles: z.array(roleEnum).openapi({ example: ["PLAYER"] }),
+    adminLevel: adminLevelEnum.openapi({ example: "ADMIN" }),
     createdAt: z.date().openapi({ example: "2026-09-06T08:00:00.000Z" }),
   })
   .openapi("AdminUserProfile");
@@ -73,7 +72,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "Create a user",
   description:
-    "Admin-only endpoint to create a user with any non-admin role (ORG_MANAGER, COACH, PLAYER, REFEREE, PUBLIC). ADMIN/SUPER_ADMIN cannot be granted here — use PUT /admin/users/{id}/admin-status. Returns the new user's id.",
+    "Admin-only endpoint to create a user with any domain role (ORG_MANAGER, COACH, PLAYER, REFEREE). Admin levels cannot be granted here — use PUT /admin/users/{id}/admin-status. Returns the new user's id.",
   request: {
     body: {
       content: { "application/json": { schema: adminCreateUserSchema } },
@@ -129,7 +128,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "List users",
   description:
-    "Admin-only paginated user list for the user-management screen. Supports page/pageSize plus optional query, role, and status filters. Unlike /users/search, inactive/suspended/deleted users are included unless filtered. Regular ADMINs only see users with non-admin roles (ORG_MANAGER, COACH, PLAYER, REFEREE, PUBLIC) — ADMIN and SUPER_ADMIN users are hidden. SUPER_ADMIN sees all users.",
+    "Admin-only paginated user list for the user-management screen. Supports page/pageSize plus optional query, role, and status filters. Unlike /users/search, inactive/suspended/deleted users are included unless filtered. Regular ADMINs only see non-admin users — users holding any admin level are hidden. SUPER_ADMIN sees all users.",
   request: {
     query: listUsersQuerySchema,
   },

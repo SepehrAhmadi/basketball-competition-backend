@@ -72,9 +72,10 @@ async function getAllOrganizations(
   roles: string[],
   query: ListOrganizationsQuery,
   baseUrl?: string,
+  adminLevel?: string | null,
 ) {
   const where: any = { status: { not: "DELETED" } };
-  if (!roles.includes("ADMIN")) {
+  if (!adminLevel) {
     where.managers = { some: { userId } };
   }
 

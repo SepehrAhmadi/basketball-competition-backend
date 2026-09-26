@@ -39,6 +39,7 @@ async function createTeam(req: Request, res: Response, next: NextFunction) {
       input,
       req.userId as number,
       req.roles as string[],
+      req.adminLevel ?? null,
       req.file,
     );
     return apiResponse.sendResponse(res, 201, messages.success.team.created, team);
@@ -59,6 +60,7 @@ async function updateTeam(req: Request, res: Response, next: NextFunction) {
       Number(req.params.teamId),
       input,
       req.roles as string[],
+      req.adminLevel ?? null,
       req.userId as number,
       req.file,
     );
@@ -73,6 +75,7 @@ async function deleteTeam(req: Request, res: Response, next: NextFunction) {
     await teamsService.deleteTeam(
       Number(req.params.teamId),
       req.roles as string[],
+      req.adminLevel ?? null,
       req.userId as number,
     );
     return apiResponse.sendResponse(res, 200, messages.success.team.deleted);
@@ -90,6 +93,7 @@ async function updateLogo(req: Request, res: Response, next: NextFunction) {
       Number(req.params.teamId),
       req.file,
       req.roles as string[],
+      req.adminLevel ?? null,
       req.userId as number,
     );
     return apiResponse.sendResponse(res, 200, messages.success.team.logoUpdated, team);
@@ -126,6 +130,7 @@ async function addRosterMember(req: Request, res: Response, next: NextFunction) 
       Number(req.params.teamId),
       input,
       req.roles as string[],
+      req.adminLevel ?? null,
       req.userId as number,
     );
     return apiResponse.sendResponse(res, 201, messages.success.team.rosterMemberAdded, member);
@@ -148,6 +153,7 @@ async function updateRosterMember(req: Request, res: Response, next: NextFunctio
       memberId,
       input,
       req.roles as string[],
+      req.adminLevel ?? null,
       req.userId as number,
     );
     return apiResponse.sendResponse(res, 200, messages.success.team.rosterMemberUpdated, member);
@@ -165,6 +171,7 @@ async function updateRosterMember(req: Request, res: Response, next: NextFunctio
       memberId,
       seasonId,
       req.roles as string[],
+      req.adminLevel ?? null,
       req.userId as number,
     );
     return apiResponse.sendResponse(res, 200, messages.success.team.rosterMemberRemoved);

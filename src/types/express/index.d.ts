@@ -1,4 +1,4 @@
-import type { Role } from "../../prisma/generated/prisma/enums.ts";
+import type { AdminLevel, Role } from "../../prisma/generated/prisma/enums.ts";
 import type { Request } from "express";
 
 declare global {
@@ -6,6 +6,7 @@ declare global {
     interface Request {
       userId?: number;
       roles?: Role[];
+      adminLevel?: AdminLevel | null;
       permissions?: string[];
     }
   }

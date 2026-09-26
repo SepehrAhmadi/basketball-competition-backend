@@ -1,4 +1,4 @@
-import type { Role, UserStatus } from "../../../prisma/generated/prisma/enums.ts";
+import type { AdminLevel, Role, UserStatus } from "../../../prisma/generated/prisma/enums.ts";
 
 export interface UpdateProfileInput {
   fullName?: string;
@@ -45,5 +45,6 @@ export interface UserProfile {
   nationalId: string | null;
   status: UserStatus;
   roles: Role[];
+  adminLevel: AdminLevel | null;
   createdAt: Date;
 }

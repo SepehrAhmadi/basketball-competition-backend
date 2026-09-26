@@ -1,11 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import AppError from "../../utils/appError.ts";
-import type { Role } from "../../prisma/generated/prisma/enums.ts";
+import type { AdminLevel, Role } from "../../prisma/generated/prisma/enums.ts";
 
 interface AccessTokenPayload {
   userId: number;
   roles: Role[];
+  adminLevel: AdminLevel | null;
   permissions: string[];
 }
 
@@ -29,8 +30,14 @@ const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
     }
 
     const payload = decoded as AccessTokenPayload;
+    // Old tokens issued before the adminLevel split carry no adminLevel
+    // field — reject them so the client re-authenticates.
+    if (payload.adminLevel === undefined) {
+      return next(new AppError(401, "Invalid token"));
+    }
     req.userId = payload.userId;
     req.roles = payload.roles;
+    req.adminLevel = payload.adminLevel;
     req.permissions = payload.permissions;
     next();
   });

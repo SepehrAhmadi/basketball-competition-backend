@@ -1,7 +1,7 @@
 import { Router } from "express";
 import validate from "../../../middleware/validate.ts";
 import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
-import verifyRole from "../../../middleware/auth/verifyRole.middleware.ts";
+import verifyAdminLevel from "../../../middleware/auth/verifyAdminLevel.middleware.ts";
 import verifyPermission from "../../../middleware/auth/verifyPermission.middleware.ts";
 import { idParamSchema } from "../../../shared/schemas.validation.ts";
 import adminUsersValidation from "./admin-users.validation.ts";
@@ -9,9 +9,9 @@ import adminUsersController from "./admin-users.controller.ts";
 
 const router = Router();
 
-// All admin user-management routes require authentication + ADMIN role.
+// All admin user-management routes require authentication + admin level.
 router.use(verifyJWT);
-router.use(verifyRole("ADMIN"));
+router.use(verifyAdminLevel("ADMIN", "SUPER_ADMIN"));
 
 router.post(
   "/",
@@ -31,7 +31,7 @@ router.get(
 // "permissions" as an :id value.
 router.get(
   "/permissions",
-  verifyRole("SUPER_ADMIN"),
+  verifyAdminLevel("SUPER_ADMIN"),
   adminUsersController.listPermissionCatalog,
 );
 
@@ -69,7 +69,7 @@ router.patch(
 // permissions must never be reachable by a plain ADMIN.
 router.put(
   "/:id/admin-status",
-  verifyRole("SUPER_ADMIN"),
+  verifyAdminLevel("SUPER_ADMIN"),
   validate(idParamSchema, "params"),
   validate(adminUsersValidation.setAdminStatusSchema),
   adminUsersController.setAdminStatus,
@@ -77,17 +77,18 @@ router.put(
 
 router.get(
   "/:id/permissions",
-  verifyRole("SUPER_ADMIN"),
+  verifyAdminLevel("SUPER_ADMIN"),
   validate(idParamSchema, "params"),
   adminUsersController.getUserPermissions,
 );
 
 router.put(
   "/:id/permissions",
-  verifyRole("SUPER_ADMIN"),
+  verifyAdminLevel("SUPER_ADMIN"),
   validate(idParamSchema, "params"),
   validate(adminUsersValidation.replacePermissionsSchema),
   adminUsersController.replaceUserPermissions,
 );
 
 export default router;
+

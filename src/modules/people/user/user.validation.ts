@@ -20,12 +20,10 @@ const jalaliBirthDate = z
   })(), "Birth date must be a valid Jalali date in YYYY/MM/DD format.");
 
 export const allRoles = [
-  "ADMIN",
   "ORG_MANAGER",
   "COACH",
   "PLAYER",
   "REFEREE",
-  "PUBLIC",
 ] as const;
 
 export const roleSchema = z.enum(allRoles).openapi({ example: "PLAYER" });

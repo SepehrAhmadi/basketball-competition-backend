@@ -14,8 +14,10 @@ import {
 } from "./user.validation.ts";
 
 const roleEnum = z
-  .enum(["ADMIN", "ORG_MANAGER", "COACH", "PLAYER", "REFEREE", "PUBLIC"])
+  .enum(["ORG_MANAGER", "COACH", "PLAYER", "REFEREE"])
   .openapi("Role");
+
+const adminLevelEnum = z.enum(["ADMIN", "SUPER_ADMIN"]).nullable().openapi("AdminLevel");
 
 export const userProfileSchema = z
   .object({
@@ -33,6 +35,7 @@ export const userProfileSchema = z
       example: "ACTIVE",
     }),
     roles: z.array(roleEnum).openapi({ example: ["PLAYER"] }),
+    adminLevel: adminLevelEnum.openapi({ example: "ADMIN" }),
     createdAt: z.date().openapi({ example: "2026-09-06T08:00:00.000Z" }),
   })
   .openapi("UserProfile");

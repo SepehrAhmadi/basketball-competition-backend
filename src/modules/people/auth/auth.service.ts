@@ -4,7 +4,7 @@ import prisma from "../../../config/db.config.ts";
 import { messages } from "../../../language/message.ts";
 import AppError from "../../../utils/appError.ts";
 import userService from "../user/user.service.ts";
-import type { Role } from "../../../prisma/generated/prisma/enums.ts";
+import type { AdminLevel, Role } from "../../../prisma/generated/prisma/enums.ts";
 import { jalaliToGregorian } from "../../../utils/date.util.ts";
 
 const SELF_REGISTER_ROLES: Role[] = [
@@ -16,15 +16,23 @@ const SELF_REGISTER_ROLES: Role[] = [
 
 // SUPER_ADMIN bypasses permission checks entirely at check-time (see
 // verifyPermission), so there's no need to enumerate "all permissions" here.
-async function getPermissionsForUser(userId: number, roles: Role[]): Promise<string[]> {
-  if (roles.includes("SUPER_ADMIN") || !roles.includes("ADMIN")) return [];
-  const rows = await prisma.adminPermission.findMany({ where: { userId } });
+async function getPermissionsForUser(
+  userAdminId: number | undefined,
+  adminLevel: AdminLevel | null,
+): Promise<string[]> {
+  if (!userAdminId || adminLevel === "SUPER_ADMIN") return [];
+  const rows = await prisma.adminPermission.findMany({ where: { userAdminId } });
   return rows.map((r) => r.permission);
 }
 
-function signAccessToken(userId: number, roles: Role[], permissions: string[]) {
+function signAccessToken(
+  userId: number,
+  roles: Role[],
+  adminLevel: AdminLevel | null,
+  permissions: string[],
+) {
   return jwt.sign(
-    { userId, roles, permissions },
+    { userId, roles, adminLevel, permissions },
     process.env.ACCESS_TOKEN_SECRET as string,
     {
       expiresIn: "15m",
@@ -87,7 +95,7 @@ interface LoginInput {
 async function authenticateUser({ identifier, password }: LoginInput) {
   const user = await prisma.user.findFirst({
     where: { OR: [{ phone: identifier }, { email: identifier }] },
-    include: { roles: true },
+    include: { roles: true, userAdmin: true },
   });
 
   if (!user) {
@@ -104,23 +112,24 @@ async function authenticateUser({ identifier, password }: LoginInput) {
   }
 
   const roles = user.roles.map((r) => r.role);
-  const permissions = await getPermissionsForUser(user.id, roles);
-  const accessToken = signAccessToken(user.id, roles, permissions);
+  const adminLevel = user.userAdmin?.level ?? null;
+  const permissions = await getPermissionsForUser(user.userAdmin?.id, adminLevel);
+  const accessToken = signAccessToken(user.id, roles, adminLevel, permissions);
   const refreshToken = signRefreshToken(user.id);
 
   await prisma.user.update({ where: { id: user.id }, data: { refreshToken } });
 
-  return { user, roles, permissions, accessToken, refreshToken };
+  return { user, roles, adminLevel, permissions, accessToken, refreshToken };
 }
 
 async function login(input: LoginInput) {
   return authenticateUser(input);
 }
 
-// admin-panel-only — same credentials check, plus a hard role gate
+// admin-panel-only — same credentials check, plus a hard admin-level gate
 async function adminLogin(input: LoginInput) {
   const result = await authenticateUser(input);
-  if (!result.roles.includes("ADMIN") && !result.roles.includes("SUPER_ADMIN")) {
+  if (result.adminLevel == null) {
     throw new AppError(403, messages.error.auth.notAuthorizedAdminPanel);
   }
   return result;
@@ -133,7 +142,7 @@ async function refreshAccessToken(refreshTokenFromCookie: string | undefined) {
 
   const user = await prisma.user.findFirst({
     where: { refreshToken: refreshTokenFromCookie },
-    include: { roles: true },
+    include: { roles: true, userAdmin: true },
   });
   if (!user) {
     throw new AppError(403, messages.error.auth.invalidRefreshToken);
@@ -153,8 +162,9 @@ async function refreshAccessToken(refreshTokenFromCookie: string | undefined) {
   }
 
   const roles = user.roles.map((r) => r.role);
-  const permissions = await getPermissionsForUser(user.id, roles);
-  return { accessToken: signAccessToken(user.id, roles, permissions) };
+  const adminLevel = user.userAdmin?.level ?? null;
+  const permissions = await getPermissionsForUser(user.userAdmin?.id, adminLevel);
+  return { accessToken: signAccessToken(user.id, roles, adminLevel, permissions) };
 }
 
 async function logout(refreshTokenFromCookie: string | undefined) {

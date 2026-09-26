@@ -4,6 +4,9 @@ import type { Role } from "../../prisma/generated/prisma/enums.ts";
 
 const verifyRole = (...allowedRoles: Role[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
+    // Any admin level bypasses domain-role checks entirely.
+    if (req.adminLevel) return next();
+
     if (!req.roles || req.roles.length === 0) {
       return next(new AppError(401, "No role found"));
     }

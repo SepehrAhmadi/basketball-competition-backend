@@ -21,6 +21,8 @@ async function getAll(
       req.userId as number,
       req.roles as string[],
       query,
+      undefined,
+      req.adminLevel ?? null,
     );
 
     return apiResponse.sendResponse(

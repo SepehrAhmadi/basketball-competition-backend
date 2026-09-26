@@ -5,7 +5,7 @@ import type { Permission } from "../../shared/permissions.ts";
 // Reads straight off the already-decoded token — no DB call, same as verifyRole.
 const verifyPermission = (permission: Permission) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (req.roles?.includes("SUPER_ADMIN")) {
+    if (req.adminLevel === "SUPER_ADMIN") {
       return next();
     }
     if (!req.permissions?.includes(permission)) {
