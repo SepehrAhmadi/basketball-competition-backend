@@ -10,9 +10,15 @@ import type {
   UpdateUserByAdminInput,
   UserProfile,
 } from "./user.types.ts";
-import type { AdminLevel, Role } from "../../../prisma/generated/prisma/enums.ts";
+import type {
+  AdminLevel,
+  Role,
+} from "../../../prisma/generated/prisma/enums.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
-import { gregorianToJalali, jalaliToGregorian } from "../../../utils/date.util.ts";
+import {
+  gregorianToJalali,
+  jalaliToGregorian,
+} from "../../../utils/date.util.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -100,15 +106,20 @@ export async function applyProfileUpdate(
     phone?: string;
     email?: string;
     birthDate?: Date | null;
-    nationalId?: string;
+    nationalId?: string | null;
   } = {};
   if (data.fullName !== undefined) updateData.fullName = data.fullName;
   if (data.phone !== undefined) updateData.phone = data.phone;
   if (data.email !== undefined) updateData.email = data.email;
-if (data.birthDate !== undefined) {
-    updateData.birthDate = data.birthDate === null ? null : jalaliToGregorian(data.birthDate);
+  if (data.birthDate !== undefined) {
+    updateData.birthDate =
+      data.birthDate === "" || data.birthDate === null
+        ? null
+        : jalaliToGregorian(data.birthDate);
   }
-  if (data.nationalId !== undefined) updateData.nationalId = data.nationalId;
+  if (data.nationalId !== undefined) {
+    updateData.nationalId = data.nationalId === "" ? null : data.nationalId;
+  }
 
   const roles = data.roles !== undefined ? [...new Set(data.roles)] : undefined;
 
@@ -161,7 +172,9 @@ if (data.birthDate !== undefined) {
   }
 }
 
-type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+type TransactionClient = Parameters<
+  Parameters<typeof prisma.$transaction>[0]
+>[0];
 
 async function syncUserRoles(
   tx: TransactionClient,

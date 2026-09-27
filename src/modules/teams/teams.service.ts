@@ -400,6 +400,7 @@ async function addRosterMember(
         status: "ACTIVE",
         jerseyNumber,
         isHeadCoach,
+        organizationId: team.organizationId,
       },
     });
     return reactivated;
@@ -426,6 +427,7 @@ async function addRosterMember(
           teamId,
           seasonId: data.seasonId,
           userId: data.userId,
+          organizationId: team.organizationId,
           role: data.role,
           jerseyNumber,
           isHeadCoach,

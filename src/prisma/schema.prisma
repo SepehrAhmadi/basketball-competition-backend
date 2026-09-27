@@ -137,6 +137,7 @@ model Organization {
 
   managers OrganizationManager[]
   teams    Team[]
+  teamSeasonMembers TeamSeasonMember[]
 
   @@map("organizations")
 }
@@ -220,21 +221,24 @@ model Season {
 }
 
 model TeamSeasonMember {
-  id           Int                @id @default(autoincrement())
-  teamId       Int                @map("team_id")
-  seasonId     Int                @map("season_id")
-  userId       Int                @map("user_id")
-  role         TeamMemberRole
-  jerseyNumber Int?               @map("jersey_number")
-  isHeadCoach  Boolean            @default(false) @map("is_head_coach")
-  status       TeamMemberStatus   @default(ACTIVE)
-  createdAt    DateTime           @default(now()) @map("created_at")
+  id             Int                @id @default(autoincrement())
+  teamId         Int                @map("team_id")
+  seasonId       Int                @map("season_id")
+  userId         Int                @map("user_id")
+  organizationId Int                @map("organization_id")
+  role           TeamMemberRole
+  jerseyNumber   Int?               @map("jersey_number")
+  isHeadCoach    Boolean            @default(false) @map("is_head_coach")
+  status         TeamMemberStatus   @default(ACTIVE)
+  createdAt      DateTime           @default(now()) @map("created_at")
 
-  team   Team   @relation(fields: [teamId], references: [id])
-  season Season @relation(fields: [seasonId], references: [id])
-  user   User   @relation(fields: [userId], references: [id])
+  team         Team         @relation(fields: [teamId], references: [id])
+  season       Season       @relation(fields: [seasonId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([teamId, seasonId, userId, role])
   @@unique([teamId, seasonId, jerseyNumber])
+  @@index([organizationId, userId])
   @@map("team_season_members")
 }

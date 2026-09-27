@@ -53,7 +53,7 @@ interface RegisterInput {
   password: string;
   avatarUrl?: string;
   birthDate?: string | null;
-  nationalId?: string;
+  nationalId?: string | null;
   roles: Role[];
 }
 
@@ -79,8 +79,14 @@ async function register(input: RegisterInput) {
       email: input.email,
       passwordHash,
       avatarUrl: input.avatarUrl,
-      birthDate: input.birthDate == null ? input.birthDate : jalaliToGregorian(input.birthDate),
-      nationalId: input.nationalId,
+      birthDate:
+        input.birthDate == null || input.birthDate === ""
+          ? null
+          : jalaliToGregorian(input.birthDate),
+      nationalId:
+        input.nationalId == null || input.nationalId === ""
+          ? null
+          : input.nationalId,
       roles: { create: roles.map((role) => ({ role })) },
     },
   });

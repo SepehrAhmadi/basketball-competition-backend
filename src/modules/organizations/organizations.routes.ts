@@ -6,7 +6,6 @@ import createUploader from "../../middleware/upload/createUploader.ts";
 import uploadConfig from "../../config/upload.config.ts";
 import { idParamSchema } from "../../shared/schemas.validation.ts";
 import organizationsValidation from "./organizations.validation.ts";
-import verifyOrgAccess from "./organizations.middleware.ts";
 import organizationsController from "./organizations.controller.ts";
 
 const router = Router();
@@ -27,7 +26,6 @@ router.get(
   "/:id",
   verifyJWT,
   validate(idParamSchema, "params"),
-  verifyOrgAccess,
   organizationsController.getById,
 );
 
@@ -45,7 +43,6 @@ router.put(
   verifyJWT,
   verifyRole("ORG_MANAGER"),
   validate(idParamSchema, "params"),
-  verifyOrgAccess,
   organizationLogoUploader.single("logo"),
   validate(organizationsValidation.updateOrganizationSchema),
   organizationsController.update,
@@ -56,7 +53,6 @@ router.delete(
   verifyJWT,
   verifyRole("ORG_MANAGER"),
   validate(idParamSchema, "params"),
-  verifyOrgAccess,
   organizationsController.remove,
 );
 

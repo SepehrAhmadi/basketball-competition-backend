@@ -40,11 +40,8 @@ function organizationLogoUrlToPath(logoUrl: string | null | undefined): string |
 }
 
 const baseUrl = process.env.BASE_URL;
-function withPublicLogoUrl(
-  organization: {
-    logoUrl: string | null;
-    [key: string]: any;
-  },
+function withPublicLogoUrl<T extends { logoUrl: string | null }>(
+  organization: T,
 ) {
   return {
     ...organization,
@@ -67,6 +64,69 @@ interface ListOrganizationsQuery {
   pageSize: number;
 }
 
+async function assertOrgManager(orgId: number, userId: number) {
+  const membership = await prisma.organizationManager.findFirst({
+    where: { organizationId: orgId, userId },
+  });
+  if (!membership) {
+    throw new AppError(403, messages.error.organization.notAuthorized);
+  }
+}
+
+async function assertOrgViewAccess(orgId: number, userId: number) {
+  const [isManager, isMember] = await Promise.all([
+    prisma.organizationManager.findFirst({ where: { organizationId: orgId, userId } }),
+    prisma.teamSeasonMember.findFirst({
+      where: { organizationId: orgId, userId, status: "ACTIVE" },
+    }),
+  ]);
+  if (!isManager && !isMember) {
+    throw new AppError(403, messages.error.organization.notAuthorized);
+  }
+}
+
+type MembershipInfo = {
+  seasonId: number;
+  seasonName: string;
+  teamId: number;
+  teamName: string;
+  role: string;
+  isHeadCoach: boolean;
+};
+
+async function getMembershipInfoForOrgs(userId: number, orgIds: number[]) {
+  const [managerRows, memberRows] = await Promise.all([
+    prisma.organizationManager.findMany({
+      where: { userId, organizationId: { in: orgIds } },
+      select: { organizationId: true },
+    }),
+    prisma.teamSeasonMember.findMany({
+      where: { userId, status: "ACTIVE", organizationId: { in: orgIds } },
+      include: {
+        team: { select: { id: true, name: true } },
+        season: { select: { id: true, name: true } },
+      },
+    }),
+  ]);
+
+  const managedOrgIds = new Set(managerRows.map((r) => r.organizationId));
+  const membershipsByOrgId = new Map<number, MembershipInfo[]>();
+
+  for (const m of memberRows) {
+    if (!membershipsByOrgId.has(m.organizationId)) membershipsByOrgId.set(m.organizationId, []);
+    membershipsByOrgId.get(m.organizationId)!.push({
+      seasonId: m.season.id,
+      seasonName: m.season.name,
+      teamId: m.team.id,
+      teamName: m.team.name,
+      role: m.role,
+      isHeadCoach: m.isHeadCoach,
+    });
+  }
+
+  return { managedOrgIds, membershipsByOrgId };
+}
+
 async function getAllOrganizations(
   userId: number,
   roles: string[],
@@ -76,7 +136,10 @@ async function getAllOrganizations(
 ) {
   const where: any = { status: { not: "DELETED" } };
   if (!adminLevel) {
-    where.managers = { some: { userId } };
+    where.OR = [
+      { managers: { some: { userId } } },
+      { teamSeasonMembers: { some: { userId, status: "ACTIVE" } } },
+    ];
   }
 
   const [items, total] = await prisma.$transaction([
@@ -89,22 +152,54 @@ async function getAllOrganizations(
     prisma.organization.count({ where }),
   ]);
 
+  let enriched = items.map((item) => withPublicLogoUrl(item));
+
+  if (!adminLevel && items.length > 0) {
+    const { managedOrgIds, membershipsByOrgId } = await getMembershipInfoForOrgs(
+      userId,
+      items.map((o) => o.id),
+    );
+    enriched = enriched.map((org) => ({
+      ...org,
+      isManager: managedOrgIds.has(org.id),
+      memberships: membershipsByOrgId.get(org.id) ?? [],
+    }));
+  }
+
   return {
-    items: items.map((item) => withPublicLogoUrl(item)),
+    items: enriched,
     total,
     page: query.page,
     pageSize: query.pageSize,
   };
 }
 
-async function getOrganizationById(id: number, baseUrl?: string) {
+async function getOrganizationById(
+  id: number,
+  userId: number,
+  adminLevel: string | null,
+  baseUrl?: string,
+) {
   const organization = await prisma.organization.findFirst({
     where: { id, status: { not: "DELETED" } },
   });
   if (!organization) {
     throw new AppError(404, messages.error.organization.notFound);
   }
-  return withPublicLogoUrl(organization);
+
+  if (!adminLevel) {
+    await assertOrgViewAccess(id, userId);
+  }
+
+  const result = withPublicLogoUrl(organization);
+  if (adminLevel) return result;
+
+  const { managedOrgIds, membershipsByOrgId } = await getMembershipInfoForOrgs(userId, [id]);
+  return {
+    ...result,
+    isManager: managedOrgIds.has(id),
+    memberships: membershipsByOrgId.get(id) ?? [],
+  };
 }
 
 async function createOrganization(
@@ -149,6 +244,8 @@ async function updateOrganization(
   id: number,
   data: UpdateOrganizationInput,
   file?: Express.Multer.File,
+  userId?: number,
+  adminLevel?: string | null,
   baseUrl?: string,
 ) {
   const organization = await prisma.organization.findFirst({
@@ -157,6 +254,14 @@ async function updateOrganization(
   if (!organization) {
     if (file) removeFileIfExists(file.path);
     throw new AppError(404, messages.error.organization.notFound);
+  }
+  if (!adminLevel) {
+    try {
+      await assertOrgManager(id, userId as number);
+    } catch (err) {
+      if (file) removeFileIfExists(file.path);
+      throw err;
+    }
   }
   // logoUrl is server-generated — a client-sent value must never reach Prisma.
   const {
@@ -205,12 +310,15 @@ async function updateOrganization(
   return withPublicLogoUrl(updated);
 }
 
-async function deleteOrganization(id: number) {
+async function deleteOrganization(id: number, userId?: number, adminLevel?: string | null) {
   const organization = await prisma.organization.findFirst({
     where: { id, status: { not: "DELETED" } },
   });
   if (!organization) {
     throw new AppError(404, messages.error.organization.notFound);
+  }
+  if (!adminLevel) {
+    await assertOrgManager(id, userId as number);
   }
   return prisma.organization.update({
     where: { id },

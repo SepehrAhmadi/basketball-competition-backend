@@ -6,18 +6,34 @@ import { messages } from "../../../language/message.ts";
 import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
 import { jalaliToGregorian } from "../../../utils/date.util.ts";
 
-const jalaliBirthDate = z
-  .string()
-  .nullable()
-  .optional()
-  .refine((value) => value == null || (() => {
-    try {
-      jalaliToGregorian(value);
-      return true;
-    } catch {
-      return false;
-    }
-  })(), "Birth date must be a valid Jalali date in YYYY/MM/DD format.");
+// Empty string from the client is treated as null (not set / clear).
+const emptyToNull = (value: unknown) => (value === "" ? null : value);
+
+const jalaliBirthDate = z.preprocess(
+  emptyToNull,
+  z
+    .string()
+    .nullable()
+    .optional()
+    .refine(
+      (value) =>
+        value == null ||
+        (() => {
+          try {
+            jalaliToGregorian(value);
+            return true;
+          } catch {
+            return false;
+          }
+        })(),
+      "Birth date must be a valid Jalali date in YYYY/MM/DD format.",
+    ),
+);
+
+const nationalIdSchema = z.preprocess(
+  emptyToNull,
+  z.string().min(10).max(10).nullable().optional(),
+);
 
 export const allRoles = [
   "ORG_MANAGER",
@@ -43,12 +59,7 @@ export const updateProfileSchema = z
       .email(messages.error.auth.invalidEmail)
       .openapi({ example: "ali@example.com" }),
     birthDate: jalaliBirthDate.openapi({ example: "1381/05/20" }),
-    nationalId: z
-      .string()
-      .min(10)
-      .max(10)
-      .optional()
-      .openapi({ example: "0012345678" }),
+    nationalId: nationalIdSchema.openapi({ example: "0012345678" }),
     roles: z.array(roleSchema).optional().openapi({ example: ["PLAYER"] }),
   })
   .partial()

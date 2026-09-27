@@ -38,7 +38,11 @@ async function getAll(
 
 async function getById(req: Request, res: Response, next: NextFunction) {
   try {
-    const organization = await organizationsService.getOrganizationById(Number(req.params.id));
+    const organization = await organizationsService.getOrganizationById(
+      Number(req.params.id),
+      req.userId as number,
+      req.adminLevel ?? null,
+    );
     return apiResponse.sendResponse(res, 200, messages.success.organization.found, organization);
   } catch (err) {
     next(err);
@@ -66,6 +70,8 @@ async function update(req: Request, res: Response, next: NextFunction) {
       Number(req.params.id),
       input,
       req.file,
+      req.userId as number,
+      req.adminLevel ?? null,
     );
     return apiResponse.sendResponse(res, 200, messages.success.organization.updated, organization);
   } catch (err) {
@@ -75,7 +81,11 @@ async function update(req: Request, res: Response, next: NextFunction) {
 
 async function remove(req: Request, res: Response, next: NextFunction) {
   try {
-    await organizationsService.deleteOrganization(Number(req.params.id));
+    await organizationsService.deleteOrganization(
+      Number(req.params.id),
+      req.userId as number,
+      req.adminLevel ?? null,
+    );
     return apiResponse.sendResponse(res, 200, messages.success.organization.deleted);
   } catch (err) {
     next(err);

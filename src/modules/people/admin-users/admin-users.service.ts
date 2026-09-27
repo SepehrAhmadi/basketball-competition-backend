@@ -3,6 +3,7 @@ import prisma from "../../../config/db.config.ts";
 import { messages } from "../../../language/message.ts";
 import AppError from "../../../utils/appError.ts";
 import findOrFail from "../../../utils/findOrFail.ts";
+import { jalaliToGregorian } from "../../../utils/date.util.ts";
 import type { AdminLevel, Role } from "../../../prisma/generated/prisma/enums.ts";
 import type {
   ListUsersQuery,
@@ -18,7 +19,7 @@ interface AdminCreateUserInput {
   email: string;
   password: string;
   birthDate?: string | null;
-  nationalId?: string;
+  nationalId?: string | null;
   roles: Role[];
 }
 
@@ -38,8 +39,14 @@ async function adminCreateUser(input: AdminCreateUserInput) {
       phone: input.phone,
       email: input.email,
       passwordHash,
-      birthDate: input.birthDate == null ? input.birthDate : undefined,
-      nationalId: input.nationalId,
+      birthDate:
+        input.birthDate == null || input.birthDate === ""
+          ? null
+          : jalaliToGregorian(input.birthDate),
+      nationalId:
+        input.nationalId == null || input.nationalId === ""
+          ? null
+          : input.nationalId,
       roles: { create: input.roles.map((role) => ({ role })) },
     },
   });

@@ -5,7 +5,7 @@ export interface UpdateProfileInput {
   phone?: string;
   email?: string;
   birthDate?: string | null;
-  nationalId?: string;
+  nationalId?: string | null;
   roles?: Role[];
 }
 
@@ -14,7 +14,7 @@ export interface UpdateUserByAdminInput {
   phone?: string;
   email?: string;
   birthDate?: string | null;
-  nationalId?: string;
+  nationalId?: string | null;
   roles?: Role[];
 }
 

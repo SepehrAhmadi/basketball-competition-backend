@@ -51,6 +51,17 @@ const updateOrganizationRequestSchema = z
   })
   .openapi("UpdateOrganizationRequest");
 
+const organizationMembershipSchema = z
+  .object({
+    seasonId: z.number().openapi({ example: 3 }),
+    seasonName: z.string().openapi({ example: "1405" }),
+    teamId: z.number().openapi({ example: 12 }),
+    teamName: z.string().openapi({ example: "Youth Team" }),
+    role: z.enum(["COACH", "PLAYER"]).openapi({ example: "COACH" }),
+    isHeadCoach: z.boolean().openapi({ example: false }),
+  })
+  .openapi("OrganizationMembership");
+
 export const organizationSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
@@ -68,6 +79,8 @@ export const organizationSchema = z
     email: z.string().email().nullable().openapi({ example: "info@titans.ir" }),
     status: z.enum(["ACTIVE", "INACTIVE", "DELETED"]).openapi({ example: "ACTIVE" }),
     createdAt: z.date().openapi({ example: "2026-01-01T10:00:00.000Z" }),
+    isManager: z.boolean().optional().openapi({ example: true }),
+    memberships: z.array(organizationMembershipSchema).optional(),
   })
   .openapi("Organization");
 
@@ -85,7 +98,7 @@ registry.registerPath({
   tags: ["Organizations"],
   summary: "List organizations",
   description:
-    "Paginated list. ADMINs see all organizations; other users only see organizations they manage.",
+    "Paginated list. ADMINs see all organizations; other users see organizations they manage or have a team membership in, distinguished by isManager.",
   request: {
     query: organizationListQuerySchema,
   },
@@ -116,7 +129,7 @@ registry.registerPath({
   tags: ["Organizations"],
   summary: "Get an organization by id",
   description:
-    "ADMINs can fetch any organization; other users only organizations they manage.",
+    "ADMINs can fetch any organization; other users can fetch organizations they manage or have a team membership in.",
   request: {
     params: idParamSchema,
   },
@@ -138,7 +151,7 @@ registry.registerPath({
       },
     },
     "403": {
-      description: "Not a manager of this organization",
+      description: "Neither a manager nor a team member of this organization",
       content: {
         "application/json": { schema: forbiddenError },
       },
