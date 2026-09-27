@@ -129,7 +129,6 @@ async function addRosterMember(req: Request, res: Response, next: NextFunction) 
     const member = await teamsService.addRosterMember(
       Number(req.params.teamId),
       input,
-      req.roles as string[],
       req.adminLevel ?? null,
       req.userId as number,
     );
@@ -152,7 +151,6 @@ async function updateRosterMember(req: Request, res: Response, next: NextFunctio
       Number(req.params.teamId),
       memberId,
       input,
-      req.roles as string[],
       req.adminLevel ?? null,
       req.userId as number,
     );
@@ -170,7 +168,6 @@ async function updateRosterMember(req: Request, res: Response, next: NextFunctio
       Number(req.params.teamId),
       memberId,
       seasonId,
-      req.roles as string[],
       req.adminLevel ?? null,
       req.userId as number,
     );

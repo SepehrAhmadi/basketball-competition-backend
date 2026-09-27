@@ -433,8 +433,7 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Add a roster member",
   description:
-    "Add a coach or player to the team for a given season. Requires ORG_MANAGER, COACH, or ADMIN with team access. COACH can only add PLAYERs. A coach can only be added once per team per season. Set isHeadCoach to true to assign as head coach (only one per team per season).",
-  security: [{ bearerAuth: [] }],
+    "Add a coach or player to the team for a given season. Requires org manager, team head coach, team coach, or ADMIN. Regular coaches can only add PLAYER entries; head coaches and org managers can add both COACH and PLAYER entries. A coach can only be added once per team per season. Set isHeadCoach to true to assign as head coach (only one per team per season).",  security: [{ bearerAuth: [] }],
   request: {
     params: teamIdParamSchema,
     body: {
@@ -490,8 +489,7 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Update a roster member",
   description:
-    "Update a team member's role, jersey number, or head coach status. Requires ORG_MANAGER, COACH, or ADMIN with team access. Only one head coach is allowed per team per season.",
-  security: [{ bearerAuth: [] }],
+    "Update a team member's role, jersey number, or head coach status. Requires org manager, team head coach, team coach, or ADMIN. Regular coaches can only edit PLAYER entries and cannot promote a PLAYER into a COACH. Only one head coach is allowed per team per season.",  security: [{ bearerAuth: [] }],
   request: {
     params: rosterMemberParamSchema,
     body: {
@@ -546,8 +544,7 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Remove a roster member",
   description:
-    "Remove a member from the team roster for a given season. Requires ORG_MANAGER, COACH, or ADMIN with team access.",
-  security: [{ bearerAuth: [] }],
+    "Remove a member from the team roster for a given season. Requires org manager, team head coach, team coach, or ADMIN. Regular coaches can only remove PLAYER entries.",  security: [{ bearerAuth: [] }],
   request: {
     params: rosterMemberParamSchema,
     body: {

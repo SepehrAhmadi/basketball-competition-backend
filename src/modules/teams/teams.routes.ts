@@ -2,7 +2,6 @@ import { Router } from "express";
 import validate from "../../middleware/validate.ts";
 import verifyJWT from "../../middleware/auth/verifyJWT.middleware.ts";
 import verifyRole from "../../middleware/auth/verifyRole.middleware.ts";
-import verifyTeamAccess from "../../middleware/auth/verifyTeamAccess.middleware.ts";
 import createUploader from "../../middleware/upload/createUploader.ts";
 import uploadConfig from "../../config/upload.config.ts";
 import teamsValidation from "./teams.validation.ts";
@@ -57,7 +56,6 @@ router.put(
   verifyJWT,
   verifyRole("ORG_MANAGER"),
   validate(teamsValidation.teamIdParamSchema, "params"),
-  verifyTeamAccess,
   teamLogoUploader.single("logo"),
   validate(teamsValidation.updateTeamSchema),
   teamsController.updateTeam,
@@ -68,7 +66,6 @@ router.delete(
   verifyJWT,
   verifyRole("ORG_MANAGER"),
   validate(teamsValidation.teamIdParamSchema, "params"),
-  verifyTeamAccess,
   teamsController.deleteTeam,
 );
 
@@ -77,7 +74,6 @@ router.put(
   verifyJWT,
   verifyRole("ORG_MANAGER"),
   validate(teamsValidation.teamIdParamSchema, "params"),
-  verifyTeamAccess,
   teamLogoUploader.single("logo"),
   teamsController.updateLogo,
 );
@@ -87,7 +83,6 @@ router.post(
   verifyJWT,
   verifyRole("ORG_MANAGER", "COACH"),
   validate(teamsValidation.teamIdParamSchema, "params"),
-  verifyTeamAccess,
   validate(teamsValidation.addRosterMemberSchema),
   teamsController.addRosterMember,
 );
@@ -97,7 +92,6 @@ router.put(
   verifyJWT,
   verifyRole("ORG_MANAGER", "COACH"),
   validate(teamsValidation.teamIdParamSchema, "params"),
-  verifyTeamAccess,
   validate(teamsValidation.updateRosterMemberSchema),
   teamsController.updateRosterMember,
 );
@@ -107,7 +101,6 @@ router.delete(
   verifyJWT,
   verifyRole("ORG_MANAGER", "COACH"),
   validate(teamsValidation.teamIdParamSchema, "params"),
-  verifyTeamAccess,
   validate(teamsValidation.removeRosterMemberSchema),
   teamsController.removeRosterMember,
 );

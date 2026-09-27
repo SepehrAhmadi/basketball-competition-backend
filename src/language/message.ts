@@ -33,7 +33,7 @@ export const messages = {
       seasonNotFound: "فصل مورد نظر یافت نشد",
       userNotFound: "کاربر مورد نظر یافت نشد",
       userNotActive: "کاربر مورد نظر فعال نیست",
-      coachOnlyAddsPlayer: "مربی فقط می‌تواند بازیکن اضافه کند",
+      coachOnlyManagesPlayer: "مربی فقط می‌تواند بازیکنان را مدیریت کند، نه مربیان دیگر",
       headCoachConflict: "مربی اصلی این تیم در فصل مورد نظر قبلاً ثبت شده است",
       jerseyConflict: "شماره پیراهن تکراری است",
       rosterMemberNotFound: "عضو تیم یافت نشد",
