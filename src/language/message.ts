@@ -25,11 +25,20 @@ export const messages = {
       nameRequired: "نام باشگاه الزامی است",
       notFound: "باشگاه یافت نشد",
       notAuthorized: "شما مجاز به دسترسی به این باشگاه نیستید",
+      managerRequired: "انتخاب مدیر سازمان الزامی است",
+      managerNotFound: "مدیر سازمان یافت نشد",
+      managerNotActive: "حساب مدیر سازمان فعال نیست",
+      managerMissingRole: "کاربر نقش مدیر سازمان را ندارد",
+      alreadyDeleted: "باشگاه قبلاً حذف شده است",
+      notDeleted: "باشگاه حذف نشده است",
     },
     team: {
       nameRequired: "نام تیم الزامی است",
       notFound: "تیم یافت نشد",
       notAuthorized: "شما مجاز به دسترسی به این تیم نیستید",
+      organizationNotFound: "سازمان مورد نظر یافت نشد",
+      alreadyDeleted: "تیم قبلاً حذف شده است",
+      notDeleted: "تیم حذف نشده است",
       seasonNotFound: "فصل مورد نظر یافت نشد",
       userNotFound: "کاربر مورد نظر یافت نشد",
       userNotActive: "کاربر مورد نظر فعال نیست",
@@ -89,6 +98,7 @@ export const messages = {
       created: "باشگاه با موفقیت ایجاد شد",
       updated: "باشگاه با موفقیت به‌روزرسانی شد",
       deleted: "باشگاه با موفقیت حذف شد",
+      restored: "باشگاه با موفقیت بازیابی شد",
     },
     team: {
       list: "لیست تیم‌ها با موفقیت دریافت شد",
@@ -96,6 +106,7 @@ export const messages = {
       created: "تیم با موفقیت ایجاد شد",
       updated: "تیم با موفقیت به‌روزرسانی شد",
       deleted: "تیم با موفقیت حذف شد",
+      restored: "تیم با موفقیت بازیابی شد",
       logoUpdated: "لوگوی تیم با موفقیت به‌روزرسانی شد",
       rosterList: "لیست اعضای تیم با موفقیت دریافت شد",
       rosterMemberAdded: "عضو جدید با موفقیت به تیم اضافه شد",
@@ -129,6 +140,9 @@ export const messages = {
     },
     refereeLevels: {
       fetched: "درجات داوری با موفقیت دریافت شد",
+    },
+    dropdown: {
+      fetched: "فهرست با موفقیت دریافت شد",
     },
     user: {
       profileFetched: "اطلاعات کاربری با موفقیت دریافت شد",

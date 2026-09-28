@@ -14,12 +14,32 @@ export const PERMISSION_CATALOG = [
     ],
   },
   {
+    title: "سازمان‌ها",
+    permissions: [
+      { code: "organizations.view", label: "مشاهده سازمان‌ها" },
+      { code: "organizations.create", label: "ایجاد سازمان" },
+      { code: "organizations.update", label: "ویرایش سازمان" },
+      { code: "organizations.delete", label: "حذف سازمان" },
+      { code: "organizations.restore", label: "بازیابی سازمان" },
+    ],
+  },
+  {
     title: "تیم‌ها",
     permissions: [
       { code: "teams.view", label: "مشاهده تیم‌ها" },
       { code: "teams.create", label: "ایجاد تیم" },
       { code: "teams.update", label: "ویرایش تیم" },
       { code: "teams.delete", label: "حذف تیم" },
+      { code: "teams.restore", label: "بازیابی تیم" },
+    ],
+  },
+  {
+    title: "راستر",
+    permissions: [
+      { code: "roster.view", label: "مشاهده راستر" },
+      { code: "roster.create", label: "افزودن عضو راستر" },
+      { code: "roster.update", label: "ویرایش عضو راستر" },
+      { code: "roster.delete", label: "حذف عضو راستر" },
     ],
   },
   {
