@@ -1,12 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
-import adminUsersService from "./admin-users.service.ts";
-import { messages } from "../../../language/message.ts";
-import apiResponse from "../../../utils/apiResponse.ts";
+import adminUsersService from "./users.admin.service.ts";
+import { messages } from "../../../../language/message.ts";
+import apiResponse from "../../../../utils/apiResponse.ts";
 import type {
   ListUsersQuery,
   UpdateUserByAdminInput,
-} from "../user/user.types.ts";
-import type { Permission } from "../../../shared/permissions.ts";
+} from "../user.types.ts";
+import type { Permission } from "../../../../shared/permissions.ts";
 
 async function createUser(req: Request, res: Response, next: NextFunction) {
   try {

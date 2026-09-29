@@ -1,7 +1,7 @@
 import { Router } from "express";
 import authRoutes from "../modules/people/auth/auth.routes.ts";
 import userRoutes from "../modules/people/user/user.routes.ts";
-import adminUsersRoutes from "../modules/people/admin-users/admin-users.routes.ts";
+import adminUsersRoutes from "../modules/people/user/admin/users.admin.routes.ts";
 import playersRoutes from "../modules/people/players/players.routes.ts";
 import coachesRoutes from "../modules/people/coaches/coaches.routes.ts";
 import refereesRoutes from "../modules/people/referees/referees.routes.ts";

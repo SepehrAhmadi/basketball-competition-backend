@@ -16,7 +16,7 @@ src/
 └── modules/
     ├── competition/        # empty placeholder (see modules/competition.md)
     ├── organizations/      # org CRUD + logos + managers
-    ├── people/auth|user|admin-users|players|coaches|referees/
+    ├── people/auth|user (with user/admin)|players|coaches|referees/
     ├── seasons/            # season lifecycle
     ├── shared/roles|coach-degrees|referee-levels/
     └── teams/              # team CRUD + roster

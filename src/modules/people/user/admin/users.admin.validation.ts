@@ -1,11 +1,11 @@
 // Must run before any schema below calls .openapi() — this file is imported
 // directly by route files, which can bypass server.ts (e.g. tests).
-import "../../../swagger/zod-extend.ts";
+import "../../../../swagger/zod-extend.ts";
 import { z } from "zod";
-import { messages } from "../../../language/message.ts";
-import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
-import { jalaliToGregorian } from "../../../utils/date.util.ts";
-import { PERMISSION_CODES } from "../../../shared/permissions.ts";
+import { messages } from "../../../../language/message.ts";
+import { paginationQuerySchema } from "../../../../shared/schemas.validation.ts";
+import { jalaliToGregorian } from "../../../../utils/date.util.ts";
+import { PERMISSION_CODES } from "../../../../shared/permissions.ts";
 
 // Empty string from the client is treated as null (not set / clear).
 const emptyToNull = (value: unknown) => (value === "" ? null : value);

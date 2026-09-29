@@ -1,17 +1,17 @@
 import bcrypt from "bcrypt";
-import prisma from "../../../config/db.config.ts";
-import { messages } from "../../../language/message.ts";
-import AppError from "../../../utils/appError.ts";
-import findOrFail from "../../../utils/findOrFail.ts";
-import { jalaliToGregorian } from "../../../utils/date.util.ts";
-import type { AdminLevel, Role } from "../../../prisma/generated/prisma/enums.ts";
+import prisma from "../../../../config/db.config.ts";
+import { messages } from "../../../../language/message.ts";
+import AppError from "../../../../utils/appError.ts";
+import findOrFail from "../../../../utils/findOrFail.ts";
+import { jalaliToGregorian } from "../../../../utils/date.util.ts";
+import type { AdminLevel, Role } from "../../../../prisma/generated/prisma/enums.ts";
 import type {
   ListUsersQuery,
   UpdateUserByAdminInput,
   UserProfile,
-} from "../user/user.types.ts";
-import { toUserProfile, applyProfileUpdate } from "../user/user.service.ts";
-import { PERMISSION_CATALOG, type Permission } from "../../../shared/permissions.ts";
+} from "../user.types.ts";
+import { toUserProfile, applyProfileUpdate } from "../user.service.ts";
+import { PERMISSION_CATALOG, type Permission } from "../../../../shared/permissions.ts";
 
 interface AdminCreateUserInput {
   fullName: string;

@@ -7,7 +7,7 @@
 | teams | ✅ Done | Out of scope |
 | auth | ✅ Done | Out of scope |
 | user | ✅ Done | Out of scope |
-| admin-users | ✅ Done | Out of scope |
+| user/admin (admin-users) | ✅ Done | Out of scope |
 | players | ✅ Done | Out of scope |
 | coaches | ✅ Done | Out of scope |
 | referees | ✅ Done | Out of scope |

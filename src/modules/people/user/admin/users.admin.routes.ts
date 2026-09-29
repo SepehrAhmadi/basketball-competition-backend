@@ -1,11 +1,11 @@
 import { Router } from "express";
-import validate from "../../../middleware/validate.ts";
-import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
-import verifyAdminLevel from "../../../middleware/auth/verifyAdminLevel.middleware.ts";
-import verifyPermission from "../../../middleware/auth/verifyPermission.middleware.ts";
-import { idParamSchema } from "../../../shared/schemas.validation.ts";
-import adminUsersValidation from "./admin-users.validation.ts";
-import adminUsersController from "./admin-users.controller.ts";
+import validate from "../../../../middleware/validate.ts";
+import verifyJWT from "../../../../middleware/auth/verifyJWT.middleware.ts";
+import verifyAdminLevel from "../../../../middleware/auth/verifyAdminLevel.middleware.ts";
+import verifyPermission from "../../../../middleware/auth/verifyPermission.middleware.ts";
+import { idParamSchema } from "../../../../shared/schemas.validation.ts";
+import adminUsersValidation from "./users.admin.validation.ts";
+import adminUsersController from "./users.admin.controller.ts";
 
 const router = Router();
 

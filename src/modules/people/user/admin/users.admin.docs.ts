@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { messages } from "../../../language/message.ts";
-import { registry } from "../../../swagger/registry.ts";
+import { messages } from "../../../../language/message.ts";
+import { registry } from "../../../../swagger/registry.ts";
 import {
   errorResponseSchema,
   successResponseSchema,
-} from "../../../swagger/helpers.ts";
-import { paginatedResponseSchema } from "../../../shared/schemas.validation.ts";
-import { idParamSchema } from "../../../shared/schemas.validation.ts";
+} from "../../../../swagger/helpers.ts";
+import { paginatedResponseSchema } from "../../../../shared/schemas.validation.ts";
+import { idParamSchema } from "../../../../shared/schemas.validation.ts";
 import {
   adminCreateUserSchema,
   listUsersQuerySchema,
@@ -14,8 +14,8 @@ import {
   adminResetPasswordSchema,
   setAdminStatusSchema,
   replacePermissionsSchema,
-} from "./admin-users.validation.ts";
-import { PERMISSION_CODES } from "../../../shared/permissions.ts";
+} from "./users.admin.validation.ts";
+import { PERMISSION_CODES } from "../../../../shared/permissions.ts";
 
 // ---- response models ----
 // Display-only: roles are domain-only now; admin standing is exposed

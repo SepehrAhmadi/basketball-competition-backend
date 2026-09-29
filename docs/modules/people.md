@@ -12,7 +12,7 @@ Owns identity, authentication, and role profiles for all human actors.
 
 - `auth` — register, login, admin login, refresh, logout, self-delete.
 - `user` — self-service profile, avatar, password, user search; exports `toUserProfile`, `applyProfileUpdate`.
-- `admin-users` — admin CRUD, admin-level assignment, permission replacement.
+- `user/admin` (admin-users) — admin CRUD, admin-level assignment, permission replacement.
 - `players` — self-only player profile upsert.
 - `coaches` — self-only coach profile upsert.
 - `referees` — self-only referee profile upsert.
@@ -26,7 +26,7 @@ Owns identity, authentication, and role profiles for all human actors.
 
 ## Relationships with other modules
 
-- → shared: `admin-users.service` imports `PERMISSION_CATALOG`, `Permission` from `shared/permissions.ts`.
+- → shared: `users.admin.service` imports `PERMISSION_CATALOG`, `Permission` from `shared/permissions.ts`.
 - → teams: `Coach`/`Player` profiles are referenced by `teams.service` roster adds via `User` + `UserRole` checks (Prisma FK, no service import).
 - → organizations: `User` rows are linked as managers via `OrganizationManager` (Prisma FK, no service import).
-- Internal: `auth.service` imports `userService.deleteOwnAccount` from `../user/user.service.ts`; `admin-users.service` imports `toUserProfile`, `applyProfileUpdate` from `../user/user.service.ts`.
+- Internal: `auth.service` imports `userService.deleteOwnAccount` from `../user/user.service.ts`; `users.admin.service` imports `toUserProfile`, `applyProfileUpdate` from `../user.service.ts`.
