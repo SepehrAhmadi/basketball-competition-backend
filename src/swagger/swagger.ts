@@ -22,9 +22,9 @@ const generator = new OpenApiGeneratorV3(registry.definitions);
 export const openApiDocument = generator.generateDocument({
   openapi: "3.0.0",
   info: {
-    title: "Basketball League API",
+    title: "Basketball Competition APP",
     version: "1.0.0",
-    description: "NSL / Academy / Super League competition management API",
+    description: "Basketball competition management API",
   },
   servers: [{ url: "/api/v1" }],
   security: [{ bearerAuth: [] }],

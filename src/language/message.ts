@@ -51,6 +51,7 @@ export const messages = {
       headCoachAlreadyExists:
         "مربی اصلی این تیم در فصل مورد نظر قبلاً تعیین شده است",
       headCoachRequiredRole: "فقط مربیان می‌توانند سر مربی باشند",
+      headCoachAssignForbidden: "فقط مدیر سازمان یا ادمین می‌تواند سرمربی تعیین کند",
     },
     season: {
       nameRequired: "نام فصل الزامی است",

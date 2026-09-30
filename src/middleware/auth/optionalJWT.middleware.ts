@@ -1,17 +1,11 @@
 import type { Request, Response, NextFunction } from "express";
-import AppError from "../../utils/appError.ts";
 import { getBearerToken, verifyAccessToken } from "./accessToken.utils.ts";
 
-const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
-  // Publicly served files (e.g. photos, gallery images) skip auth entirely
-  if (req.url.startsWith("/uploads")) {
-    return next();
-  }
-
+const optionalJWT = (req: Request, res: Response, next: NextFunction) => {
   const token = getBearerToken(req.headers.authorization);
 
   if (!token) {
-    return next(new AppError(401, "Unauthorized"));
+    return next();
   }
 
   try {
@@ -20,10 +14,10 @@ const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
     req.roles = payload.roles;
     req.adminLevel = payload.adminLevel;
     req.permissions = payload.permissions;
-    next();
   } catch (err) {
-    return next(new AppError(401, "Invalid token"));
+    // Public routes stay accessible — an invalid token is treated as guest.
   }
+  next();
 };
 
-export default verifyJWT;
+export default optionalJWT;

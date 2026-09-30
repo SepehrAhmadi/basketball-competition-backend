@@ -1,6 +1,7 @@
 import { Router } from "express";
 import validate from "../../middleware/validate.ts";
 import verifyJWT from "../../middleware/auth/verifyJWT.middleware.ts";
+import { attachActor } from "../../middleware/auth/attachActor.middleware.ts";
 import verifyRole from "../../middleware/auth/verifyRole.middleware.ts";
 import createUploader from "../../middleware/upload/createUploader.ts";
 import uploadConfig from "../../config/upload.config.ts";
@@ -18,6 +19,7 @@ const organizationLogoUploader = createUploader({
 router.get(
   "/",
   verifyJWT,
+  attachActor,
   validate(organizationsValidation.organizationListQuerySchema, "query"),
   organizationsController.getAll,
 );
@@ -25,6 +27,7 @@ router.get(
 router.get(
   "/:id",
   verifyJWT,
+  attachActor,
   validate(idParamSchema, "params"),
   organizationsController.getById,
 );
@@ -32,6 +35,7 @@ router.get(
 router.post(
   "/",
   verifyJWT,
+  attachActor,
   verifyRole("ORG_MANAGER"),
   organizationLogoUploader.single("logo"),
   validate(organizationsValidation.createOrganizationSchema),
@@ -41,6 +45,7 @@ router.post(
 router.put(
   "/:id",
   verifyJWT,
+  attachActor,
   verifyRole("ORG_MANAGER"),
   validate(idParamSchema, "params"),
   organizationLogoUploader.single("logo"),
@@ -51,6 +56,7 @@ router.put(
 router.delete(
   "/:id",
   verifyJWT,
+  attachActor,
   verifyRole("ORG_MANAGER"),
   validate(idParamSchema, "params"),
   organizationsController.remove,

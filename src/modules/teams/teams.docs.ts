@@ -84,6 +84,30 @@ const removeRosterMemberRequestSchema = z
 
 // ---- response models ----
 
+export const teamCanSchema = z
+  .object({
+    edit: z.boolean().openapi({ example: false }),
+    delete: z.boolean().openapi({ example: false }),
+  })
+  .openapi("TeamCan");
+
+export const rosterCanSchema = z
+  .object({
+    assignHeadCoach: z
+      .boolean()
+      .openapi({ example: false, description: "Only admins/org managers can assign the head coach." }),
+    manageCoaches: z.boolean().openapi({ example: false }),
+    managePlayers: z.boolean().openapi({ example: false }),
+  })
+  .openapi("RosterCan");
+
+export const rosterMemberCanSchema = z
+  .object({
+    edit: z.boolean().openapi({ example: false }),
+    delete: z.boolean().openapi({ example: false }),
+  })
+  .openapi("RosterMemberCan");
+
 export const teamSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
@@ -102,6 +126,7 @@ export const teamSchema = z
         name: z.string().openapi({ example: "Tehran Titans Club" }),
       })
       .optional(),
+    can: teamCanSchema.optional(),
   })
   .openapi("Team");
 
@@ -122,6 +147,7 @@ const teamMemberSchema = z
         .nullable()
         .openapi({ example: "/uploads/avatars/avatar-1.png" }),
     }),
+    can: rosterMemberCanSchema,
   })
   .openapi("TeamRosterMember");
 
@@ -135,6 +161,7 @@ const rosterResponseSchema = z
     total: z.number().openapi({ example: 42 }),
     page: z.number().openapi({ example: 1 }),
     pageSize: z.number().openapi({ example: 20 }),
+    can: rosterCanSchema,
   })
   .openapi("TeamRoster");
 
@@ -179,7 +206,8 @@ registry.registerPath({
   path: "/teams/{teamId}",
   tags: ["Teams"],
   summary: "Get a team by id",
-  description: "Fetch a single team (public).",
+  description:
+    "Fetch a single team (public). When authenticated, the response includes a `can` object with edit/delete flags for the caller's organization context; guests receive all-false flags.",
   request: {
     params: teamIdParamSchema,
   },
@@ -209,7 +237,7 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Get team roster",
   description:
-    "List members of a team for a specific season (defaults to the active season). Public.",
+    "List members of a team for a specific season (defaults to the active season). Public. The response includes a top-level `can` object (assignHeadCoach/manageCoaches/managePlayers) computed for the resolved season, and per-item `can` edit/delete flags that are row-specific: rows with `isHeadCoach: true` are editable/deletable by admins/org managers only (so a head coach's own row shows false); guests receive all-false flags.",
   request: {
     params: teamIdParamSchema,
     query: rosterQuerySchema,

@@ -233,16 +233,24 @@ async function adminGetRoster(teamId: number, query: AdminRosterQuery) {
 }
 
 // Roster mutations reuse the main service (head-coach demotion + reactivation).
-// Permission gating happens at the router; pass an admin level so the
+// Permission gating happens at the router; pass an admin actor so the
 // org-manager self-check is bypassed.
-const ADMIN_LEVEL = "ADMIN";
+function adminActor(callerUserId: number) {
+  return {
+    userId: callerUserId,
+    isAdmin: true,
+    managedOrgIds: new Set<number>(),
+    memberOrgIds: new Set<number>(),
+    membershipFor: () => undefined,
+  };
+}
 
 async function adminAddRosterMember(
   teamId: number,
   data: { userId: number; seasonId: number; role: "COACH" | "PLAYER"; jerseyNumber?: number; isHeadCoach?: boolean },
   callerUserId: number,
 ) {
-  return teamsService.addRosterMember(teamId, data, ADMIN_LEVEL, callerUserId);
+  return teamsService.addRosterMember(teamId, data, adminActor(callerUserId));
 }
 
 async function adminUpdateRosterMember(
@@ -251,7 +259,7 @@ async function adminUpdateRosterMember(
   data: { seasonId: number; role?: "COACH" | "PLAYER"; jerseyNumber?: number | null; isHeadCoach?: boolean },
   callerUserId: number,
 ) {
-  return teamsService.updateRosterMember(teamId, memberId, data, ADMIN_LEVEL, callerUserId);
+  return teamsService.updateRosterMember(teamId, memberId, data, adminActor(callerUserId));
 }
 
 async function adminRemoveRosterMember(
@@ -260,7 +268,7 @@ async function adminRemoveRosterMember(
   seasonId: number,
   callerUserId: number,
 ) {
-  return teamsService.removeRosterMember(teamId, memberId, seasonId, ADMIN_LEVEL, callerUserId);
+  return teamsService.removeRosterMember(teamId, memberId, seasonId, adminActor(callerUserId));
 }
 
 export default {

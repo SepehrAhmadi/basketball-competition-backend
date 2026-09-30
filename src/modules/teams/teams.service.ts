@@ -6,6 +6,16 @@ import AppError from "../../utils/appError.ts";
 import { messages } from "../../language/message.ts";
 import getPublicFileUrl from "../../utils/getFileUrl.ts";
 import { jalaliToGregorian, gregorianToJalali } from "../../utils/date.util.ts";
+import type { Actor } from "../../authz/actor.ts";
+import { assertAllowed } from "../../authz/assert.ts";
+import { organizationPolicy } from "../organizations/organizations.policy.ts";
+import {
+  teamPolicy,
+  rosterPolicy,
+  canManageRosterRole,
+  canManageMember,
+  type RosterCan,
+} from "./teams.policy.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,40 +65,45 @@ function removeFileIfExists(filePath: string | null) {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-async function assertOrgManager(orgId: number, userId: number) {
-  const membership = await prisma.organizationManager.findFirst({
-    where: { organizationId: orgId, userId },
-  });
-  if (!membership) throw new AppError(403, messages.error.team.notAuthorized);
+function isOrgManagerOrAdmin(actor: Actor, organizationId: number): boolean {
+  return actor.isAdmin || actor.managedOrgIds.has(organizationId);
 }
 
-async function assertRosterManageAccess(
-  organizationId: number,
-  teamId: number,
-  seasonId: number,
-  callerUserId: number,
-  adminLevel: string | null,
-  targetRole: "COACH" | "PLAYER",
-): Promise<{ isOrgManager: boolean; callerMembership: { isHeadCoach: boolean } | null }> {
-  if (adminLevel) return { isOrgManager: true, callerMembership: null };
-
-  const orgManager = await prisma.organizationManager.findFirst({
-    where: { organizationId, userId: callerUserId },
-  });
-  if (orgManager) return { isOrgManager: true, callerMembership: null };
-
-  const callerMembership = await prisma.teamSeasonMember.findFirst({
-    where: { teamId, seasonId, userId: callerUserId, role: "COACH", status: "ACTIVE" },
-  });
-  if (!callerMembership) {
-    throw new AppError(403, messages.error.team.notAuthorized);
+// Preserves the old error-message distinction: a coach who may manage players
+// but not coaches gets coachOnlyManagesPlayer when targeting COACH, while a
+// caller with no roster power at all gets notAuthorized.
+function rosterManageError(can: RosterCan, role: "COACH" | "PLAYER"): string {
+  if (role === "COACH" && can.managePlayers) {
+    return messages.error.team.coachOnlyManagesPlayer;
   }
+  return messages.error.team.notAuthorized;
+}
 
-  if (!callerMembership.isHeadCoach && targetRole !== "PLAYER") {
-    throw new AppError(403, messages.error.team.coachOnlyManagesPlayer);
+function assertCanManageRoster(
+  actor: Actor,
+  params: { organizationId: number; teamId: number; seasonId: number },
+  role: "COACH" | "PLAYER",
+): RosterCan {
+  const can = rosterPolicy(actor, params);
+  assertAllowed(canManageRosterRole(can, role), rosterManageError(can, role));
+  return can;
+}
+
+function assertCanManageMember(
+  can: RosterCan,
+  target: { role: "COACH" | "PLAYER"; isHeadCoach: boolean },
+): void {
+  // Head-coach rows are manager-only; other rows keep the role-based message
+  // distinction (coach targeting COACH vs. no access at all).
+  if (target.isHeadCoach) {
+    assertAllowed(can.assignHeadCoach, messages.error.team.headCoachAssignForbidden);
+    return;
   }
+  assertAllowed(canManageMember(can, target), rosterManageError(can, target.role));
+}
 
-  return { isOrgManager: false, callerMembership };
+function assertCanAssignHeadCoach(can: RosterCan): void {
+  assertAllowed(can.assignHeadCoach, messages.error.team.headCoachAssignForbidden);
 }
 
 async function getActiveSeasonOrThrow(seasonId?: number) {
@@ -133,26 +148,28 @@ async function listTeams(query: {
   };
 }
 
-async function getTeamById(teamId: number) {
+async function getTeamById(teamId: number, actor?: Actor) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
     include: { organization: { select: { id: true, name: true } } },
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
-  return withPublicLogoUrl(team);
+  const result = withPublicLogoUrl(team);
+  if (!actor) return result;
+  return { ...result, can: teamPolicy(actor, { organizationId: team.organizationId }) };
 }
 
 // ─── Mutations (auth required) ────────────────────────────────────────────
 
-async function createTeam(
-  data: CreateTeamInput,
-  userId: number,
-  roles: string[],
-  adminLevel: string | null,
-  file?: Express.Multer.File,
-) {
-  if (!adminLevel) {
-    await assertOrgManager(data.organizationId, userId);
+async function createTeam(data: CreateTeamInput, actor: Actor, file?: Express.Multer.File) {
+  try {
+    assertAllowed(
+      organizationPolicy(actor, data.organizationId).createTeam,
+      messages.error.team.notAuthorized,
+    );
+  } catch (err) {
+    if (file) removeFileIfExists(file.path);
+    throw err;
   }
 
   const {
@@ -172,7 +189,10 @@ async function createTeam(
     const team = await prisma.team.create({
       data: { ...safeData, ...(foundedDate != null && { foundedDate }), ...(logoUrl != null && { logoUrl }) },
     });
-    return withPublicLogoUrl(team);
+    return {
+      ...withPublicLogoUrl(team),
+      can: teamPolicy(actor, { organizationId: team.organizationId }),
+    };
   } catch (err) {
     if (file) removeFileIfExists(file.path);
     throw err;
@@ -182,9 +202,7 @@ async function createTeam(
 async function updateTeam(
   teamId: number,
   data: UpdateTeamInput,
-  roles: string[],
-  adminLevel: string | null,
-  userId: number,
+  actor: Actor,
   file?: Express.Multer.File,
 ) {
   const team = await prisma.team.findFirst({
@@ -195,8 +213,26 @@ async function updateTeam(
     throw new AppError(404, messages.error.team.notFound);
   }
 
-  if (!adminLevel) {
-    await assertOrgManager(team.organizationId, userId);
+  try {
+    assertAllowed(
+      teamPolicy(actor, { organizationId: team.organizationId }).edit,
+      messages.error.team.notAuthorized,
+    );
+  } catch (err) {
+    if (file) removeFileIfExists(file.path);
+    throw err;
+  }
+  // Org transfer: the caller must also manage the target organization.
+  if (data.organizationId !== undefined && data.organizationId !== team.organizationId) {
+    try {
+      assertAllowed(
+        teamPolicy(actor, { organizationId: data.organizationId }).edit,
+        messages.error.team.notAuthorized,
+      );
+    } catch (err) {
+      if (file) removeFileIfExists(file.path);
+      throw err;
+    }
   }
 
   const {
@@ -234,18 +270,22 @@ async function updateTeam(
     if (oldPath && oldPath !== file?.path) removeFileIfExists(oldPath);
   }
 
-  return withPublicLogoUrl(updated);
+  return {
+    ...withPublicLogoUrl(updated),
+    can: teamPolicy(actor, { organizationId: updated.organizationId }),
+  };
 }
 
-async function deleteTeam(teamId: number, roles: string[], adminLevel: string | null, userId: number) {
+async function deleteTeam(teamId: number, actor: Actor) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
 
-  if (!adminLevel) {
-    await assertOrgManager(team.organizationId, userId);
-  }
+  assertAllowed(
+    teamPolicy(actor, { organizationId: team.organizationId }).delete,
+    messages.error.team.notAuthorized,
+  );
 
   return prisma.team.update({
     where: { id: teamId },
@@ -253,13 +293,7 @@ async function deleteTeam(teamId: number, roles: string[], adminLevel: string | 
   });
 }
 
-async function updateLogo(
-  teamId: number,
-  file: Express.Multer.File,
-  roles: string[],
-  adminLevel: string | null,
-  userId: number,
-) {
+async function updateLogo(teamId: number, file: Express.Multer.File, actor: Actor) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
   });
@@ -268,8 +302,14 @@ async function updateLogo(
     throw new AppError(404, messages.error.team.notFound);
   }
 
-  if (!adminLevel) {
-    await assertOrgManager(team.organizationId, userId);
+  try {
+    assertAllowed(
+      teamPolicy(actor, { organizationId: team.organizationId }).edit,
+      messages.error.team.notAuthorized,
+    );
+  } catch (err) {
+    removeFileIfExists(file.path);
+    throw err;
   }
 
   const logoUrl = `${TEAM_LOGO_URL_PREFIX}${file.filename}`;
@@ -289,7 +329,10 @@ async function updateLogo(
     if (oldPath && oldPath !== file.path) removeFileIfExists(oldPath);
   }
 
-  return withPublicLogoUrl(updated);
+  return {
+    ...withPublicLogoUrl(updated),
+    can: teamPolicy(actor, { organizationId: updated.organizationId }),
+  };
 }
 
 // ─── Roster ────────────────────────────────────────────────────────────────
@@ -297,6 +340,7 @@ async function updateLogo(
 async function getRoster(
   teamId: number,
   query: { seasonId?: number; role?: string; page: number; pageSize: number },
+  actor: Actor,
 ) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
@@ -304,6 +348,11 @@ async function getRoster(
   if (!team) throw new AppError(404, messages.error.team.notFound);
 
   const season = await getActiveSeasonOrThrow(query.seasonId);
+  const can = rosterPolicy(actor, {
+    organizationId: team.organizationId,
+    teamId,
+    seasonId: season.id,
+  });
 
   const where: any = {
     teamId,
@@ -344,10 +393,15 @@ async function getRoster(
         ...m.user,
         avatarUrl: getPublicFileUrl(m.user.avatarUrl, baseUrl),
       },
+      can: (() => {
+        const ok = canManageMember(can, m);
+        return { edit: ok, delete: ok };
+      })(),
     })),
     total,
     page: query.page,
     pageSize: query.pageSize,
+    can,
   };
 }
 
@@ -360,22 +414,22 @@ async function addRosterMember(
     jerseyNumber?: number;
     isHeadCoach?: boolean;
   },
-  adminLevel: string | null,
-  callerUserId: number,
+  actor: Actor,
 ) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
 
-  await assertRosterManageAccess(
-    team.organizationId,
-    teamId,
-    data.seasonId,
-    callerUserId,
-    adminLevel,
+  const addCan = assertCanManageRoster(
+    actor,
+    { organizationId: team.organizationId, teamId, seasonId: data.seasonId },
     data.role,
   );
+  // Only admins/org managers can assign the head coach.
+  if (data.isHeadCoach === true) {
+    assertCanAssignHeadCoach(addCan);
+  }
 
   // Validate team season exists
   const season = await prisma.season.findFirst({
@@ -482,8 +536,7 @@ async function updateRosterMember(
     jerseyNumber?: number | null;
     isHeadCoach?: boolean;
   },
-  adminLevel: string | null,
-  callerUserId: number,
+  actor: Actor,
 ) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
@@ -501,20 +554,23 @@ async function updateRosterMember(
   });
   if (!member) throw new AppError(404, messages.error.team.rosterMemberNotFound);
 
-  const access = await assertRosterManageAccess(
-    team.organizationId,
-    teamId,
-    data.seasonId,
-    callerUserId,
-    adminLevel,
-    member.role,
-  );
-
-  // A regular coach must not be able to use this endpoint to promote a PLAYER into a COACH
-  if (!access.isOrgManager && !access.callerMembership?.isHeadCoach) {
-    if (data.role && data.role !== "PLAYER") {
-      throw new AppError(403, messages.error.team.coachOnlyManagesPlayer);
-    }
+  const scope = { organizationId: team.organizationId, teamId, seasonId: data.seasonId };
+  const updateCan = rosterPolicy(actor, scope);
+  // The caller must manage the existing row (head-coach rows are
+  // manager-only), and the resulting role when it changes.
+  assertCanManageMember(updateCan, member);
+  const resultingRole = data.role ?? member.role;
+  if (resultingRole !== member.role) {
+    assertAllowed(
+      canManageRosterRole(updateCan, resultingRole),
+      rosterManageError(updateCan, resultingRole),
+    );
+  }
+  // Only admins/org managers can promote a member to head coach.
+  // Demotion (isHeadCoach: false on a head-coach row) is already covered by
+  // the row check above.
+  if (data.isHeadCoach === true && !member.isHeadCoach) {
+    assertCanAssignHeadCoach(updateCan);
   }
 
   const effectiveRole = data.role ?? member.role;
@@ -576,13 +632,7 @@ async function updateRosterMember(
   }
 }
 
-async function removeRosterMember(
-  teamId: number,
-  memberId: number,
-  seasonId: number,
-  adminLevel: string | null,
-  callerUserId: number,
-) {
+async function removeRosterMember(teamId: number, memberId: number, seasonId: number, actor: Actor) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
   });
@@ -593,18 +643,18 @@ async function removeRosterMember(
   });
   if (!member) throw new AppError(404, messages.error.team.rosterMemberNotFound);
 
-  const access = await assertRosterManageAccess(
-    team.organizationId,
-    teamId,
-    seasonId,
-    callerUserId,
-    adminLevel,
-    member.role,
+  assertCanManageMember(
+    rosterPolicy(actor, { organizationId: team.organizationId, teamId, seasonId }),
+    member,
   );
 
   // Only self-service coaches are restricted from leaving a team with zero coaches;
   // org managers/admins can still force it.
-  if (!access.isOrgManager && member.userId === callerUserId && member.role === "COACH") {
+  if (
+    !isOrgManagerOrAdmin(actor, team.organizationId) &&
+    member.userId === actor.userId &&
+    member.role === "COACH"
+  ) {
     const coachCount = await prisma.teamSeasonMember.count({
       where: { teamId, seasonId, role: "COACH", status: "ACTIVE" },
     });

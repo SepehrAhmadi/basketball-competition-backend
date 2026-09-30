@@ -21,7 +21,7 @@ async function listTeams(req: Request, res: Response, next: NextFunction) {
 
 async function getTeam(req: Request, res: Response, next: NextFunction) {
   try {
-    const team = await teamsService.getTeamById(Number(req.params.teamId));
+    const team = await teamsService.getTeamById(Number(req.params.teamId), req.actor!);
     return apiResponse.sendResponse(res, 200, messages.success.team.found, team);
   } catch (err) {
     next(err);
@@ -35,13 +35,7 @@ async function createTeam(req: Request, res: Response, next: NextFunction) {
       name: string;
       foundedDate?: string;
     };
-    const team = await teamsService.createTeam(
-      input,
-      req.userId as number,
-      req.roles as string[],
-      req.adminLevel ?? null,
-      req.file,
-    );
+    const team = await teamsService.createTeam(input, req.actor!, req.file);
     return apiResponse.sendResponse(res, 201, messages.success.team.created, team);
   } catch (err) {
     next(err);
@@ -56,14 +50,7 @@ async function updateTeam(req: Request, res: Response, next: NextFunction) {
       foundedDate?: string;
       removeLogo?: boolean;
     };
-    const team = await teamsService.updateTeam(
-      Number(req.params.teamId),
-      input,
-      req.roles as string[],
-      req.adminLevel ?? null,
-      req.userId as number,
-      req.file,
-    );
+    const team = await teamsService.updateTeam(Number(req.params.teamId), input, req.actor!, req.file);
     return apiResponse.sendResponse(res, 200, messages.success.team.updated, team);
   } catch (err) {
     next(err);
@@ -72,12 +59,7 @@ async function updateTeam(req: Request, res: Response, next: NextFunction) {
 
 async function deleteTeam(req: Request, res: Response, next: NextFunction) {
   try {
-    await teamsService.deleteTeam(
-      Number(req.params.teamId),
-      req.roles as string[],
-      req.adminLevel ?? null,
-      req.userId as number,
-    );
+    await teamsService.deleteTeam(Number(req.params.teamId), req.actor!);
     return apiResponse.sendResponse(res, 200, messages.success.team.deleted);
   } catch (err) {
     next(err);
@@ -89,13 +71,7 @@ async function updateLogo(req: Request, res: Response, next: NextFunction) {
     if (!req.file) {
       throw new AppError(400, "Logo file is required");
     }
-    const team = await teamsService.updateLogo(
-      Number(req.params.teamId),
-      req.file,
-      req.roles as string[],
-      req.adminLevel ?? null,
-      req.userId as number,
-    );
+    const team = await teamsService.updateLogo(Number(req.params.teamId), req.file, req.actor!);
     return apiResponse.sendResponse(res, 200, messages.success.team.logoUpdated, team);
   } catch (err) {
     next(err);
@@ -110,7 +86,7 @@ async function getRoster(req: Request, res: Response, next: NextFunction) {
       page: number;
       pageSize: number;
     };
-    const result = await teamsService.getRoster(Number(req.params.teamId), query);
+    const result = await teamsService.getRoster(Number(req.params.teamId), query, req.actor!);
     return apiResponse.sendResponse(res, 200, messages.success.team.rosterList, result);
   } catch (err) {
     next(err);
@@ -126,12 +102,7 @@ async function addRosterMember(req: Request, res: Response, next: NextFunction) 
       jerseyNumber?: number;
       isHeadCoach?: boolean;
     };
-    const member = await teamsService.addRosterMember(
-      Number(req.params.teamId),
-      input,
-      req.adminLevel ?? null,
-      req.userId as number,
-    );
+    const member = await teamsService.addRosterMember(Number(req.params.teamId), input, req.actor!);
     return apiResponse.sendResponse(res, 201, messages.success.team.rosterMemberAdded, member);
   } catch (err) {
     next(err);
@@ -151,8 +122,7 @@ async function updateRosterMember(req: Request, res: Response, next: NextFunctio
       Number(req.params.teamId),
       memberId,
       input,
-      req.adminLevel ?? null,
-      req.userId as number,
+      req.actor!,
     );
     return apiResponse.sendResponse(res, 200, messages.success.team.rosterMemberUpdated, member);
   } catch (err) {
@@ -164,13 +134,7 @@ async function updateRosterMember(req: Request, res: Response, next: NextFunctio
   try {
     const { seasonId } = (req.validatedBody ?? req.body) as { seasonId: number };
     const memberId = Number(req.params.memberId);
-    await teamsService.removeRosterMember(
-      Number(req.params.teamId),
-      memberId,
-      seasonId,
-      req.adminLevel ?? null,
-      req.userId as number,
-    );
+    await teamsService.removeRosterMember(Number(req.params.teamId), memberId, seasonId, req.actor!);
     return apiResponse.sendResponse(res, 200, messages.success.team.rosterMemberRemoved);
   } catch (err) {
     next(err);

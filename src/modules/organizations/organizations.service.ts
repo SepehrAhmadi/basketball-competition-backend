@@ -5,6 +5,9 @@ import prisma from "../../config/db.config.ts";
 import AppError from "../../utils/appError.ts";
 import { messages } from "../../language/message.ts";
 import getPublicFileUrl from "../../utils/getFileUrl.ts";
+import type { Actor } from "../../authz/actor.ts";
+import { assertAllowed } from "../../authz/assert.ts";
+import { organizationPolicy } from "./organizations.policy.ts";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,27 +67,6 @@ interface ListOrganizationsQuery {
   pageSize: number;
 }
 
-async function assertOrgManager(orgId: number, userId: number) {
-  const membership = await prisma.organizationManager.findFirst({
-    where: { organizationId: orgId, userId },
-  });
-  if (!membership) {
-    throw new AppError(403, messages.error.organization.notAuthorized);
-  }
-}
-
-async function assertOrgViewAccess(orgId: number, userId: number) {
-  const [isManager, isMember] = await Promise.all([
-    prisma.organizationManager.findFirst({ where: { organizationId: orgId, userId } }),
-    prisma.teamSeasonMember.findFirst({
-      where: { organizationId: orgId, userId, status: "ACTIVE" },
-    }),
-  ]);
-  if (!isManager && !isMember) {
-    throw new AppError(403, messages.error.organization.notAuthorized);
-  }
-}
-
 type MembershipInfo = {
   seasonId: number;
   seasonName: string;
@@ -127,15 +109,10 @@ async function getMembershipInfoForOrgs(userId: number, orgIds: number[]) {
   return { managedOrgIds, membershipsByOrgId };
 }
 
-async function getAllOrganizations(
-  userId: number,
-  roles: string[],
-  query: ListOrganizationsQuery,
-  baseUrl?: string,
-  adminLevel?: string | null,
-) {
+async function getAllOrganizations(actor: Actor, query: ListOrganizationsQuery) {
+  const userId = actor.userId;
   const where: any = { status: { not: "DELETED" } };
-  if (!adminLevel) {
+  if (!actor.isAdmin) {
     where.OR = [
       { managers: { some: { userId } } },
       { teamSeasonMembers: { some: { userId, status: "ACTIVE" } } },
@@ -152,9 +129,12 @@ async function getAllOrganizations(
     prisma.organization.count({ where }),
   ]);
 
-  let enriched = items.map((item) => withPublicLogoUrl(item));
+  let enriched = items.map((item) => ({
+    ...withPublicLogoUrl(item),
+    can: organizationPolicy(actor, item.id),
+  }));
 
-  if (!adminLevel && items.length > 0) {
+  if (!actor.isAdmin && items.length > 0 && userId != null) {
     const { managedOrgIds, membershipsByOrgId } = await getMembershipInfoForOrgs(
       userId,
       items.map((o) => o.id),
@@ -174,12 +154,7 @@ async function getAllOrganizations(
   };
 }
 
-async function getOrganizationById(
-  id: number,
-  userId: number,
-  adminLevel: string | null,
-  baseUrl?: string,
-) {
+async function getOrganizationById(id: number, actor: Actor) {
   const organization = await prisma.organization.findFirst({
     where: { id, status: { not: "DELETED" } },
   });
@@ -187,14 +162,13 @@ async function getOrganizationById(
     throw new AppError(404, messages.error.organization.notFound);
   }
 
-  if (!adminLevel) {
-    await assertOrgViewAccess(id, userId);
-  }
+  const can = organizationPolicy(actor, id);
+  assertAllowed(can.view, messages.error.organization.notAuthorized);
 
-  const result = withPublicLogoUrl(organization);
-  if (adminLevel) return result;
+  const result = { ...withPublicLogoUrl(organization), can };
+  if (actor.isAdmin || actor.userId == null) return result;
 
-  const { managedOrgIds, membershipsByOrgId } = await getMembershipInfoForOrgs(userId, [id]);
+  const { managedOrgIds, membershipsByOrgId } = await getMembershipInfoForOrgs(actor.userId, [id]);
   return {
     ...result,
     isManager: managedOrgIds.has(id),
@@ -206,7 +180,6 @@ async function createOrganization(
   data: CreateOrganizationInput,
   userId: number,
   file?: Express.Multer.File,
-  baseUrl?: string,
 ) {
   // logoUrl is server-generated from the uploaded file — never client-provided.
   // removeLogo is meaningless on create (nothing exists yet to delete).
@@ -232,7 +205,11 @@ async function createOrganization(
       });
       return created;
     });
-    return withPublicLogoUrl(org);
+    // Creator becomes the first manager, so all flags are granted.
+    return {
+      ...withPublicLogoUrl(org),
+      can: { view: true, edit: true, delete: true, createTeam: true },
+    };
   } catch (err) {
     // Multer already wrote the file but the DB create failed — avoid orphans.
     if (file) removeFileIfExists(file.path);
@@ -244,9 +221,7 @@ async function updateOrganization(
   id: number,
   data: UpdateOrganizationInput,
   file?: Express.Multer.File,
-  userId?: number,
-  adminLevel?: string | null,
-  baseUrl?: string,
+  actor?: Actor,
 ) {
   const organization = await prisma.organization.findFirst({
     where: { id, status: { not: "DELETED" } },
@@ -255,13 +230,14 @@ async function updateOrganization(
     if (file) removeFileIfExists(file.path);
     throw new AppError(404, messages.error.organization.notFound);
   }
-  if (!adminLevel) {
-    try {
-      await assertOrgManager(id, userId as number);
-    } catch (err) {
-      if (file) removeFileIfExists(file.path);
-      throw err;
-    }
+  // actor is always set by attachActor on these routes; required param would
+  // break the untouched admin callers' type surface, so keep optional here.
+  const can = organizationPolicy(actor!, id);
+  try {
+    assertAllowed(can.edit, messages.error.organization.notAuthorized);
+  } catch (err) {
+    if (file) removeFileIfExists(file.path);
+    throw err;
   }
   // logoUrl is server-generated — a client-sent value must never reach Prisma.
   const {
@@ -307,19 +283,20 @@ async function updateOrganization(
     if (oldPath && oldPath !== file?.path) removeFileIfExists(oldPath);
   }
 
-  return withPublicLogoUrl(updated);
+  return { ...withPublicLogoUrl(updated), can: organizationPolicy(actor!, id) };
 }
 
-async function deleteOrganization(id: number, userId?: number, adminLevel?: string | null) {
+async function deleteOrganization(id: number, actor: Actor) {
   const organization = await prisma.organization.findFirst({
     where: { id, status: { not: "DELETED" } },
   });
   if (!organization) {
     throw new AppError(404, messages.error.organization.notFound);
   }
-  if (!adminLevel) {
-    await assertOrgManager(id, userId as number);
-  }
+  assertAllowed(
+    organizationPolicy(actor, id).delete,
+    messages.error.organization.notAuthorized,
+  );
   return prisma.organization.update({
     where: { id },
     data: { status: "DELETED" },

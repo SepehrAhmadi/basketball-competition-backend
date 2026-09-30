@@ -1,5 +1,6 @@
 import type { AdminLevel, Role } from "../../prisma/generated/prisma/enums.ts";
 import type { Request } from "express";
+import type { Actor } from "../../authz/actor.ts";
 
 declare global {
   namespace Express {
@@ -8,6 +9,7 @@ declare global {
       roles?: Role[];
       adminLevel?: AdminLevel | null;
       permissions?: string[];
+      actor?: Actor;
     }
   }
 }

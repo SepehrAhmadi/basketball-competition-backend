@@ -62,6 +62,15 @@ const organizationMembershipSchema = z
   })
   .openapi("OrganizationMembership");
 
+export const organizationCanSchema = z
+  .object({
+    view: z.boolean().openapi({ example: true }),
+    edit: z.boolean().openapi({ example: false }),
+    delete: z.boolean().openapi({ example: false }),
+    createTeam: z.boolean().openapi({ example: false }),
+  })
+  .openapi("OrganizationCan");
+
 export const organizationSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
@@ -81,6 +90,9 @@ export const organizationSchema = z
     createdAt: z.date().openapi({ example: "2026-01-01T10:00:00.000Z" }),
     isManager: z.boolean().optional().openapi({ example: true }),
     memberships: z.array(organizationMembershipSchema).optional(),
+    // Always present on manager routes (list/detail/create/update); the
+    // parallel admin routes reuse this schema but omit `can`.
+    can: organizationCanSchema.optional(),
   })
   .openapi("Organization");
 

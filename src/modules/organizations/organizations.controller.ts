@@ -17,13 +17,7 @@ async function getAll(
       pageSize: number;
     };
 
-    const result = await organizationsService.getAllOrganizations(
-      req.userId as number,
-      req.roles as string[],
-      query,
-      undefined,
-      req.adminLevel ?? null,
-    );
+    const result = await organizationsService.getAllOrganizations(req.actor!, query);
 
     return apiResponse.sendResponse(
       res,
@@ -40,8 +34,7 @@ async function getById(req: Request, res: Response, next: NextFunction) {
   try {
     const organization = await organizationsService.getOrganizationById(
       Number(req.params.id),
-      req.userId as number,
-      req.adminLevel ?? null,
+      req.actor!,
     );
     return apiResponse.sendResponse(res, 200, messages.success.organization.found, organization);
   } catch (err) {
@@ -70,8 +63,7 @@ async function update(req: Request, res: Response, next: NextFunction) {
       Number(req.params.id),
       input,
       req.file,
-      req.userId as number,
-      req.adminLevel ?? null,
+      req.actor!,
     );
     return apiResponse.sendResponse(res, 200, messages.success.organization.updated, organization);
   } catch (err) {
@@ -81,11 +73,7 @@ async function update(req: Request, res: Response, next: NextFunction) {
 
 async function remove(req: Request, res: Response, next: NextFunction) {
   try {
-    await organizationsService.deleteOrganization(
-      Number(req.params.id),
-      req.userId as number,
-      req.adminLevel ?? null,
-    );
+    await organizationsService.deleteOrganization(Number(req.params.id), req.actor!);
     return apiResponse.sendResponse(res, 200, messages.success.organization.deleted);
   } catch (err) {
     next(err);
