@@ -215,9 +215,37 @@ model Season {
   isActive  Boolean   @default(true) @map("is_active")
   createdAt DateTime  @default(now()) @map("created_at")
 
-  members TeamSeasonMember[]
+  members            TeamSeasonMember[]
+  ageCategoryCutoffs AgeCategoryCutoff[]
 
   @@map("seasons")
+}
+
+model AgeCategory {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  cutoffs AgeCategoryCutoff[]
+
+  @@map("age_categories")
+}
+
+model AgeCategoryCutoff {
+  id            Int      @id @default(autoincrement())
+  ageCategoryId Int      @map("age_category_id")
+  seasonId      Int      @map("season_id")
+  minBirthDate  DateTime @map("min_birth_date") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  ageCategory AgeCategory @relation(fields: [ageCategoryId], references: [id])
+  season      Season      @relation(fields: [seasonId], references: [id])
+
+  @@unique([ageCategoryId, seasonId])
+  @@index([seasonId])
+  @@map("age_category_cutoffs")
 }
 
 model TeamSeasonMember {

@@ -44,4 +44,10 @@ router.get(
   dropdownsController.getUsers,
 );
 
+router.get(
+  "/age-categories",
+  validate(dropdownsValidation.dropdownSearchQuerySchema, "query"),
+  dropdownsController.getAgeCategories,
+);
+
 export default router;

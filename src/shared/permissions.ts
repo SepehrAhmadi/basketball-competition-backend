@@ -51,6 +51,15 @@ export const PERMISSION_CATALOG = [
       { code: "seasons.delete", label: "حذف فصل" },
     ],
   },
+  {
+    title: "رده‌های سنی",
+    permissions: [
+      { code: "age-categories.view", label: "مشاهده رده‌های سنی" },
+      { code: "age-categories.create", label: "ایجاد رده سنی" },
+      { code: "age-categories.update", label: "ویرایش رده سنی" },
+      { code: "age-categories.delete", label: "حذف رده سنی" },
+    ],
+  },
 ] as const;
 
 // Union of the exact code literals — derived from the catalog itself (NOT from

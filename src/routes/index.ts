@@ -14,6 +14,8 @@ import dropdownsRoutes from "../modules/shared/dropdowns/dropdowns.routes.ts";
 import coachDegreesRoutes from "../modules/shared/coach-degrees/coach-degrees.routes.ts";
 import refereeLevelsRoutes from "../modules/shared/referee-levels/referee-levels.routes.ts";
 import seasonsRoutes from "../modules/seasons/seasons.routes.ts";
+import ageCategoriesAdminRoutes from "../modules/age-categories/admin/age-categories/age-categories.admin.routes.ts";
+import ageCategoryCutoffsAdminRoutes from "../modules/age-categories/admin/age-category-cutoffs/age-category-cutoffs.admin.routes.ts";
 
 const router = Router();
 
@@ -32,5 +34,7 @@ router.use("/dropdowns", dropdownsRoutes);
 router.use("/coach-degrees", coachDegreesRoutes);
 router.use("/referee-levels", refereeLevelsRoutes);
 router.use("/seasons", seasonsRoutes);
+router.use("/admin/age-categories", ageCategoriesAdminRoutes);
+router.use("/admin/age-category-cutoffs", ageCategoryCutoffsAdminRoutes);
 
 export default router;

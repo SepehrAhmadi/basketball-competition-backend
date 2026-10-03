@@ -183,6 +183,29 @@ async function getUsersDropdown(query: SearchQuery) {
   };
 }
 
+async function getAgeCategoriesDropdown(query: SearchQuery) {
+  const where: any = {};
+  if (query.search?.trim()) {
+    where.name = { contains: query.search.trim() };
+  }
+  const [items, total] = await prisma.$transaction([
+    prisma.ageCategory.findMany({
+      where,
+      orderBy: { id: "asc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: { id: true, name: true },
+    }),
+    prisma.ageCategory.count({ where }),
+  ]);
+  return {
+    items: items.map((c) => ({ value: c.id, label: c.name })),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
+  };
+}
+
 export default {
   getOrganizationStatuses,
   getTeamStatuses,
@@ -192,4 +215,5 @@ export default {
   getSeasonsDropdown,
   getManagerCandidates,
   getUsersDropdown,
+  getAgeCategoriesDropdown,
 };

@@ -103,6 +103,20 @@ async function getUsers(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+async function getAgeCategories(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = (req.validatedQuery ?? req.query) as {
+      search?: string;
+      page: number;
+      pageSize: number;
+    };
+    const result = await dropdownsService.getAgeCategoriesDropdown(query);
+    return sendDropdown(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   getOrganizationStatuses,
   getTeamStatuses,
@@ -112,4 +126,5 @@ export default {
   getSeasons,
   getManagerCandidates,
   getUsers,
+  getAgeCategories,
 };

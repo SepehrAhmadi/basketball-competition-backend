@@ -192,6 +192,32 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/dropdowns/age-categories",
+  tags: ["Dropdowns"],
+  summary: "Age category options",
+  description: "Searchable id/label list of age categories, creation order.",
+  security: [{ bearerAuth: [] }],
+  request: { query: dropdownSearchQuerySchema },
+  responses: {
+    "200": {
+      description: "Age category options",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(paginatedResponseSchema(idLabelItemSchema), {
+            messageExample: messages.success.dropdown.fetched,
+          }),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: { "application/json": { schema: unauthorizedError } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/dropdowns/users",
   tags: ["Dropdowns"],
   summary: "User options",
