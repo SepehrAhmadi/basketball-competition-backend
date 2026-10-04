@@ -43,7 +43,7 @@ async function create(req: Request, res: Response, next: NextFunction) {
 
 async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    const input = (req.validatedBody ?? req.body) as { minBirthDate: string };
+    const input = (req.validatedBody ?? req.body) as { seasonId?: number; minBirthDate?: string };
     const cutoff = await cutoffsAdminService.updateCutoff(Number(req.params.cutoffId), input);
     return apiResponse.sendResponse(res, 200, messages.success.ageCategoryCutoff.updated, cutoff);
   } catch (err) {

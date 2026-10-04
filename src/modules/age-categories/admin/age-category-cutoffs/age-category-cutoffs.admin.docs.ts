@@ -165,7 +165,7 @@ registry.registerPath({
   path: "/admin/age-category-cutoffs/{cutoffId}",
   tags: ["Admin - Age Category Cutoffs"],
   summary: "Update an age category cutoff (admin)",
-  description: "Only minBirthDate can change; category and season are immutable.",
+  description: "seasonId and minBirthDate can change; category is immutable.",
   request: {
     params: cutoffIdParamSchema,
     body: { content: { "application/json": { schema: updateCutoffSchema } } },
@@ -194,10 +194,18 @@ registry.registerPath({
       content: { "application/json": { schema: forbiddenError } },
     },
     "404": {
-      description: "Cutoff not found",
+      description: "Cutoff or new season not found",
       content: {
         "application/json": {
-          schema: errorResponseSchema(404, messages.error.ageCategoryCutoff.notFound),
+          schema: errorResponseSchema(404, messages.error.season.notFound),
+        },
+      },
+    },
+    "409": {
+      description: "Duplicate season for this category, or cutoff in use",
+      content: {
+        "application/json": {
+          schema: conflictError(messages.error.ageCategoryCutoff.alreadyExists),
         },
       },
     },

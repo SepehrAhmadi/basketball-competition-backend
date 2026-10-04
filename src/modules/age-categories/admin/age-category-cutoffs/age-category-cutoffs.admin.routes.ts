@@ -46,6 +46,6 @@ router.delete(
   verifyPermission("age-categories.delete"),
   validate(cutoffsAdminValidation.cutoffIdParamSchema, "params"),
   cutoffsAdminController.remove,
-);
+);  
 
 export default router;

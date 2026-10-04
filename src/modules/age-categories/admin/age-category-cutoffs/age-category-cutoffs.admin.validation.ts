@@ -39,9 +39,13 @@ export const createCutoffSchema = z
 
 export const updateCutoffSchema = z
   .object({
-    minBirthDate: jalaliDateSchema,
+    seasonId: idField(1).optional(),
+    minBirthDate: jalaliDateSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((d) => Object.keys(d).length > 0, {
+    message: "At least one field must be provided",
+  });
 
 export const cutoffListQuerySchema = paginationQuerySchema.extend({
   ageCategoryId: z.coerce.number().int().positive().optional().openapi({ example: 1 }),

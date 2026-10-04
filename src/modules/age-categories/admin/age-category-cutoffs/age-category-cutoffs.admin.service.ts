@@ -32,6 +32,14 @@ const cutoffInclude = {
   season: { select: { id: true, name: true } },
 } as const;
 
+// TODO(League): implement the check once the League model exists.
+// Any league linked to this row fully blocks editing (date and season)
+// and deletion with 409.
+// const used = await prisma.league.count({ where: { ageCategoryCutoffId: _cutoffId } });
+// if (used > 0) throw new AppError(409, messages.error.ageCategoryCutoff.inUse);
+async function assertCutoffEditable(_cutoffId: number) {
+}
+
 interface ListCutoffsQuery {
   page: number;
   pageSize: number;
@@ -99,24 +107,60 @@ async function createCutoff(input: { ageCategoryId: number; seasonId: number; mi
   }
 }
 
-async function updateCutoff(cutoffId: number, input: { minBirthDate: string }) {
+async function updateCutoff(
+  cutoffId: number,
+  input: { seasonId?: number; minBirthDate?: string },
+) {
   const existing = await prisma.ageCategoryCutoff.findUnique({
     where: { id: cutoffId },
     include: cutoffInclude,
   });
   if (!existing) throw new AppError(404, messages.error.ageCategoryCutoff.notFound);
 
-  // Skip the write when the date is unchanged so updatedAt stays untouched.
-  if (gregorianToJalali(existing.minBirthDate) === input.minBirthDate) {
-    return toCutoffResponse(existing);
+  // Compare Date to Date so "1390/1/1" matches a stored "1390/01/01".
+  const newDate =
+    input.minBirthDate !== undefined ? jalaliToGregorian(input.minBirthDate) : undefined;
+  const seasonChanged =
+    input.seasonId !== undefined && input.seasonId !== existing.seasonId;
+  const dateChanged =
+    newDate !== undefined && newDate.getTime() !== existing.minBirthDate.getTime();
+  // Skip the write when nothing changed so updatedAt stays untouched.
+  if (!seasonChanged && !dateChanged) return toCutoffResponse(existing);
+
+  // "In use" outranks "duplicate season" — check the lock first.
+  await assertCutoffEditable(cutoffId);
+
+  if (seasonChanged) {
+    const season = await prisma.season.findUnique({ where: { id: input.seasonId! } });
+    if (!season) throw new AppError(404, messages.error.season.notFound);
+    const dup = await prisma.ageCategoryCutoff.findUnique({
+      where: {
+        ageCategoryId_seasonId: {
+          ageCategoryId: existing.ageCategoryId,
+          seasonId: input.seasonId!,
+        },
+      },
+    });
+    if (dup) throw new AppError(409, messages.error.ageCategoryCutoff.alreadyExists);
   }
 
-  const updated = await prisma.ageCategoryCutoff.update({
-    where: { id: cutoffId },
-    data: { minBirthDate: jalaliToGregorian(input.minBirthDate) },
-    include: cutoffInclude,
-  });
-  return toCutoffResponse(updated);
+  try {
+    const updated = await prisma.ageCategoryCutoff.update({
+      where: { id: cutoffId },
+      data: {
+        ...(seasonChanged && { seasonId: input.seasonId }),
+        ...(dateChanged && { minBirthDate: newDate }),
+      },
+      include: cutoffInclude,
+    });
+    return toCutoffResponse(updated);
+  } catch (err: any) {
+    if (err?.code === "P2002")
+      throw new AppError(409, messages.error.ageCategoryCutoff.alreadyExists);
+    if (err?.code === "P2003")
+      throw new AppError(409, messages.error.ageCategoryCutoff.inUse);
+    throw err;
+  }
 }
 
 async function deleteCutoff(cutoffId: number) {
@@ -124,6 +168,8 @@ async function deleteCutoff(cutoffId: number) {
     where: { id: cutoffId },
   });
   if (!existing) throw new AppError(404, messages.error.ageCategoryCutoff.notFound);
+
+  await assertCutoffEditable(cutoffId);
 
   try {
     return await prisma.ageCategoryCutoff.delete({ where: { id: cutoffId } });
