@@ -10,12 +10,12 @@ Owns identity, authentication, and role profiles for all human actors.
 
 ## Sub-modules
 
-- `auth` — register, login, admin login, refresh, logout, self-delete.
-- `user` — self-service profile, avatar, password, user search; exports `toUserProfile`, `applyProfileUpdate`.
-- `user/admin` (admin-users) — admin CRUD, admin-level assignment, permission replacement.
-- `players` — self-only player profile upsert.
-- `coaches` — self-only coach profile upsert.
-- `referees` — self-only referee profile upsert.
+- `auth` — register, login, admin login, refresh, logout, self-delete (`/auth/*`; only `DELETE /account` requires JWT).
+- `user` — self-service profile, avatar (`avatars` uploader, 2 MB), password, user search; exports `toUserProfile`, `applyProfileUpdate` (all `verifyJWT`).
+- `user/admin` (admin-users) — admin CRUD, admin-level assignment, permission replacement (`/admin/users`, `verifyJWT` + `verifyAdminLevel` + `users.*` permissions; `GET /permissions` is `SUPER_ADMIN`-only).
+- `players` — self-only player profile upsert (`verifyJWT` + `verifyRole("PLAYER")`).
+- `coaches` — self-only coach profile upsert (`verifyJWT` + `verifyRole("COACH")`).
+- `referees` — self-only referee profile upsert (`verifyJWT` + `verifyRole("REFEREE")`).
 
 ## Responsibilities
 

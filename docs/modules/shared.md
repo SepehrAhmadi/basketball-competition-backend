@@ -10,13 +10,15 @@ Serves static enum lookups for dropdowns and validation.
 
 ## Sub-modules
 
-- `roles` — lists `Role` values with labels.
-- `coach-degrees` — lists `CoachDegree` values with labels.
-- `referee-levels` — lists `RefreeLevel` values with labels.
+- `roles` — public `GET /` listing `Role` values with labels.
+- `coach-degrees` — public `GET /` listing `CoachDegree` values with labels.
+- `referee-levels` — public `GET /` listing `RefreeLevel` values with labels.
+- `dropdowns` — authenticated (`verifyJWT`, no admin gate) reference data: static `organization-statuses`/`team-statuses`/`team-member-roles` (Persian labels) + paginated `organizations`/`teams`/`seasons`/`manager-candidates`/`users`/`age-categories` lookups.
 
 ## Responsibilities
 
-- Public `GET /` endpoints returning code + label lists; no writes.
+- Static enum endpoints return code + label lists; no writes.
+- Dropdown endpoints return paginated `{ items: { value, label, ... }, total, page, pageSize }` filtered to non-`DELETED` (orgs/teams) for filters/forms.
 
 ## Relationships with other modules
 

@@ -6,20 +6,22 @@ src/
 ├── server.ts               # dotenv + zod-extend preload, listen
 ├── config/                 # db, cors, origins, upload limits
 ├── routes/index.ts         # mounts all module routers under /api/v1
-├── middleware/             # see 05-middleware.md
+├── middleware/             # see 05-middleware.md (auth/*, validate, errorHandler, upload/*)
+├── authz/                  # Actor loader types + assertAllowed (see 09-authorization.md)
 ├── utils/                  # see 06-utilities.md
 ├── shared/                 # PERMISSION_CATALOG + id/pagination schemas
-├── types/express/          # Request augmentation (userId, roles, validated*)
+├── types/express/          # Request augmentation (userId, roles, adminLevel, permissions, actor, validated*)
 ├── language/message.ts     # central Persian messages
 ├── swagger/                # registry, helpers, zod-extend, doc aggregation
-├── prisma/schema.prisma    # 12 models, enums (see 04-data-model.md)
+├── prisma/schema.prisma    # 14 models, enums (see 04-data-model.md)
 └── modules/
+    ├── age-categories/admin/age-categories|age-category-cutoffs/  # admin-only category + cutoff CRUD
     ├── competition/        # empty placeholder (see modules/competition.md)
-    ├── organizations/      # org CRUD + logos + managers
+    ├── organizations/      # org CRUD + logos + managers + admin/ (restore, status filter)
     ├── people/auth|user (with user/admin)|players|coaches|referees/
     ├── seasons/            # season lifecycle
-    ├── shared/roles|coach-degrees|referee-levels/
-    └── teams/              # team CRUD + roster
+    ├── shared/roles|coach-degrees|referee-levels|dropdowns/  # dropdowns requires JWT, rest public
+    └── teams/              # team CRUD + roster + admin/ (restore, roster manage)
 ```
 
 - `src/` — all runtime code; `rootDir: ./src`, ESM with `.ts` import suffixes.

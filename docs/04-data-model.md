@@ -12,14 +12,16 @@
 
 ## Competition Structure
 
-- `Season` — standalone timebox (`startDate`/`endDate` required, `isActive`); no `organizationId`.
-- `Organization` — club with status; owns teams.
+- `Season` — standalone timebox (`startDate`/`endDate` required, `isActive`); no `organizationId`; has `members` + `ageCategoryCutoffs` relations.
+- `Organization` — club with status; owns `teams` + `teamSeasonMembers`.
 - `OrganizationManager` — join `Organization`–`User`, unique `[organizationId, userId]`.
+- `AgeCategory` — unique `name` + `createdAt`/`updatedAt`; has `cutoffs` relation.
+- `AgeCategoryCutoff` — per-season eligibility (`ageCategoryId`, `seasonId`, `minBirthDate @db.Date`); unique `[ageCategoryId, seasonId]`, index on `seasonId`.
 
 ## Teams & Rosters
 
-- `Team` — belongs to `Organization`; has `foundedDate`, `logoUrl`, status.
-- `TeamSeasonMember` — unified roster row for coaches and players per team-season-user.
+- `Team` — belongs to `Organization`; has `foundedDate @db.Date`, `logoUrl`, status.
+- `TeamSeasonMember` — unified roster row for coaches and players per team-season-user; unique `[teamId, seasonId, userId, role]` + unique `[teamId, seasonId, jerseyNumber]`; `isHeadCoach` default false, `status` default `ACTIVE` (soft-delete via `DELETED` + reactivation).
 
 ## Key decisions
 

@@ -2,9 +2,11 @@
 
 | Module | Backend Status | Frontend Status |
 |---|---|---|
-| organizations | ✅ Done | Out of scope |
+| organizations | ✅ Done (+ `admin/` restore + status filter) | Out of scope |
 | seasons | ✅ Done | Out of scope |
-| teams | ✅ Done | Out of scope |
+| teams | ✅ Done (+ `admin/` restore + roster manage) | Out of scope |
+| age-categories | ✅ Done (`admin/age-categories` CRUD) | Out of scope |
+| age-category-cutoffs | ✅ Done (`admin/age-category-cutoffs` CRUD) | Out of scope |
 | auth | ✅ Done | Out of scope |
 | user | ✅ Done | Out of scope |
 | user/admin (admin-users) | ✅ Done | Out of scope |
@@ -14,6 +16,7 @@
 | roles | ✅ Done | Out of scope |
 | coach-degrees | ✅ Done | Out of scope |
 | referee-levels | ✅ Done | Out of scope |
+| dropdowns | ✅ Done (JWT-required reference lookups) | Out of scope |
 | competition | ❌ Not Started | Out of scope |
 | games / series | ❌ Not Started | Out of scope |
 | stats | ❌ Not Started | Out of scope |
