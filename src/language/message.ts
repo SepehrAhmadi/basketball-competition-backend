@@ -89,6 +89,8 @@ export const messages = {
       currentPasswordIncorrect: "رمز عبور فعلی نادرست است",
       avatarNotFound: "آواتار یافت نشد",
       avatarRequired: "فایل آواتار الزامی است",
+      cannotRemoveOrgManagerRole:
+        "این کاربر مدیر یک سازمان است؛ ابتدا مدیریت سازمان را به کاربر دیگری منتقل کنید",
     },
   },
   success: {

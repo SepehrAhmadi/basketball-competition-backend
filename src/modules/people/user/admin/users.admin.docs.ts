@@ -63,6 +63,10 @@ const conflictError = errorResponseSchema(
   409,
   messages.error.auth.phoneOrEmailInUse,
 );
+const orgManagerLockedError = errorResponseSchema(
+  409,
+  messages.error.user.cannotRemoveOrgManagerRole,
+);
 
 // ---- path registrations ----
 
@@ -206,7 +210,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "Update user",
   description:
-    "Admin-only edit of another user's profile fields and non-admin roles. The roles array is treated as the complete selection and synchronized exactly; it cannot contain ADMIN or SUPER_ADMIN — use PUT /admin/users/{id}/admin-status for that. Regular ADMINs cannot edit ADMIN or SUPER_ADMIN users (403).",
+    "Admin-only edit of another user's profile fields and non-admin roles. The roles array is treated as the complete selection and synchronized exactly; it cannot contain ADMIN or SUPER_ADMIN — use PUT /admin/users/{id}/admin-status for that. Regular ADMINs cannot edit ADMIN or SUPER_ADMIN users (403). Removing ORG_MANAGER while the user manages a non-deleted organization is rejected with 409 — transfer the organization's management to another user first.",
   request: {
     params: idParamSchema,
     body: {
@@ -251,9 +255,12 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "Phone number or email already in use",
+      description:
+        "Phone number or email already in use, or removing ORG_MANAGER while managing an organization",
       content: {
-        "application/json": { schema: conflictError },
+        "application/json": {
+          schema: z.union([conflictError, orgManagerLockedError]),
+        },
       },
     },
   },
