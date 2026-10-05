@@ -13,9 +13,7 @@ import {
   searchUsersQuerySchema,
 } from "./user.validation.ts";
 
-const roleEnum = z
-  .enum(["ORG_MANAGER", "COACH", "PLAYER", "REFEREE"])
-  .openapi("Role");
+const roleEnum = z.enum(["COACH", "PLAYER", "REFEREE"]).openapi("Role");
 
 const adminLevelEnum = z.enum(["ADMIN", "SUPER_ADMIN"]).nullable().openapi("AdminLevel");
 
@@ -64,10 +62,6 @@ const conflictError = errorResponseSchema(
   409,
   messages.error.auth.phoneOrEmailInUse,
 );
-const orgManagerLockedError = errorResponseSchema(
-  409,
-  messages.error.user.cannotRemoveOrgManagerRole,
-);
 
 registry.registerPath({
   method: "get",
@@ -109,7 +103,7 @@ registry.registerPath({
   tags: ["Users"],
   summary: "Update own profile",
   description:
-    "Updates self-service editable fields (fullName, phone, email, birthDate, nationalId) and fully replaces roles with the provided array (at least one role required). Omitting roles leaves them unchanged. Status, passwords, and admin level cannot be changed here. Removing ORG_MANAGER while the user manages a non-deleted organization is rejected with 409 — transfer the organization's management to another user first.",
+    "Updates self-service editable fields (fullName, phone, email, birthDate, nationalId) and fully replaces roles with the provided array. Omitting roles leaves them unchanged. Status, passwords, and admin level cannot be changed here.",
   request: {
     body: {
       content: { "application/json": { schema: updateProfileSchema } },
@@ -147,11 +141,10 @@ registry.registerPath({
       },
     },
     "409": {
-      description:
-        "Phone number or email already in use, or removing ORG_MANAGER while managing an organization",
+      description: "Phone number or email already in use",
       content: {
         "application/json": {
-          schema: z.union([conflictError, orgManagerLockedError]),
+          schema: conflictError,
         },
       },
     },

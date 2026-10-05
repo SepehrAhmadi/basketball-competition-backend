@@ -35,12 +35,7 @@ const nationalIdSchema = z.preprocess(
   z.string().min(10).max(10).nullable().optional(),
 );
 
-export const allRoles = [
-  "ORG_MANAGER",
-  "COACH",
-  "PLAYER",
-  "REFEREE",
-] as const;
+export const allRoles = ["COACH", "PLAYER", "REFEREE"] as const;
 
 export const roleSchema = z.enum(allRoles).openapi({ example: "PLAYER" });
 
@@ -62,7 +57,6 @@ export const updateProfileSchema = z
     nationalId: nationalIdSchema.openapi({ example: "0012345678" }),
     roles: z
       .array(roleSchema)
-      .min(1, messages.error.auth.atLeastOneRoleRequired)
       .optional()
       .openapi({ example: ["PLAYER"] }),
   })

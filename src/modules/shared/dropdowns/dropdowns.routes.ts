@@ -33,12 +33,6 @@ router.get(
 );
 
 router.get(
-  "/manager-candidates",
-  validate(dropdownsValidation.dropdownSearchQuerySchema, "query"),
-  dropdownsController.getManagerCandidates,
-);
-
-router.get(
   "/users",
   validate(dropdownsValidation.usersDropdownQuerySchema, "query"),
   dropdownsController.getUsers,

@@ -3,7 +3,6 @@ import validate from "../../middleware/validate.ts";
 import verifyJWT from "../../middleware/auth/verifyJWT.middleware.ts";
 import optionalJWT from "../../middleware/auth/optionalJWT.middleware.ts";
 import { attachActor, optionalActor } from "../../middleware/auth/attachActor.middleware.ts";
-import verifyRole from "../../middleware/auth/verifyRole.middleware.ts";
 import createUploader from "../../middleware/upload/createUploader.ts";
 import uploadConfig from "../../config/upload.config.ts";
 import teamsValidation from "./teams.validation.ts";
@@ -52,7 +51,6 @@ router.post(
   "/",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER"),
   teamLogoUploader.single("logo"),
   validate(teamsValidation.createTeamSchema),
   teamsController.createTeam,
@@ -62,7 +60,6 @@ router.put(
   "/:teamId",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   teamLogoUploader.single("logo"),
   validate(teamsValidation.updateTeamSchema),
@@ -73,7 +70,6 @@ router.delete(
   "/:teamId",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   teamsController.deleteTeam,
 );
@@ -82,7 +78,6 @@ router.put(
   "/:teamId/logo",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   teamLogoUploader.single("logo"),
   teamsController.updateLogo,
@@ -92,7 +87,6 @@ router.post(
   "/:teamId/roster",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER", "COACH"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   validate(teamsValidation.addRosterMemberSchema),
   teamsController.addRosterMember,
@@ -102,7 +96,6 @@ router.put(
   "/:teamId/roster/:memberId",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER", "COACH"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   validate(teamsValidation.updateRosterMemberSchema),
   teamsController.updateRosterMember,
@@ -112,7 +105,6 @@ router.delete(
   "/:teamId/roster/:memberId",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER", "COACH"),
   validate(teamsValidation.teamIdParamSchema, "params"),
   validate(teamsValidation.removeRosterMemberSchema),
   teamsController.removeRosterMember,

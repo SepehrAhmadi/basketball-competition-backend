@@ -7,13 +7,6 @@ import userService from "../user/user.service.ts";
 import type { AdminLevel, Role } from "../../../prisma/generated/prisma/enums.ts";
 import { jalaliToGregorian } from "../../../utils/date.util.ts";
 
-const SELF_REGISTER_ROLES: Role[] = [
-  "ORG_MANAGER",
-  "PLAYER",
-  "COACH",
-  "REFEREE",
-];
-
 // SUPER_ADMIN bypasses permission checks entirely at check-time (see
 // verifyPermission), so there's no need to enumerate "all permissions" here.
 async function getPermissionsForUser(
@@ -59,9 +52,6 @@ interface RegisterInput {
 
 async function register(input: RegisterInput) {
   const roles = [...new Set(input.roles)];
-  if (roles.some((role) => !SELF_REGISTER_ROLES.includes(role))) {
-    throw new AppError(400, messages.error.auth.invalidSelfRegisterRole);
-  }
 
   const duplicate = await prisma.user.findFirst({
     where: { OR: [{ phone: input.phone }, { email: input.email }] },

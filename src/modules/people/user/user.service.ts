@@ -123,10 +123,6 @@ export async function applyProfileUpdate(
 
   const roles = data.roles !== undefined ? [...new Set(data.roles)] : undefined;
 
-  if (roles !== undefined && roles.length === 0) {
-    throw new AppError(400, messages.error.auth.atLeastOneRoleRequired);
-  }
-
   if (Object.keys(updateData).length === 0 && roles === undefined) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -194,16 +190,6 @@ async function syncUserRoles(
 
   const toRemove = [...currentRoles].filter((role) => !nextRoles.has(role));
   const toAdd = [...nextRoles].filter((role) => !currentRoles.has(role));
-
-  if (toRemove.includes("ORG_MANAGER")) {
-    const managed = await tx.organizationManager.findFirst({
-      where: { userId, organization: { status: { not: "DELETED" } } },
-      select: { id: true },
-    });
-    if (managed) {
-      throw new AppError(409, messages.error.user.cannotRemoveOrgManagerRole);
-    }
-  }
 
   if (toRemove.length > 0) {
     await tx.userRole.deleteMany({

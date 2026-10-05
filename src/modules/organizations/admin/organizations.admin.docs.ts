@@ -19,7 +19,7 @@ const adminCreateOrganizationRequestSchema = z
     city: z.string().optional().openapi({ example: "Tehran" }),
     phone: z.string().optional().openapi({ example: "02112345678" }),
     email: z.string().email().optional().openapi({ example: "info@titans.ir" }),
-    managerId: z.number().openapi({ example: 5, description: "User id with ORG_MANAGER role" }),
+    managerId: z.number().openapi({ example: 5, description: "Id of an ACTIVE user who becomes the manager" }),
     status: z.enum(["ACTIVE", "INACTIVE"]).optional().openapi({ example: "ACTIVE" }),
   })
   .openapi("AdminCreateOrganizationRequest");
@@ -129,7 +129,7 @@ registry.registerPath({
   tags: ["Admin - Organizations"],
   summary: "Create an organization (admin)",
   description:
-    "Creates an organization with an admin-selected manager (must already have the ORG_MANAGER role) and an ACTIVE/INACTIVE status. JSON body. Logos are managed by the organization manager, not admin.",
+    "Creates an organization with an admin-selected manager (any ACTIVE user) and an ACTIVE/INACTIVE status. JSON body. Logos are managed by the organization manager, not admin.",
   request: {
     body: {
       content: { "application/json": { schema: adminCreateOrganizationRequestSchema } },
@@ -148,10 +148,10 @@ registry.registerPath({
       },
     },
     "400": {
-      description: "Validation error or manager without ORG_MANAGER role",
+      description: "Validation error",
       content: {
         "application/json": {
-          schema: errorResponseSchema(400, messages.error.organization.managerMissingRole),
+          schema: errorResponseSchema(400, "Validation failed"),
         },
       },
     },
@@ -162,6 +162,10 @@ registry.registerPath({
     "403": {
       description: "Missing organizations.create permission",
       content: { "application/json": { schema: forbiddenError } },
+    },
+    "404": {
+      description: "Manager user not found",
+      content: { "application/json": { schema: notFoundError() } },
     },
   },
 });
@@ -199,7 +203,7 @@ registry.registerPath({
       content: { "application/json": { schema: forbiddenError } },
     },
     "404": {
-      description: "Organization not found",
+      description: "Organization or new manager not found",
       content: { "application/json": { schema: notFoundError() } },
     },
   },

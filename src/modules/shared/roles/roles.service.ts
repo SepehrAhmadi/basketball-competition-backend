@@ -4,7 +4,6 @@ import { Role } from "../../../prisma/generated/prisma/enums.ts";
 // a general-purpose dropdown. Admin standing lives in the separate
 // AdminLevel / user_admins table and is never exposed here.
 const ROLE_LABELS_FA: Record<Role, string> = {
-  ORG_MANAGER: "مدیر باشگاه",
   COACH: "مربی",
   PLAYER: "بازیکن",
   REFEREE: "داور",

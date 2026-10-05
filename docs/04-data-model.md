@@ -25,7 +25,7 @@
 
 ## Key decisions
 
-- Roles are a static `Role` enum (`ORG_MANAGER, COACH, PLAYER, REFEREE`); admin power comes from `AdminLevel` + `AdminPermission` strings, not a dynamic RBAC table.
+- Roles are a static `Role` enum (`COACH, PLAYER, REFEREE`); organization management is the `OrganizationManager` relation, not a role; admin power comes from `AdminLevel` + `AdminPermission` strings, not a dynamic RBAC table.
 - Coaches are seasonal roster members via unified `TeamSeasonMember` (`role` enum, `isHeadCoach`, `jerseyNumber`), not a separate `team_coaches` table.
 - `Season` is standalone; there is no `League` or `LeagueSeason` join table.
 - No `Game`, series, or `player_game_stats` tables exist yet; media is URL strings (`avatarUrl`, `photoUrl`, `logoUrl`), not a table.

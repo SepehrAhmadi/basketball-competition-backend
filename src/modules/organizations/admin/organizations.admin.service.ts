@@ -39,26 +39,15 @@ export interface AdminListOrganizationsQuery {
   status?: "ACTIVE" | "INACTIVE" | "DELETED" | "ALL";
 }
 
-// The admin-selected manager must already hold the ORG_MANAGER role.
-// Returns the user so the caller can name them in the error message.
-async function assertManagerCandidate(managerId: number) {
+// The admin-selected manager must be an ACTIVE user.
+async function assertActiveUser(userId: number) {
   const user = await prisma.user.findFirst({
-    where: { id: managerId, status: "ACTIVE" },
-    select: { id: true, fullName: true, status: true },
+    where: { id: userId, status: "ACTIVE" },
+    select: { id: true },
   });
   if (!user) {
     throw new AppError(404, messages.error.organization.managerNotFound);
   }
-  const hasRole = await prisma.userRole.findFirst({
-    where: { userId: managerId, role: "ORG_MANAGER" },
-  });
-  if (!hasRole) {
-    throw new AppError(
-      400,
-      `${messages.error.organization.managerMissingRole}: ${user.fullName}`,
-    );
-  }
-  return user;
 }
 
 async function adminListOrganizations(query: AdminListOrganizationsQuery) {
@@ -139,7 +128,7 @@ async function adminCreateOrganization(data: AdminCreateOrganizationInput) {
   if (!data.managerId) {
     throw new AppError(400, messages.error.organization.managerRequired);
   }
-  await assertManagerCandidate(data.managerId);
+  await assertActiveUser(data.managerId);
 
   const {
     managerId,
@@ -177,7 +166,7 @@ async function adminUpdateOrganization(id: number, data: AdminUpdateOrganization
   }
 
   if (data.managerId !== undefined) {
-    await assertManagerCandidate(data.managerId);
+    await assertActiveUser(data.managerId);
   }
 
   const {

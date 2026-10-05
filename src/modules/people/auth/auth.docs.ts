@@ -11,12 +11,7 @@ import {
 } from "./auth.validation.ts";
 
 // ---- response models ----
-const roleEnum = z.enum([
-  "ORG_MANAGER",
-  "COACH",
-  "PLAYER",
-  "REFEREE",
-]).openapi("Role");
+const roleEnum = z.enum(["COACH", "PLAYER", "REFEREE"]).openapi("Role");
 
 const adminLevelEnum = z.enum(["ADMIN", "SUPER_ADMIN"]).nullable().openapi("AdminLevel");
 
@@ -57,7 +52,7 @@ registry.registerPath({
   tags: ["Auth"],
   summary: "Self-register a new account",
   description:
-    "Creates a user account with one or more self-service roles. Returns the new user's id.",
+    "Creates a user account with optional domain roles (COACH, PLAYER, REFEREE), or none. Returns the new user's id.",
   security: [],
   request: {
     body: { content: { "application/json": { schema: registerSchema } } },

@@ -122,34 +122,6 @@ async function getSeasonsDropdown(query: SearchQuery) {
   };
 }
 
-// Users eligible as organization managers: ACTIVE + ORG_MANAGER role.
-async function getManagerCandidates(query: SearchQuery) {
-  const where: any = {
-    status: "ACTIVE",
-    roles: { some: { role: "ORG_MANAGER" } },
-  };
-  if (query.search?.trim()) {
-    const search = query.search.trim();
-    where.OR = [{ fullName: { contains: search } }, { phone: { contains: search } }];
-  }
-  const [items, total] = await prisma.$transaction([
-    prisma.user.findMany({
-      where,
-      orderBy: { id: "asc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-      select: { id: true, fullName: true, phone: true },
-    }),
-    prisma.user.count({ where }),
-  ]);
-  return {
-    items: items.map((u) => ({ value: u.id, label: `${u.fullName} (${u.phone})` })),
-    total,
-    page: query.page,
-    pageSize: query.pageSize,
-  };
-}
-
 // General user options: ACTIVE users, optionally filtered by domain role.
 // Omit role to return users with any role.
 async function getUsersDropdown(query: SearchQuery) {
@@ -213,7 +185,6 @@ export default {
   getOrganizationsDropdown,
   getTeamsDropdown,
   getSeasonsDropdown,
-  getManagerCandidates,
   getUsersDropdown,
   getAgeCategoriesDropdown,
 };

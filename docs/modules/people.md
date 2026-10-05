@@ -19,10 +19,9 @@ Owns identity, authentication, and role profiles for all human actors.
 
 ## Responsibilities
 
-- Self-registration limited to `ORG_MANAGER, PLAYER, COACH, REFEREE` with phone/email uniqueness and Jalali birth-date handling.
+- Self-registration accepts `PLAYER`, `COACH`, `REFEREE`, or no role, with phone/email uniqueness and Jalali birth-date handling.
 - Credential verification, access/refresh token issuance, refresh-token persistence, admin-login gating on `adminLevel`.
 - Own-profile read/update, avatar upload/remove, password change, soft self-delete (`status = DELETED`).
-- Removing `ORG_MANAGER` is rejected with 409 while the user is a manager of any (non-deleted) organization.
 - Admin user listing (non-`SUPER_ADMIN` hides admin accounts), admin create/update/delete, password reset, permission catalog listing and replacement.
 
 ## Relationships with other modules

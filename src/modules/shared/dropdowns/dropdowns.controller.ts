@@ -74,25 +74,11 @@ async function getSeasons(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-async function getManagerCandidates(req: Request, res: Response, next: NextFunction) {
-  try {
-    const query = (req.validatedQuery ?? req.query) as {
-      search?: string;
-      page: number;
-      pageSize: number;
-    };
-    const result = await dropdownsService.getManagerCandidates(query);
-    return sendDropdown(res, result);
-  } catch (err) {
-    next(err);
-  }
-}
-
 async function getUsers(req: Request, res: Response, next: NextFunction) {
   try {
     const query = (req.validatedQuery ?? req.query) as {
       search?: string;
-      role?: "ORG_MANAGER" | "COACH" | "PLAYER" | "REFEREE";
+      role?: "COACH" | "PLAYER" | "REFEREE";
       page: number;
       pageSize: number;
     };
@@ -124,7 +110,6 @@ export default {
   getOrganizations,
   getTeams,
   getSeasons,
-  getManagerCandidates,
   getUsers,
   getAgeCategories,
 };

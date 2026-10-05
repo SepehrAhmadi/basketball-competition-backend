@@ -1,7 +1,6 @@
 export const messages = {
   error: {
     auth: {
-      invalidSelfRegisterRole: "نقش انتخاب‌شده برای ثبت‌نام مجاز نیست",
       phoneOrEmailInUse: "شماره تلفن یا ایمیل قبلاً استفاده شده است",
       invalidCredentials: "اطلاعات ورود نامعتبر است",
       accountNotActive: "حساب کاربری فعال نیست",
@@ -15,7 +14,6 @@ export const messages = {
       passwordMinLength: "رمز عبور باید حداقل ۸ کاراکتر باشد",
       identifierRequired: "شماره تلفن یا ایمیل الزامی است",
       passwordRequired: "رمز عبور الزامی است",
-      atLeastOneRoleRequired: "حداقل یک نقش الزامی است",
       phoneNumberLength: "شماره تلفن باید ۱۱ رقم باشد",
       userNotAdmin: "کاربر مورد نظر ادمین نیست",
       cannotRevokeAdminFromSuperAdmin: "نمی‌توان دسترسی ادمین را از سوپر ادمین گرفت",
@@ -28,7 +26,6 @@ export const messages = {
       managerRequired: "انتخاب مدیر سازمان الزامی است",
       managerNotFound: "مدیر سازمان یافت نشد",
       managerNotActive: "حساب مدیر سازمان فعال نیست",
-      managerMissingRole: "کاربر نقش مدیر سازمان را ندارد",
       alreadyDeleted: "باشگاه قبلاً حذف شده است",
       notDeleted: "باشگاه حذف نشده است",
     },
@@ -89,8 +86,6 @@ export const messages = {
       currentPasswordIncorrect: "رمز عبور فعلی نادرست است",
       avatarNotFound: "آواتار یافت نشد",
       avatarRequired: "فایل آواتار الزامی است",
-      cannotRemoveOrgManagerRole:
-        "این کاربر مدیر یک سازمان است؛ ابتدا مدیریت سازمان را به کاربر دیگری منتقل کنید",
     },
   },
   success: {

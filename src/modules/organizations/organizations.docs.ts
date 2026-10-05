@@ -183,7 +183,7 @@ registry.registerPath({
   tags: ["Organizations"],
   summary: "Create an organization",
   description:
-    "Creates an organization and makes the authenticated user its first manager. Requires ORG_MANAGER or ADMIN. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\"). If no logo is sent, logoUrl stays null.",
+    "Creates an organization and makes the authenticated user its first manager. Any authenticated user can create an organization. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\"). If no logo is sent, logoUrl stays null.",
   request: {
     body: {
       content: { "multipart/form-data": { schema: createOrganizationRequestSchema } },
@@ -218,12 +218,6 @@ registry.registerPath({
         "application/json": { schema: unauthorizedError },
       },
     },
-    "403": {
-      description: "Requires ORG_MANAGER or ADMIN role",
-      content: {
-        "application/json": { schema: errorResponseSchema(403, "Forbidden") },
-      },
-    },
   },
 });
 
@@ -233,7 +227,7 @@ registry.registerPath({
   tags: ["Organizations"],
   summary: "Update an organization",
   description:
-    "Partial update — send only the fields to change. Requires ORG_MANAGER or ADMIN. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\"). If no logo is sent and removeLogo is not \"true\", the existing logo remains unchanged. Send removeLogo=\"true\" with no logo file to delete the existing logo (logoUrl becomes null). A newly uploaded logo takes precedence over removeLogo.",
+    "Partial update — send only the fields to change. Requires being a manager of the organization, or an ADMIN. Accepts multipart/form-data with organization fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\"). If no logo is sent and removeLogo is not \"true\", the existing logo remains unchanged. Send removeLogo=\"true\" with no logo file to delete the existing logo (logoUrl becomes null). A newly uploaded logo takes precedence over removeLogo.",
   request: {
     params: idParamSchema,
     body: {
@@ -288,7 +282,7 @@ registry.registerPath({
   path: "/organizations/{id}",
   tags: ["Organizations"],
   summary: "Delete an organization",
-  description: "Requires ORG_MANAGER or ADMIN.",
+  description: "Requires being a manager of the organization, or an ADMIN.",
   request: {
     params: idParamSchema,
   },

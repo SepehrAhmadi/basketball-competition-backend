@@ -39,7 +39,7 @@ const seasonDropdownItemSchema = idLabelItemSchema
   .openapi("SeasonDropdownItem");
 
 const userDropdownItemSchema = idLabelItemSchema
-  .extend({ roles: z.array(z.string()).openapi({ example: ["ORG_MANAGER"] }) })
+  .extend({ roles: z.array(z.string()).openapi({ example: ["COACH"] }) })
   .openapi("UserDropdownItem");
 
 const unauthorizedError = errorResponseSchema(401, "Unauthorized");
@@ -165,33 +165,6 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
-  path: "/dropdowns/manager-candidates",
-  tags: ["Dropdowns"],
-  summary: "Manager candidate options",
-  description:
-    "Searchable id/label list of ACTIVE users holding the ORG_MANAGER role, for the admin organization form.",
-  security: [{ bearerAuth: [] }],
-  request: { query: dropdownSearchQuerySchema },
-  responses: {
-    "200": {
-      description: "Manager candidates",
-      content: {
-        "application/json": {
-          schema: successResponseSchema(paginatedResponseSchema(idLabelItemSchema), {
-            messageExample: messages.success.dropdown.fetched,
-          }),
-        },
-      },
-    },
-    "401": {
-      description: "Missing or invalid access token",
-      content: { "application/json": { schema: unauthorizedError } },
-    },
-  },
-});
-
-registry.registerPath({
-  method: "get",
   path: "/dropdowns/age-categories",
   tags: ["Dropdowns"],
   summary: "Age category options",
@@ -222,7 +195,7 @@ registry.registerPath({
   tags: ["Dropdowns"],
   summary: "User options",
   description:
-    "Searchable id/label list of ACTIVE users. Optional role filter (e.g. ORG_MANAGER); omit role to return users with any role.",
+    "Searchable id/label list of ACTIVE users. Optional role filter (e.g. COACH); omit role to return users with any role.",
   security: [{ bearerAuth: [] }],
   request: { query: usersDropdownQuerySchema },
   responses: {
