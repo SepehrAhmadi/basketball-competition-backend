@@ -60,7 +60,11 @@ export const updateProfileSchema = z
       .openapi({ example: "ali@example.com" }),
     birthDate: jalaliBirthDate.openapi({ example: "1381/05/20" }),
     nationalId: nationalIdSchema.openapi({ example: "0012345678" }),
-    roles: z.array(roleSchema).optional().openapi({ example: ["PLAYER"] }),
+    roles: z
+      .array(roleSchema)
+      .min(1, messages.error.auth.atLeastOneRoleRequired)
+      .optional()
+      .openapi({ example: ["PLAYER"] }),
   })
   .partial()
   .strict();

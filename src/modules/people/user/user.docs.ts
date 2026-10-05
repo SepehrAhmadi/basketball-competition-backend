@@ -64,6 +64,10 @@ const conflictError = errorResponseSchema(
   409,
   messages.error.auth.phoneOrEmailInUse,
 );
+const orgManagerLockedError = errorResponseSchema(
+  409,
+  messages.error.user.cannotRemoveOrgManagerRole,
+);
 
 registry.registerPath({
   method: "get",
@@ -105,7 +109,7 @@ registry.registerPath({
   tags: ["Users"],
   summary: "Update own profile",
   description:
-    "Updates self-service editable fields (fullName, phone, email, birthDate, nationalId) and synchronizes roles with the provided array. Status and passwords cannot be changed here.",
+    "Updates self-service editable fields (fullName, phone, email, birthDate, nationalId) and fully replaces roles with the provided array (at least one role required). Omitting roles leaves them unchanged. Status, passwords, and admin level cannot be changed here. Removing ORG_MANAGER while the user manages a non-deleted organization is rejected with 409 — transfer the organization's management to another user first.",
   request: {
     body: {
       content: { "application/json": { schema: updateProfileSchema } },
@@ -143,9 +147,12 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "Phone number or email already in use",
+      description:
+        "Phone number or email already in use, or removing ORG_MANAGER while managing an organization",
       content: {
-        "application/json": { schema: conflictError },
+        "application/json": {
+          schema: z.union([conflictError, orgManagerLockedError]),
+        },
       },
     },
   },
