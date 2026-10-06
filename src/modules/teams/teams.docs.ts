@@ -86,6 +86,7 @@ const removeRosterMemberRequestSchema = z
 
 export const teamCanSchema = z
   .object({
+    view: z.boolean().openapi({ example: true }),
     edit: z.boolean().openapi({ example: false }),
     delete: z.boolean().openapi({ example: false }),
   })
@@ -183,7 +184,8 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "List teams",
   description:
-    "Paginated list of teams (public). Optionally filter by organizationId.",
+    "Paginated list of teams visible to the caller (admin: all; manager: managed organizations; others: member teams). Optionally filter by organizationId.",
+  security: [{ bearerAuth: [] }],
   request: {
     query: listTeamsQuerySchema,
   },
@@ -198,6 +200,18 @@ registry.registerPath({
         },
       },
     },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "Not authorized to view teams",
+      content: {
+        "application/json": { schema: forbiddenError },
+      },
+    },
   },
 });
 
@@ -207,7 +221,8 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Get a team by id",
   description:
-    "Fetch a single team (public). When authenticated, the response includes a `can` object with edit/delete flags for the caller's organization context; guests receive all-false flags.",
+    "Fetch a single team visible to the caller. The response includes a `can` object with view/edit/delete flags.",
+  security: [{ bearerAuth: [] }],
   request: {
     params: teamIdParamSchema,
   },
@@ -220,6 +235,18 @@ registry.registerPath({
             messageExample: messages.success.team.found,
           }),
         },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "Not authorized to view this team",
+      content: {
+        "application/json": { schema: forbiddenError },
       },
     },
     "404": {
@@ -237,7 +264,8 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Get team roster",
   description:
-    "List members of a team for a specific season (defaults to the active season). Public. The response includes a top-level `can` object (assignHeadCoach/manageCoaches/managePlayers) computed for the resolved season, and per-item `can` edit/delete flags that are row-specific: rows with `isHeadCoach: true` are editable/deletable by admins/org managers only (so a head coach's own row shows false); guests receive all-false flags.",
+    "List members of a team for a specific season (defaults to the active season). Requires view access to the team. The response includes a top-level `can` object (assignHeadCoach/manageCoaches/managePlayers) computed for the resolved season, and per-item `can` edit/delete flags that are row-specific: rows with `isHeadCoach: true` are editable/deletable by admins/org managers only (so a head coach's own row shows false).",
+  security: [{ bearerAuth: [] }],
   request: {
     params: teamIdParamSchema,
     query: rosterQuerySchema,
@@ -251,6 +279,18 @@ registry.registerPath({
             messageExample: messages.success.team.rosterList,
           }),
         },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: {
+        "application/json": { schema: unauthorizedError },
+      },
+    },
+    "403": {
+      description: "Not authorized to view this team",
+      content: {
+        "application/json": { schema: forbiddenError },
       },
     },
     "404": {

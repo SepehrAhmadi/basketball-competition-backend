@@ -10,6 +10,7 @@ export interface Actor {
   isAdmin: boolean;
   managedOrgIds: ReadonlySet<number>;
   memberOrgIds: ReadonlySet<number>;
+  memberTeamIds: ReadonlySet<number>;
   membershipFor(teamId: number, seasonId: number): Membership | undefined;
 }
 
@@ -22,6 +23,7 @@ export const guestActor: Actor = {
   isAdmin: false,
   managedOrgIds: new Set<number>(),
   memberOrgIds: new Set<number>(),
+  memberTeamIds: new Set<number>(),
   membershipFor: emptyMembershipLookup(),
 };
 
@@ -32,7 +34,7 @@ export async function loadActor(userId: number, adminLevel: string | null): Prom
       select: { organizationId: true },
     }),
     prisma.teamSeasonMember.findMany({
-      where: { userId, status: "ACTIVE" },
+      where: { userId, status: "ACTIVE", season: { isActive: true } },
       select: {
         organizationId: true,
         teamId: true,
@@ -45,10 +47,12 @@ export async function loadActor(userId: number, adminLevel: string | null): Prom
 
   const managedOrgIds = new Set<number>(managerRows.map((r) => r.organizationId));
   const memberOrgIds = new Set<number>();
+  const memberTeamIds = new Set<number>();
   const membershipByKey = new Map<string, Membership>();
 
   for (const m of memberRows) {
     memberOrgIds.add(m.organizationId);
+    memberTeamIds.add(m.teamId);
     membershipByKey.set(`${m.teamId}:${m.seasonId}`, {
       role: m.role,
       isHeadCoach: m.isHeadCoach,
@@ -60,6 +64,7 @@ export async function loadActor(userId: number, adminLevel: string | null): Prom
     isAdmin: adminLevel != null,
     managedOrgIds,
     memberOrgIds,
+    memberTeamIds,
     membershipFor: (teamId: number, seasonId: number) =>
       membershipByKey.get(`${teamId}:${seasonId}`),
   };

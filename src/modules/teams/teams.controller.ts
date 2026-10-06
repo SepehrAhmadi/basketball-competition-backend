@@ -12,7 +12,7 @@ async function listTeams(req: Request, res: Response, next: NextFunction) {
       organizationId?: number;
     };
 
-    const result = await teamsService.listTeams(query);
+    const result = await teamsService.listTeams(query, req.actor!);
     return apiResponse.sendResponse(res, 200, messages.success.team.list, result);
   } catch (err) {
     next(err);
