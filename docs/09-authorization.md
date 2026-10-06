@@ -20,7 +20,7 @@ that name.
 | Concept | Meaning |
 |---|---|
 | Authentication | Who the caller is (`verifyJWT`, login module). Unchanged. |
-| Actor | The caller's contextual identity for one request: id, admin flag, managed/member sets, and a season-scoped membership lookup. |
+| Actor | The caller's contextual identity for one request: id, admin flag, managed/member sets (including member teams for the active season), and a season-scoped membership lookup. |
 | Policy | A pure synchronous function `(actor, scope) => flags`. No DB access inside. |
 | `can` | The policy result attached to a response item. Frontend renders it, never derives it. |
 | Enforcement | Service calls `assertAllowed(can.flag, message)` before mutating. Throws `AppError` 403 on denial. |
@@ -38,7 +38,7 @@ that name.
 Defined in `src/authz/actor.ts`:
 
 - `userId: number | null`, `isAdmin: boolean` (`adminLevel != null`).
-- `managedOrgIds`, `memberOrgIds`: readonly sets built from membership rows.
+- `managedOrgIds`, `memberOrgIds`, `memberTeamIds`: readonly sets built from membership rows. `memberTeamIds` only includes ACTIVE memberships in the active season.
 - `membershipFor(teamId, seasonId)`: season-scoped lookup backed by a `Map` keyed `${teamId}:${seasonId}`.
 - `guestActor`: null user, empty sets, lookup always returns `undefined`.
 - `loadActor(userId, adminLevel)`: runs the membership queries in parallel, builds the sets and map, returns the actor. Built once per request; policies receive it as input and never query.
@@ -80,17 +80,17 @@ is always checked before the policy denial (403).
 
 - Additive: existing response fields are unchanged; `can` is an extra object.
 - Present on detail and mutation responses; list responses include it per item only when cheap (no per-row lookups otherwise).
-- Guests and callers with no access receive all-false flags; public reads still succeed.
+- Guests and callers with no access receive all-false flags; authenticated reads without visibility fail with 403.
 - Row-level lists expose per-item `can` (e.g. `{ edit, delete }`) plus a top-level `can` for the collection scope.
 - Swagger documents each `can` shape (e.g. `...Can` schemas in `*.docs.ts`) so the frontend can code against it.
 
 ## Adding a new domain
 
 1. Create `<domain>.policy.ts` with a `<Domain>Can` type and a pure policy function.
-2. Add `attachActor` (or `optionalJWT` + `optionalActor` for public reads) in the domain routes.
+2. Add `verifyJWT` + `attachActor` in the domain routes (`optionalJWT` + `optionalActor` remain only for future public routes).
 3. Pass `req.actor` from controller to service; drop the `userId/roles/adminLevel` params it replaces.
 4. In the service: 404 first, compute `can = policy(actor, scope)`, enforce with `assertAllowed`, return `can` in the response.
-5. Register the `...Can` schema in `<domain>.docs.ts` and note guest/public semantics.
+5. Register the `...Can` schema in `<domain>.docs.ts` and note authenticated semantics.
 
 ## Conventions and pitfalls
 
