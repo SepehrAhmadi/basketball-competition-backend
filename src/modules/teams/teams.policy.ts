@@ -1,6 +1,7 @@
 import type { Actor } from "../../authz/actor.ts";
 
 export interface TeamCan {
+  view: boolean;
   edit: boolean;
   delete: boolean;
 }
@@ -16,9 +17,13 @@ export interface RosterMemberCan {
   delete: boolean;
 }
 
-export function teamPolicy(actor: Actor, params: { organizationId: number }): TeamCan {
-  const allowed = actor.isAdmin || actor.managedOrgIds.has(params.organizationId);
-  return { edit: allowed, delete: allowed };
+export function teamPolicy(
+  actor: Actor,
+  params: { organizationId: number; teamId: number },
+): TeamCan {
+  const manager = actor.isAdmin || actor.managedOrgIds.has(params.organizationId);
+  const member = actor.memberTeamIds.has(params.teamId);
+  return { view: manager || member, edit: manager, delete: manager };
 }
 
 export function rosterPolicy(

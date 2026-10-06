@@ -10,7 +10,7 @@ Manages teams and their per-season rosters of coaches and players.
 
 ## Responsibilities
 
-- Public team list (`GET /`, optional `organizationId` filter) and detail; detail/roster use `optionalJWT` + `optionalActor` and return `can` flags when authenticated (guests get all-false).
+- Authenticated team list (`GET /`, optional `organizationId` filter) scoped to visible teams (admin: all; manager: managed organizations; others: member teams of the active season); detail/roster require `verifyJWT` + `attachActor` and return `can` flags (`teamPolicy` view gate, 404 before 403).
 - Mutations require `verifyJWT` + `attachActor`; record checks via `teamPolicy`/`rosterPolicy` + `assertAllowed` with `can` on responses.
 - Team create/update/soft-delete with Jalali `foundedDate` conversion and logo handling (server-generated URL, `basename` + prefix guard, orphan cleanup); org transfer requires managing the target org; `admin/` adds status filter + `POST /:teamId/restore` (`teams.restore`).
 - Roster read (resolved season — explicit `seasonId` or active — `status = ACTIVE`, user include) with top-level `can` (`assignHeadCoach/manageCoaches/managePlayers`) + per-item `can { edit, delete }` (head-coach rows manager-only).

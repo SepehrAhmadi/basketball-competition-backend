@@ -1,8 +1,7 @@
 import { Router } from "express";
 import validate from "../../middleware/validate.ts";
 import verifyJWT from "../../middleware/auth/verifyJWT.middleware.ts";
-import optionalJWT from "../../middleware/auth/optionalJWT.middleware.ts";
-import { attachActor, optionalActor } from "../../middleware/auth/attachActor.middleware.ts";
+import { attachActor } from "../../middleware/auth/attachActor.middleware.ts";
 import createUploader from "../../middleware/upload/createUploader.ts";
 import uploadConfig from "../../config/upload.config.ts";
 import teamsValidation from "./teams.validation.ts";
@@ -20,26 +19,28 @@ const teamLogoUploader = createUploader({
   ...uploadConfig.teamLogo,
 });
 
-// ─── Public reads (no auth) ──────────────────────────────────────────────
+// ─── Authenticated reads ─────────────────────────────────────────────────
 
 router.get(
   "/",
+  verifyJWT,
+  attachActor,
   validate(listTeamsQuerySchema, "query"),
   teamsController.listTeams,
 );
 
 router.get(
   "/:teamId",
-  optionalJWT,
-  optionalActor,
+  verifyJWT,
+  attachActor,
   validate(teamsValidation.teamIdParamSchema, "params"),
   teamsController.getTeam,
 );
 
 router.get(
   "/:teamId/roster",
-  optionalJWT,
-  optionalActor,
+  verifyJWT,
+  attachActor,
   validate(teamsValidation.teamIdParamSchema, "params"),
   validate(teamsValidation.rosterQuerySchema, "query"),
   teamsController.getRoster,

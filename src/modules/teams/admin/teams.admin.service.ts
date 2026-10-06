@@ -241,6 +241,7 @@ function adminActor(callerUserId: number) {
     isAdmin: true,
     managedOrgIds: new Set<number>(),
     memberOrgIds: new Set<number>(),
+    memberTeamIds: new Set<number>(),
     membershipFor: () => undefined,
   };
 }
