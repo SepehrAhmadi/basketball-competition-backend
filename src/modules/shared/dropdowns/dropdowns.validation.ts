@@ -18,10 +18,10 @@ export const teamsDropdownQuerySchema = dropdownSearchQuerySchema.extend({
 
 export const usersDropdownQuerySchema = dropdownSearchQuerySchema.extend({
   role: z
-    .enum(["ORG_MANAGER", "COACH", "PLAYER", "REFEREE"])
+    .enum(["COACH", "PLAYER", "REFEREE"])
     .optional()
     .openapi({
-      example: "ORG_MANAGER",
+      example: "COACH",
       description: "Filter by domain role. Omit to return users with any role.",
     }),
 });

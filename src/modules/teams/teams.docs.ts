@@ -268,7 +268,7 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Create a team",
   description:
-    "Creates a team within an organization. Requires ORG_MANAGER or ADMIN. Accepts multipart/form-data with team fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\").",
+    "Creates a team within an organization. Requires being a manager of the organization, or an ADMIN. Accepts multipart/form-data with team fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\").",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -305,7 +305,7 @@ registry.registerPath({
       },
     },
     "403": {
-      description: "Requires ORG_MANAGER or ADMIN role",
+      description: "Not a manager of the target organization",
       content: {
         "application/json": { schema: forbiddenError },
       },
@@ -319,7 +319,7 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Update a team",
   description:
-    "Partial update — send only the fields to change. Requires ORG_MANAGER or ADMIN with team access. Accepts multipart/form-data with team fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\").",
+    "Partial update — send only the fields to change. Requires being a manager of the organization, or an ADMIN with team access. Accepts multipart/form-data with team fields plus an optional logo image file field named `logo` and an optional `removeLogo` text field (\"true\"/\"false\").",
   security: [{ bearerAuth: [] }],
   request: {
     params: teamIdParamSchema,
@@ -364,7 +364,7 @@ registry.registerPath({
   path: "/teams/{teamId}",
   tags: ["Teams"],
   summary: "Delete a team",
-  description: "Soft-deletes a team (sets status to DELETED). Requires ORG_MANAGER or ADMIN with team access.",
+  description: "Soft-deletes a team (sets status to DELETED). Requires being a manager of the organization, or an ADMIN with team access.",
   security: [{ bearerAuth: [] }],
   request: {
     params: teamIdParamSchema,
@@ -407,7 +407,7 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Replace team logo",
   description:
-    "Upload a new logo image for the team. Replaces the existing logo. Requires ORG_MANAGER or ADMIN with team access. Accepts multipart/form-data with a `logo` file field.",
+    "Upload a new logo image for the team. Replaces the existing logo. Requires being a manager of the organization, or an ADMIN with team access. Accepts multipart/form-data with a `logo` file field.",
   security: [{ bearerAuth: [] }],
   request: {
     params: teamIdParamSchema,

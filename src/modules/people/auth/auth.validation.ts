@@ -34,7 +34,7 @@ const nationalIdSchema = z.preprocess(
   z.string().min(10).max(10).nullable().optional(),
 );
 
-const selfRegisterRoles = ["ORG_MANAGER", "PLAYER", "COACH", "REFEREE"] as const;
+const selfRegisterRoles = ["PLAYER", "COACH", "REFEREE"] as const;
 
 export const registerSchema = z.object({
   fullName: z
@@ -61,7 +61,7 @@ export const registerSchema = z.object({
     .openapi({ format: "password", example: "secret123" }),
   roles: z
     .array(z.enum(selfRegisterRoles))
-    .min(1, messages.error.auth.atLeastOneRoleRequired)
+    .default([])
     .openapi({ example: ["PLAYER"] }),
 });
 

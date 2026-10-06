@@ -36,13 +36,7 @@ const nationalIdSchema = z.preprocess(
   z.string().min(10).max(10).nullable().optional(),
 );
 
-const adminAssignableRoles = [
-  "ORG_MANAGER",
-  "COACH",
-  "PLAYER",
-  "REFEREE",
-  "PUBLIC",
-] as const;
+const adminAssignableRoles = ["COACH", "PLAYER", "REFEREE"] as const;
 
 export const roleSchema = z.enum(adminAssignableRoles).openapi({ example: "PLAYER" });
 
@@ -67,7 +61,7 @@ export const adminCreateUserSchema = z.object({
     .openapi({ format: "password", example: "secret123" }),
   roles: z
     .array(z.enum(adminAssignableRoles))
-    .min(1, messages.error.auth.atLeastOneRoleRequired)
+    .default([])
     .openapi({ example: ["COACH"] }),
 });
 

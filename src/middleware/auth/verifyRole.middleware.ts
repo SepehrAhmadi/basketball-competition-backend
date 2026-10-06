@@ -7,13 +7,7 @@ const verifyRole = (...allowedRoles: Role[]) => {
     // Any admin level bypasses domain-role checks entirely.
     if (req.adminLevel) return next();
 
-    if (!req.roles || req.roles.length === 0) {
-      return next(new AppError(401, "No role found"));
-    }
-
-    const hasPermission = req.roles.some((role) => allowedRoles.includes(role));
-
-    if (!hasPermission) {
+    if (!req.roles?.some((role) => allowedRoles.includes(role))) {
       return next(new AppError(403, "Forbidden"));
     }
 

@@ -2,7 +2,6 @@ import { Router } from "express";
 import validate from "../../middleware/validate.ts";
 import verifyJWT from "../../middleware/auth/verifyJWT.middleware.ts";
 import { attachActor } from "../../middleware/auth/attachActor.middleware.ts";
-import verifyRole from "../../middleware/auth/verifyRole.middleware.ts";
 import createUploader from "../../middleware/upload/createUploader.ts";
 import uploadConfig from "../../config/upload.config.ts";
 import { idParamSchema } from "../../shared/schemas.validation.ts";
@@ -36,7 +35,6 @@ router.post(
   "/",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER"),
   organizationLogoUploader.single("logo"),
   validate(organizationsValidation.createOrganizationSchema),
   organizationsController.create,
@@ -46,7 +44,6 @@ router.put(
   "/:id",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER"),
   validate(idParamSchema, "params"),
   organizationLogoUploader.single("logo"),
   validate(organizationsValidation.updateOrganizationSchema),
@@ -57,7 +54,6 @@ router.delete(
   "/:id",
   verifyJWT,
   attachActor,
-  verifyRole("ORG_MANAGER"),
   validate(idParamSchema, "params"),
   organizationsController.remove,
 );

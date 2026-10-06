@@ -8,7 +8,7 @@ import { messages } from "../../../language/message.ts";
 
 // ---- response models ----
 const assignableRoleEnum = z
-  .enum(["ORG_MANAGER", "COACH", "PLAYER", "REFEREE"])
+  .enum(["COACH", "PLAYER", "REFEREE"])
   .openapi("AssignableRole");
 
 const roleItemSchema = z

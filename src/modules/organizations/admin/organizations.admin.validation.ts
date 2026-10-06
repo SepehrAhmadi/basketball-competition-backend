@@ -16,7 +16,7 @@ const managerIdField = z
   .number({ invalid_type_error: "The value must be a number" })
   .int()
   .positive()
-  .openapi({ example: 5, description: "User id with ORG_MANAGER role" });
+  .openapi({ example: 5, description: "Id of an ACTIVE user who becomes the manager" });
 
 export const adminCreateOrganizationSchema = z
   .object({

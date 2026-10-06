@@ -20,12 +20,7 @@ import { PERMISSION_CODES } from "../../../../shared/permissions.ts";
 // ---- response models ----
 // Display-only: roles are domain-only now; admin standing is exposed
 // separately via adminLevel.
-const roleEnum = z.enum([
-  "ORG_MANAGER",
-  "COACH",
-  "PLAYER",
-  "REFEREE",
-]).openapi("Role");
+const roleEnum = z.enum(["COACH", "PLAYER", "REFEREE"]).openapi("Role");
 
 const adminLevelEnum = z.enum(["ADMIN", "SUPER_ADMIN"]).nullable().openapi("AdminLevel");
 
@@ -63,10 +58,6 @@ const conflictError = errorResponseSchema(
   409,
   messages.error.auth.phoneOrEmailInUse,
 );
-const orgManagerLockedError = errorResponseSchema(
-  409,
-  messages.error.user.cannotRemoveOrgManagerRole,
-);
 
 // ---- path registrations ----
 
@@ -76,7 +67,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "Create a user",
   description:
-    "Admin-only endpoint to create a user with any domain role (ORG_MANAGER, COACH, PLAYER, REFEREE). Admin levels cannot be granted here — use PUT /admin/users/{id}/admin-status. Returns the new user's id.",
+    "Admin-only endpoint to create a user with any domain role (COACH, PLAYER, REFEREE), or none. Admin levels cannot be granted here — use PUT /admin/users/{id}/admin-status. Returns the new user's id.",
   request: {
     body: {
       content: { "application/json": { schema: adminCreateUserSchema } },
@@ -210,7 +201,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "Update user",
   description:
-    "Admin-only edit of another user's profile fields and non-admin roles. The roles array is treated as the complete selection and synchronized exactly; it cannot contain ADMIN or SUPER_ADMIN — use PUT /admin/users/{id}/admin-status for that. Regular ADMINs cannot edit ADMIN or SUPER_ADMIN users (403). Removing ORG_MANAGER while the user manages a non-deleted organization is rejected with 409 — transfer the organization's management to another user first.",
+    "Admin-only edit of another user's profile fields and non-admin roles. The roles array is treated as the complete selection and synchronized exactly; it cannot contain ADMIN or SUPER_ADMIN — use PUT /admin/users/{id}/admin-status for that. Regular ADMINs cannot edit ADMIN or SUPER_ADMIN users (403).",
   request: {
     params: idParamSchema,
     body: {
@@ -255,11 +246,10 @@ registry.registerPath({
       },
     },
     "409": {
-      description:
-        "Phone number or email already in use, or removing ORG_MANAGER while managing an organization",
+      description: "Phone number or email already in use",
       content: {
         "application/json": {
-          schema: z.union([conflictError, orgManagerLockedError]),
+          schema: conflictError,
         },
       },
     },
