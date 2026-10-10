@@ -46,7 +46,7 @@ function teamLogoUrlToPath(logoUrl: string | null | undefined): string | null {
 }
 
 const baseUrl = process.env.BASE_URL;
-function withPublicLogoUrl(team: { logoUrl: string | null; foundedDate: Date | null; [key: string]: any }) {
+export function withPublicLogoUrl(team: { logoUrl: string | null; foundedDate: Date | null; [key: string]: any }) {
   return {
     ...team,
     logoUrl: getPublicFileUrl(team.logoUrl, baseUrl),
@@ -117,16 +117,23 @@ async function getActiveSeasonOrThrow(seasonId?: number) {
   return season;
 }
 
-// ─── Public list / detail (no auth required) ──────────────────────────────
+// ─── Authenticated list / detail ─────────────────────────────────────────
 
 async function listTeams(query: {
   page: number;
   pageSize: number;
   organizationId?: number;
-}) {
+}, actor: Actor) {
   const where: any = { status: { not: "DELETED" } };
   if (query.organizationId) {
     where.organizationId = query.organizationId;
+  }
+
+  if (!actor.isAdmin) {
+    where.OR = [
+      { organizationId: { in: [...actor.managedOrgIds] } },
+      { id: { in: [...actor.memberTeamIds] } },
+    ];
   }
 
   const [items, total] = await prisma.$transaction([
@@ -141,22 +148,26 @@ async function listTeams(query: {
   ]);
 
   return {
-    items: items.map((item) => withPublicLogoUrl(item)),
+    items: items.map((item) => ({
+      ...withPublicLogoUrl(item),
+      can: teamPolicy(actor, { organizationId: item.organizationId, teamId: item.id }),
+    })),
     total,
     page: query.page,
     pageSize: query.pageSize,
   };
 }
 
-async function getTeamById(teamId: number, actor?: Actor) {
+async function getTeamById(teamId: number, actor: Actor) {
   const team = await prisma.team.findFirst({
     where: { id: teamId, status: { not: "DELETED" } },
     include: { organization: { select: { id: true, name: true } } },
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
+  const can = teamPolicy(actor, { organizationId: team.organizationId, teamId });
+  assertAllowed(can.view, messages.error.team.notAuthorized);
   const result = withPublicLogoUrl(team);
-  if (!actor) return result;
-  return { ...result, can: teamPolicy(actor, { organizationId: team.organizationId }) };
+  return { ...result, can };
 }
 
 // ─── Mutations (auth required) ────────────────────────────────────────────
@@ -191,7 +202,7 @@ async function createTeam(data: CreateTeamInput, actor: Actor, file?: Express.Mu
     });
     return {
       ...withPublicLogoUrl(team),
-      can: teamPolicy(actor, { organizationId: team.organizationId }),
+      can: teamPolicy(actor, { organizationId: team.organizationId, teamId: team.id }),
     };
   } catch (err) {
     if (file) removeFileIfExists(file.path);
@@ -215,7 +226,7 @@ async function updateTeam(
 
   try {
     assertAllowed(
-      teamPolicy(actor, { organizationId: team.organizationId }).edit,
+      teamPolicy(actor, { organizationId: team.organizationId, teamId }).edit,
       messages.error.team.notAuthorized,
     );
   } catch (err) {
@@ -226,7 +237,7 @@ async function updateTeam(
   if (data.organizationId !== undefined && data.organizationId !== team.organizationId) {
     try {
       assertAllowed(
-        teamPolicy(actor, { organizationId: data.organizationId }).edit,
+        teamPolicy(actor, { organizationId: data.organizationId, teamId }).edit,
         messages.error.team.notAuthorized,
       );
     } catch (err) {
@@ -272,7 +283,7 @@ async function updateTeam(
 
   return {
     ...withPublicLogoUrl(updated),
-    can: teamPolicy(actor, { organizationId: updated.organizationId }),
+    can: teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id }),
   };
 }
 
@@ -283,7 +294,7 @@ async function deleteTeam(teamId: number, actor: Actor) {
   if (!team) throw new AppError(404, messages.error.team.notFound);
 
   assertAllowed(
-    teamPolicy(actor, { organizationId: team.organizationId }).delete,
+    teamPolicy(actor, { organizationId: team.organizationId, teamId }).delete,
     messages.error.team.notAuthorized,
   );
 
@@ -304,7 +315,7 @@ async function updateLogo(teamId: number, file: Express.Multer.File, actor: Acto
 
   try {
     assertAllowed(
-      teamPolicy(actor, { organizationId: team.organizationId }).edit,
+      teamPolicy(actor, { organizationId: team.organizationId, teamId }).edit,
       messages.error.team.notAuthorized,
     );
   } catch (err) {
@@ -331,7 +342,7 @@ async function updateLogo(teamId: number, file: Express.Multer.File, actor: Acto
 
   return {
     ...withPublicLogoUrl(updated),
-    can: teamPolicy(actor, { organizationId: updated.organizationId }),
+    can: teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id }),
   };
 }
 
@@ -346,6 +357,11 @@ async function getRoster(
     where: { id: teamId, status: { not: "DELETED" } },
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
+
+  assertAllowed(
+    teamPolicy(actor, { organizationId: team.organizationId, teamId }).view,
+    messages.error.team.notAuthorized,
+  );
 
   const season = await getActiveSeasonOrThrow(query.seasonId);
   const can = rosterPolicy(actor, {

@@ -8,7 +8,6 @@ import {
 import {
   idParamSchema,
   paginatedResponseSchema,
-  paginationQuerySchema,
 } from "../../shared/schemas.validation.ts";
 import { organizationListQuerySchema } from "./organizations.validation.ts";
 
