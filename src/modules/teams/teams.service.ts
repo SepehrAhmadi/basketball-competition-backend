@@ -117,6 +117,21 @@ async function getActiveSeasonOrThrow(seasonId?: number) {
   return season;
 }
 
+async function isLockedByLeague(memberId: number): Promise<boolean> {
+  const row = await prisma.leagueTeamMember.findFirst({
+    where: {
+      teamSeasonMemberId: memberId,
+      status: "ACTIVE",
+      leagueTeam: {
+        status: "ACTIVE",
+        league: { status: { in: ["ACTIVE", "FINISHED"] } },
+      },
+    },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
 // ─── Authenticated list / detail ─────────────────────────────────────────
 
 async function listTeams(query: {
@@ -614,6 +629,14 @@ async function updateRosterMember(
     effectiveJerseyNumber = data.role === "COACH" ? null : member.jerseyNumber;
   }
 
+  const roleChanged = data.role !== undefined && data.role !== member.role;
+  const jerseyChanged =
+    effectiveJerseyNumber !== undefined &&
+    effectiveJerseyNumber !== member.jerseyNumber;
+  if ((roleChanged || jerseyChanged) && (await isLockedByLeague(memberId))) {
+    throw new AppError(409, messages.error.team.memberInActiveLeague);
+  }
+
   try {
     const updated = await prisma.$transaction(async (tx) => {
       // If becoming head coach (was not before), demote any existing head coach
@@ -627,6 +650,14 @@ async function updateRosterMember(
             id: { not: memberId },
           },
           data: { isHeadCoach: false },
+        });
+      }
+
+      // A role change invalidates the league selection — clear it.
+      if (roleChanged) {
+        await tx.leagueTeamMember.updateMany({
+          where: { teamSeasonMemberId: memberId, status: "ACTIVE" },
+          data: { status: "DELETED" },
         });
       }
 
@@ -679,10 +710,20 @@ async function removeRosterMember(teamId: number, memberId: number, seasonId: nu
     }
   }
 
-  await prisma.teamSeasonMember.update({
-    where: { id: memberId },
-    data: { status: "DELETED", jerseyNumber: null, isHeadCoach: false },
-  });
+  if (await isLockedByLeague(memberId)) {
+    throw new AppError(409, messages.error.team.memberInActiveLeague);
+  }
+
+  await prisma.$transaction([
+    prisma.teamSeasonMember.update({
+      where: { id: memberId },
+      data: { status: "DELETED", jerseyNumber: null, isHeadCoach: false },
+    }),
+    prisma.leagueTeamMember.updateMany({
+      where: { teamSeasonMemberId: memberId, status: "ACTIVE" },
+      data: { status: "DELETED" },
+    }),
+  ]);
   return member;
 }
 

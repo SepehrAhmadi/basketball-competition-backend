@@ -20,6 +20,6 @@
 ## Backend specifics
 
 - ESM `.ts` files with explicit `.ts` import suffixes; `__dirname` re-derived via `fileURLToPath`.
-- Soft-delete via `status = DELETED` for orgs/teams/users + roster rows (with `POST .../restore` on admin org/team routes and roster reactivation); hard `delete` for seasons, age-categories, and cutoffs (`P2003` → 409 when referenced).
+- Soft-delete via `status = DELETED` for orgs/teams/users + roster rows + league teams/members (with `POST .../restore` on admin org/team routes and roster reactivation); hard `delete` for seasons, age-categories, cutoffs, and leagues (guarded: leagues only in `INACTIVE`/`REGISTRATION` with no ACTIVE teams; `P2003` → 409 when referenced).
 - Uploaded file URLs generated server-side (`/uploads/<dest>/...`), never trusted from client; deletes guarded by `basename` + prefix check; orphan uploads removed when the DB write fails.
 - Jalali dates accepted as `YYYY/MM/DD`, stored as UTC-noon Gregorian `Date`.

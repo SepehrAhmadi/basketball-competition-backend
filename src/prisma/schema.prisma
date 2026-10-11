@@ -65,6 +65,23 @@ enum RefreeLevel {
   NATIONAL
 }
 
+enum LeagueStatus {
+  INACTIVE
+  REGISTRATION
+  ACTIVE
+  FINISHED
+}
+
+enum LeagueTeamStatus {
+  ACTIVE
+  DELETED
+}
+
+enum LeagueTeamMemberStatus {
+  ACTIVE
+  DELETED
+}
+
 model User {
   id           Int        @id @default(autoincrement())
   fullName     String     @map("full_name")
@@ -202,6 +219,7 @@ model Team {
 
   organization Organization       @relation(fields: [organizationId], references: [id])
   members      TeamSeasonMember[]
+  leagueTeams  LeagueTeam[]
 
   @@map("teams")
 }
@@ -241,6 +259,7 @@ model AgeCategoryCutoff {
 
   ageCategory AgeCategory @relation(fields: [ageCategoryId], references: [id])
   season      Season      @relation(fields: [seasonId], references: [id])
+  leagues     League[]
 
   @@unique([ageCategoryId, seasonId])
   @@index([seasonId])
@@ -263,9 +282,59 @@ model TeamSeasonMember {
   season       Season       @relation(fields: [seasonId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
+  leagueMemberships LeagueTeamMember[]
 
   @@unique([teamId, seasonId, userId, role])
   @@unique([teamId, seasonId, jerseyNumber])
   @@index([organizationId, userId])
   @@map("team_season_members")
+}
+
+model League {
+  id                  Int          @id @default(autoincrement())
+  name                String
+  ageCategoryCutoffId Int          @map("age_category_cutoff_id")
+  status              LeagueStatus @default(INACTIVE)
+  startDate           DateTime?    @map("start_date") @db.Date
+  endDate             DateTime?    @map("end_date") @db.Date
+  rosterDeadline      DateTime?    @map("roster_deadline") @db.Date
+  description         String?      @db.Text
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+
+  ageCategoryCutoff AgeCategoryCutoff @relation(fields: [ageCategoryCutoffId], references: [id])
+  teams             LeagueTeam[]
+
+  @@unique([ageCategoryCutoffId, name])
+  @@map("leagues")
+}
+
+model LeagueTeam {
+  id        Int              @id @default(autoincrement())
+  leagueId  Int              @map("league_id")
+  teamId    Int              @map("team_id")
+  status    LeagueTeamStatus @default(ACTIVE)
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  league  League             @relation(fields: [leagueId], references: [id])
+  team    Team               @relation(fields: [teamId], references: [id])
+  members LeagueTeamMember[]
+
+  @@unique([leagueId, teamId])
+  @@map("league_teams")
+}
+
+model LeagueTeamMember {
+  id                 Int                    @id @default(autoincrement())
+  leagueTeamId       Int                    @map("league_team_id")
+  teamSeasonMemberId Int                    @map("team_season_member_id")
+  status             LeagueTeamMemberStatus @default(ACTIVE)
+  createdAt          DateTime               @default(now()) @map("created_at")
+
+  leagueTeam       LeagueTeam       @relation(fields: [leagueTeamId], references: [id])
+  teamSeasonMember TeamSeasonMember @relation(fields: [teamSeasonMemberId], references: [id])
+
+  @@unique([leagueTeamId, teamSeasonMemberId])
+  @@index([teamSeasonMemberId])
+  @@map("league_team_members")
 }

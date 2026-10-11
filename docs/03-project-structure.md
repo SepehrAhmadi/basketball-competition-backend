@@ -16,11 +16,11 @@ src/
 ├── prisma/schema.prisma    # 14 models, enums (see 04-data-model.md)
 └── modules/
     ├── age-categories/admin/age-categories|age-category-cutoffs/  # admin-only category + cutoff CRUD
-    ├── competition/        # empty placeholder (see modules/competition.md)
+    ├── competition/leagues|admin/leagues|admin/league-teams|shared/  # league CRUD, registration, roster (see modules/competition.md)
     ├── organizations/      # org CRUD + logos + managers + admin/ (restore, status filter)
     ├── people/auth|user (with user/admin)|players|coaches|referees/
     ├── seasons/            # season lifecycle
-    ├── shared/roles|coach-degrees|referee-levels|dropdowns/  # dropdowns requires JWT, rest public
+    ├── shared/roles|coach-degrees|referee-levels|league-statuses|dropdowns/  # dropdowns requires JWT, rest public
     └── teams/              # team CRUD + roster + admin/ (restore, roster manage)
 ```
 

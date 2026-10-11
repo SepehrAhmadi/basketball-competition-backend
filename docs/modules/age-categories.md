@@ -22,9 +22,9 @@ Owns age-category definitions and their per-season birth-date cutoffs for eligib
 - Cutoff list (paginated, filterable by `ageCategoryId`/`seasonId`, ordered by `seasonId desc`) and detail, both with `ageCategory { id, name }` + `season { id, name }` includes and Jalali `minBirthDate` output via `gregorianToJalali`.
 - Cutoff create validates `AgeCategory` + `Season` existence, converts Jalali `minBirthDate` via `jalaliToGregorian`, and maps unique `[ageCategoryId, seasonId]` `P2002` → 409.
 - Cutoff update keeps `ageCategoryId` immutable; allows `seasonId`/`minBirthDate` only, skips the write when nothing changed (Date-to-Date compare so `1390/1/1` matches `1390/01/01`), pre-checks duplicate `(ageCategoryId, seasonId)` → 409, and maps `P2002`/`P2003` → 409.
-- Cutoff hard `delete` with `P2003` → 409 and `P2025` → 404; edit/delete lock `assertCutoffEditable()` is currently a no-op stub.
+- Cutoff hard `delete` with `P2003` → 409 and `P2025` → 404; edit/delete lock `assertCutoffEditable()` blocks when any league references the cutoff (409 `inUse`).
 
 ## Relationships with other modules
 
 - → seasons: cutoff create/update validates `Season` existence and reads `Season` for response includes (shared FK, no service import).
-- → competition (planned): `assertCutoffEditable` has a `TODO(League)` stub — any future league linked to a cutoff must block cutoff edit/delete with 409.
+- → competition: any league linked to a cutoff blocks cutoff edit/delete with 409 (`assertCutoffEditable` via `prisma.league.count`).

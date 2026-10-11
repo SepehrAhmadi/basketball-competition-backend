@@ -18,6 +18,10 @@ import "../modules/shared/roles/roles.docs.ts";
 import "../modules/shared/dropdowns/dropdowns.docs.ts";
 import "../modules/shared/coach-degrees/coach-degrees.docs.ts";
 import "../modules/shared/referee-levels/referee-levels.docs.ts";
+import "../modules/shared/league-statuses/league-statuses.docs.ts";
+import "../modules/competition/leagues/leagues.docs.ts";
+import "../modules/competition/admin/leagues/leagues.admin.docs.ts";
+import "../modules/competition/admin/league-teams/league-teams.admin.docs.ts";
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 

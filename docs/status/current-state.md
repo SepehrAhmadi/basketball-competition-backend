@@ -17,7 +17,8 @@
 | coach-degrees | ✅ Done | Out of scope |
 | referee-levels | ✅ Done | Out of scope |
 | dropdowns | ✅ Done (JWT-required reference lookups) | Out of scope |
-| competition | ❌ Not Started | Out of scope |
+| competition (leagues) | ✅ Done (leagues + league-teams + league-roster) | Out of scope |
+| league-statuses | ✅ Done | Out of scope |
 | games / series | ❌ Not Started | Out of scope |
 | stats | ❌ Not Started | Out of scope |
 | media / uploads | ⏳ In Progress (infra only, no module) | Out of scope |
