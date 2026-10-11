@@ -39,7 +39,7 @@ export function leagueTeamPolicy(
 ): LeagueTeamCan {
   if (actor.isAdmin) {
     const allowed = canEditByStatus(league.status, true);
-    return { manageRoster: allowed, unregister: allowed };
+    return { manageRoster: allowed, unregister: allowed && league.status !== "ACTIVE" };
   }
   if (actor.userId === null || !actor.managedOrgIds.has(organizationId)) {
     return { manageRoster: false, unregister: false };

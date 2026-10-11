@@ -1,12 +1,10 @@
 import { Router } from "express";
-import validate from "../../../../middleware/validate.ts";
-import verifyJWT from "../../../../middleware/auth/verifyJWT.middleware.ts";
-import verifyAdminLevel from "../../../../middleware/auth/verifyAdminLevel.middleware.ts";
-import verifyPermission from "../../../../middleware/auth/verifyPermission.middleware.ts";
+import validate from "../../../../../middleware/validate.ts";
+import verifyJWT from "../../../../../middleware/auth/verifyJWT.middleware.ts";
+import verifyAdminLevel from "../../../../../middleware/auth/verifyAdminLevel.middleware.ts";
+import verifyPermission from "../../../../../middleware/auth/verifyPermission.middleware.ts";
 import leaguesAdminValidation from "./leagues.admin.validation.ts";
 import leaguesAdminController from "./leagues.admin.controller.ts";
-import leagueTeamsAdminValidation from "../league-teams/league-teams.admin.validation.ts";
-import leagueTeamsAdminController from "../league-teams/league-teams.admin.controller.ts";
 
 const router = Router();
 
@@ -18,14 +16,6 @@ router.get(
   verifyPermission("leagues.view"),
   validate(leaguesAdminValidation.adminLeagueListQuerySchema, "query"),
   leaguesAdminController.list,
-);
-
-router.get(
-  "/:leagueId/eligible-teams",
-  verifyPermission("league-teams.create"),
-  validate(leagueTeamsAdminValidation.leagueIdParamSchema, "params"),
-  validate(leagueTeamsAdminValidation.eligibleTeamsQuerySchema, "query"),
-  leagueTeamsAdminController.listEligible,
 );
 
 router.get(

@@ -1,6 +1,5 @@
-import leagueTeamsService, {
-  adminActor,
-} from "../../leagues/league-teams.service.ts";
+import leagueTeamsService from "../../league-teams.service.ts";
+import { adminActor } from "../../../../../authz/actor.ts";
 
 async function listLeagueTeams(
   leagueId: number,

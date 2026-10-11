@@ -27,8 +27,7 @@ export const guestActor: Actor = {
   membershipFor: emptyMembershipLookup(),
 };
 
-export async function loadActor(userId: number, adminLevel: string | null): Promise<Actor> {
-  const [managerRows, memberRows] = await Promise.all([
+export async function loadActor(userId: number, adminLevel: string | null): Promise<Actor> {  const [managerRows, memberRows] = await Promise.all([
     prisma.organizationManager.findMany({
       where: { userId },
       select: { organizationId: true },
@@ -67,5 +66,16 @@ export async function loadActor(userId: number, adminLevel: string | null): Prom
     memberTeamIds,
     membershipFor: (teamId: number, seasonId: number) =>
       membershipByKey.get(`${teamId}:${seasonId}`),
+  };
+}
+
+export function adminActor(callerUserId: number): Actor {
+  return {
+    userId: callerUserId,
+    isAdmin: true,
+    managedOrgIds: new Set<number>(),
+    memberOrgIds: new Set<number>(),
+    memberTeamIds: new Set<number>(),
+    membershipFor: () => undefined,
   };
 }

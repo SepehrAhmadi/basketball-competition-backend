@@ -1,8 +1,8 @@
 import { Router } from "express";
-import validate from "../../../../middleware/validate.ts";
-import verifyJWT from "../../../../middleware/auth/verifyJWT.middleware.ts";
-import verifyAdminLevel from "../../../../middleware/auth/verifyAdminLevel.middleware.ts";
-import verifyPermission from "../../../../middleware/auth/verifyPermission.middleware.ts";
+import validate from "../../../../../middleware/validate.ts";
+import verifyJWT from "../../../../../middleware/auth/verifyJWT.middleware.ts";
+import verifyAdminLevel from "../../../../../middleware/auth/verifyAdminLevel.middleware.ts";
+import verifyPermission from "../../../../../middleware/auth/verifyPermission.middleware.ts";
 import leagueTeamsAdminValidation from "./league-teams.admin.validation.ts";
 import leagueTeamsAdminController from "./league-teams.admin.controller.ts";
 
@@ -61,6 +61,19 @@ router.delete(
   verifyPermission("league-roster.delete"),
   validate(leagueTeamsAdminValidation.leagueMemberParamSchema, "params"),
   leagueTeamsAdminController.removeMember,
+);
+
+export const eligibleTeamsRouter = Router({ mergeParams: true });
+
+eligibleTeamsRouter.use(verifyJWT);
+eligibleTeamsRouter.use(verifyAdminLevel("ADMIN", "SUPER_ADMIN"));
+
+eligibleTeamsRouter.get(
+  "/",
+  verifyPermission("league-teams.create"),
+  validate(leagueTeamsAdminValidation.leagueIdParamSchema, "params"),
+  validate(leagueTeamsAdminValidation.eligibleTeamsQuerySchema, "query"),
+  leagueTeamsAdminController.listEligible,
 );
 
 export default router;

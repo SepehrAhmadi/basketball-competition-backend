@@ -13,10 +13,10 @@ src/
 ├── types/express/          # Request augmentation (userId, roles, adminLevel, permissions, actor, validated*)
 ├── language/message.ts     # central Persian messages
 ├── swagger/                # registry, helpers, zod-extend, doc aggregation
-├── prisma/schema.prisma    # 14 models, enums (see 04-data-model.md)
+├── prisma/schema.prisma    # 17 models, enums (see 04-data-model.md)
 └── modules/
     ├── age-categories/admin/age-categories|age-category-cutoffs/  # admin-only category + cutoff CRUD
-    ├── competition/leagues|admin/leagues|admin/league-teams|shared/  # league CRUD, registration, roster (see modules/competition.md)
+    ├── competition/leagues|leagues/admin/leagues|leagues/admin/league-teams|shared/  # league CRUD, registration, roster (see modules/competition.md)
     ├── organizations/      # org CRUD + logos + managers + admin/ (restore, status filter)
     ├── people/auth|user (with user/admin)|players|coaches|referees/
     ├── seasons/            # season lifecycle

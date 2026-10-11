@@ -1,4 +1,4 @@
-import "../../../../swagger/zod-extend.ts";
+import "../../../../../swagger/zod-extend.ts";
 import {
   leagueIdParamSchema,
   leagueTeamParamSchema,
@@ -9,7 +9,7 @@ import {
   membersQuerySchema,
   candidatesQuerySchema,
   eligibleTeamsQuerySchema,
-} from "../../leagues/leagues.validation.ts";
+} from "../../leagues.validation.ts";
 
 export {
   leagueIdParamSchema,

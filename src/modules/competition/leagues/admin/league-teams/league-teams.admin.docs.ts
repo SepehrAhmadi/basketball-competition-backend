@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { messages } from "../../../../language/message.ts";
-import { registry } from "../../../../swagger/registry.ts";
+import { messages } from "../../../../../language/message.ts";
+import { registry } from "../../../../../swagger/registry.ts";
 import {
   errorResponseSchema,
   successResponseSchema,
-} from "../../../../swagger/helpers.ts";
+} from "../../../../../swagger/helpers.ts";
 import {
   leagueIdParamSchema,
   leagueTeamParamSchema,
@@ -16,23 +16,15 @@ import {
   candidatesQuerySchema,
   eligibleTeamsQuerySchema,
 } from "./league-teams.admin.validation.ts";
+import {
+  eligibleTeamSchema as baseEligibleTeamSchema,
+  leagueCandidateSchema as baseLeagueCandidateSchema,
+  leagueMemberSchema as baseLeagueMemberSchema,
+  leagueTeamItemSchema,
+} from "../../leagues.docs.ts";
 
-const leagueTeamSchema = z
-  .object({
-    id: z.number().openapi({ example: 1 }),
-    status: z.string().openapi({ example: "ACTIVE" }),
-    team: z.object({
-      id: z.number().openapi({ example: 1 }),
-      name: z.string().openapi({ example: "عقاب" }),
-      logoUrl: z.string().nullable().openapi({ example: null }),
-    }),
-    organization: z.object({
-      id: z.number().openapi({ example: 1 }),
-      name: z.string().openapi({ example: "باشگاه عقاب" }),
-    }),
-    membersCount: z.number().openapi({ example: 5 }),
-    createdAt: z.string(),
-  })
+const leagueTeamSchema = leagueTeamItemSchema
+  .omit({ can: true })
   .openapi("AdminLeagueTeam");
 
 const leagueTeamListDataSchema = z.object({
@@ -42,20 +34,8 @@ const leagueTeamListDataSchema = z.object({
   pageSize: z.number(),
 });
 
-const eligibleTeamSchema = z
-  .object({
-    team: z.object({
-      id: z.number().openapi({ example: 1 }),
-      name: z.string().openapi({ example: "عقاب" }),
-      logoUrl: z.string().nullable().openapi({ example: null }),
-    }),
-    organization: z.object({
-      id: z.number().openapi({ example: 1 }),
-      name: z.string().openapi({ example: "باشگاه عقاب" }),
-    }),
-    activeRosterCount: z.number().openapi({ example: 8 }),
-    alreadyRegistered: z.boolean().openapi({ example: false }),
-  })
+const eligibleTeamSchema = baseEligibleTeamSchema
+  .extend({})
   .openapi("AdminEligibleTeam");
 
 const eligibleTeamListDataSchema = z.object({
@@ -65,16 +45,8 @@ const eligibleTeamListDataSchema = z.object({
   pageSize: z.number(),
 });
 
-const memberSchema = z
-  .object({
-    id: z.number().openapi({ example: 1 }),
-    teamSeasonMemberId: z.number().openapi({ example: 3 }),
-    userId: z.number().openapi({ example: 7 }),
-    fullName: z.string().openapi({ example: "علی رضایی" }),
-    avatarUrl: z.string().nullable().openapi({ example: null }),
-    role: z.string().openapi({ example: "PLAYER" }),
-    jerseyNumber: z.number().nullable().openapi({ example: 10 }),
-    isHeadCoach: z.boolean().openapi({ example: false }),
+const memberSchema = baseLeagueMemberSchema
+  .extend({
     phone: z.string().openapi({ example: "09123456789" }),
     birthDate: z.string().nullable().openapi({ example: "1390/05/12" }),
   })
@@ -87,21 +59,8 @@ const memberListDataSchema = z.object({
   pageSize: z.number(),
 });
 
-const candidateSchema = z
-  .object({
-    teamSeasonMemberId: z.number().openapi({ example: 3 }),
-    userId: z.number().openapi({ example: 7 }),
-    fullName: z.string().openapi({ example: "علی رضایی" }),
-    avatarUrl: z.string().nullable().openapi({ example: null }),
-    role: z.string().openapi({ example: "PLAYER" }),
-    jerseyNumber: z.number().nullable().openapi({ example: 10 }),
-    isHeadCoach: z.boolean().openapi({ example: false }),
-    selected: z.boolean().openapi({ example: false }),
-    eligible: z.boolean().openapi({ example: true }),
-    ineligibleReason: z
-      .string()
-      .nullable()
-      .openapi({ example: null, description: "BIRTH_DATE_MISSING | TOO_OLD | IN_OTHER_TEAM" }),
+const candidateSchema = baseLeagueCandidateSchema
+  .extend({
     phone: z.string().openapi({ example: "09123456789" }),
     birthDate: z.string().nullable().openapi({ example: "1390/05/12" }),
   })
@@ -110,6 +69,8 @@ const candidateSchema = z
 const candidateListDataSchema = z.object({
   items: z.array(candidateSchema),
   total: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
 });
 
 const unauthorizedError = errorResponseSchema(401, "Unauthorized");
@@ -237,7 +198,7 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "Already registered or registration closed",
+      description: "Already registered, registration closed, or unregister from ACTIVE league forbidden",
       content: { "application/json": { schema: conflictError } },
     },
   },
@@ -273,7 +234,7 @@ registry.registerPath({
       content: { "application/json": { schema: leagueTeamNotFound } },
     },
     "409": {
-      description: "Registration closed",
+      description: "Unregister from ACTIVE league forbidden",
       content: { "application/json": { schema: conflictError } },
     },
   },
@@ -426,7 +387,7 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "Registration closed",
+      description: "Registration closed or removing the last player of a team in an ACTIVE league",
       content: { "application/json": { schema: conflictError } },
     },
   },

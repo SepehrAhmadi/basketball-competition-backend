@@ -33,7 +33,7 @@ const leagueTeamCanSchema = z
   })
   .openapi("LeagueTeamCan");
 
-const leagueSchema = z
+export const leagueSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
     name: z.string().openapi({ example: "لیگ برتر نوجوانان" }),
@@ -53,8 +53,8 @@ const leagueSchema = z
     }),
     minBirthDate: z.string().nullable().openapi({ example: "1390/10/11" }),
     teamsCount: z.number().openapi({ example: 4 }),
-    createdAt: z.string(),
-    updatedAt: z.string(),
+    createdAt: z.date().openapi({ example: "2026-01-01T10:00:00.000Z" }),
+    updatedAt: z.date().openapi({ example: "2026-01-01T10:00:00.000Z" }),
     can: leagueCanSchema.optional(),
   })
   .openapi("League");
@@ -66,7 +66,7 @@ const leagueListDataSchema = z.object({
   pageSize: z.number(),
 });
 
-const leagueTeamItemSchema = z
+export const leagueTeamItemSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
     status: z.string().openapi({ example: "ACTIVE" }),
@@ -80,7 +80,7 @@ const leagueTeamItemSchema = z
       name: z.string().openapi({ example: "باشگاه عقاب" }),
     }),
     membersCount: z.number().openapi({ example: 5 }),
-    createdAt: z.string(),
+    createdAt: z.date().openapi({ example: "2026-01-01T10:00:00.000Z" }),
     can: leagueTeamCanSchema.optional(),
   })
   .openapi("LeagueTeamItem");
@@ -92,7 +92,7 @@ const leagueTeamListDataSchema = z.object({
   pageSize: z.number(),
 });
 
-const leagueMemberSchema = z
+export const leagueMemberSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
     teamSeasonMemberId: z.number().openapi({ example: 3 }),
@@ -113,7 +113,7 @@ const leagueMemberListDataSchema = z.object({
   can: leagueTeamCanSchema.optional(),
 });
 
-const leagueCandidateSchema = leagueMemberSchema
+export const leagueCandidateSchema = leagueMemberSchema
   .extend({
     selected: z.boolean().openapi({ example: false }),
     eligible: z.boolean().openapi({ example: true }),
@@ -127,9 +127,11 @@ const leagueCandidateSchema = leagueMemberSchema
 const leagueCandidateListDataSchema = z.object({
   items: z.array(leagueCandidateSchema),
   total: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
 });
 
-const eligibleTeamSchema = z
+export const eligibleTeamSchema = z
   .object({
     team: z.object({
       id: z.number().openapi({ example: 1 }),
@@ -293,7 +295,7 @@ registry.registerPath({
       description: "League or team not found",
       content: {
         "application/json": {
-          schema: errorResponseSchema(404, messages.error.league.notFound),
+          schema: errorResponseSchema(404, messages.error.leagueTeam.notFound),
         },
       },
     },
@@ -440,7 +442,7 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "Registration closed",
+      description: "Already registered, registration closed, or unregister from ACTIVE league forbidden",
       content: { "application/json": { schema: conflictError } },
     },
   },
@@ -569,7 +571,7 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "Registration closed",
+      description: "Registration closed or removing the last player of a team in an ACTIVE league",
       content: { "application/json": { schema: conflictError } },
     },
   },

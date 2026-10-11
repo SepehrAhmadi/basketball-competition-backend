@@ -1,11 +1,11 @@
-import prisma from "../../../../config/db.config.ts";
-import AppError from "../../../../utils/appError.ts";
-import { messages } from "../../../../language/message.ts";
-import { jalaliToGregorian } from "../../../../utils/date.util.ts";
+import prisma from "../../../../../config/db.config.ts";
+import AppError from "../../../../../utils/appError.ts";
+import { messages } from "../../../../../language/message.ts";
+import { jalaliToGregorian } from "../../../../../utils/date.util.ts";
 import {
   leagueInclude,
   toLeagueResponse,
-} from "../../shared/league.mapper.ts";
+} from "../../../shared/league.mapper.ts";
 
 interface AdminLeagueListQuery {
   page: number;

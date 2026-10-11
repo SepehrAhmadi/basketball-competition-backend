@@ -117,10 +117,43 @@ export function toAdminMemberItem(
   };
 }
 
+type LeagueTeamMemberRow = {
+  id: number;
+  teamSeasonMember: {
+    id: number;
+    role: string;
+    jerseyNumber: number | null;
+    isHeadCoach: boolean;
+    user: {
+      id: number;
+      fullName: string;
+      avatarUrl: string | null;
+      phone: string;
+      birthDate: Date | null;
+    };
+  };
+};
+
+export function toLeagueTeamMemberRow(row: LeagueTeamMemberRow) {
+  return {
+    id: row.id,
+    teamSeasonMemberId: row.teamSeasonMember.id,
+    userId: row.teamSeasonMember.user.id,
+    fullName: row.teamSeasonMember.user.fullName,
+    avatarUrl: row.teamSeasonMember.user.avatarUrl,
+    role: row.teamSeasonMember.role,
+    jerseyNumber: row.teamSeasonMember.jerseyNumber,
+    isHeadCoach: row.teamSeasonMember.isHeadCoach,
+    phone: row.teamSeasonMember.user.phone,
+    birthDate: row.teamSeasonMember.user.birthDate,
+  };
+}
+
 export default {
   leagueInclude,
   toLeagueResponse,
   toLeagueTeamItem,
   toPublicMemberItem,
   toAdminMemberItem,
+  toLeagueTeamMemberRow,
 };

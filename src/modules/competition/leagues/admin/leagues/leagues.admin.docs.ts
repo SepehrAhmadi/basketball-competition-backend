@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { messages } from "../../../../language/message.ts";
-import { registry } from "../../../../swagger/registry.ts";
+import { messages } from "../../../../../language/message.ts";
+import { registry } from "../../../../../swagger/registry.ts";
 import {
   errorResponseSchema,
   successResponseSchema,
-} from "../../../../swagger/helpers.ts";
+} from "../../../../../swagger/helpers.ts";
 import {
   leagueIdParamSchema,
   adminLeagueListQuerySchema,
@@ -12,30 +12,10 @@ import {
   updateLeagueSchema,
   updateLeagueStatusSchema,
 } from "./leagues.admin.validation.ts";
+import { leagueSchema as baseLeagueSchema } from "../../leagues.docs.ts";
 
-const leagueSchema = z
-  .object({
-    id: z.number().openapi({ example: 1 }),
-    name: z.string().openapi({ example: "لیگ برتر نوجوانان" }),
-    description: z.string().nullable().openapi({ example: "توضیحات لیگ" }),
-    status: z.string().openapi({ example: "REGISTRATION" }),
-    startDate: z.string().nullable().openapi({ example: "1404/06/01" }),
-    endDate: z.string().nullable().openapi({ example: "1404/09/01" }),
-    rosterDeadline: z.string().nullable().openapi({ example: "1404/05/20" }),
-    ageCategoryCutoffId: z.number().openapi({ example: 1 }),
-    ageCategory: z.object({
-      id: z.number().openapi({ example: 1 }),
-      name: z.string().openapi({ example: "نوجوانان" }),
-    }),
-    season: z.object({
-      id: z.number().openapi({ example: 1 }),
-      name: z.string().openapi({ example: "فصل ۱۴۰۴" }),
-    }),
-    minBirthDate: z.string().nullable().openapi({ example: "1390/10/11" }),
-    teamsCount: z.number().openapi({ example: 4 }),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })
+const leagueSchema = baseLeagueSchema
+  .omit({ can: true })
   .openapi("AdminLeague");
 
 const leagueListDataSchema = z.object({
