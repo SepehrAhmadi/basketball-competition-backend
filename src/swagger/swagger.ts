@@ -14,14 +14,14 @@ import "../modules/teams/admin/teams.admin.docs.ts";
 import "../modules/seasons/seasons.docs.ts";
 import "../modules/age-categories/admin/age-categories/age-categories.admin.docs.ts";
 import "../modules/age-categories/admin/age-category-cutoffs/age-category-cutoffs.admin.docs.ts";
+import "../modules/competition/leagues/leagues.docs.ts";
+import "../modules/competition/leagues/admin/leagues/leagues.admin.docs.ts";
+import "../modules/competition/leagues/admin/league-teams/league-teams.admin.docs.ts";
 import "../modules/shared/roles/roles.docs.ts";
 import "../modules/shared/dropdowns/dropdowns.docs.ts";
 import "../modules/shared/coach-degrees/coach-degrees.docs.ts";
 import "../modules/shared/referee-levels/referee-levels.docs.ts";
 import "../modules/shared/league-statuses/league-statuses.docs.ts";
-import "../modules/competition/leagues/leagues.docs.ts";
-import "../modules/competition/leagues/admin/leagues/leagues.admin.docs.ts";
-import "../modules/competition/leagues/admin/league-teams/league-teams.admin.docs.ts";
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 
