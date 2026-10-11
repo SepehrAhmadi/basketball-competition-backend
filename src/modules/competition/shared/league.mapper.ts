@@ -149,6 +149,22 @@ export function toLeagueTeamMemberRow(row: LeagueTeamMemberRow) {
   };
 }
 
+// head coach first, COACH before PLAYER, then jersey number, then id.
+// (jerseyNumber NULLs follow the database default ordering.)
+export const memberOrderBy = [
+  { teamSeasonMember: { isHeadCoach: "desc" } },
+  { teamSeasonMember: { role: "asc" } },
+  { teamSeasonMember: { jerseyNumber: "asc" } },
+  { id: "asc" },
+] as const;
+
+export const teamSeasonMemberOrderBy = [
+  { isHeadCoach: "desc" },
+  { role: "asc" },
+  { jerseyNumber: "asc" },
+  { id: "asc" },
+] as const;
+
 export default {
   leagueInclude,
   toLeagueResponse,

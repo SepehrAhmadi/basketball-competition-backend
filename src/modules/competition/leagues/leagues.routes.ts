@@ -36,21 +36,11 @@ router.get(
 );
 
 router.get(
-  "/:leagueId/teams",
-  optionalJWT,
-  optionalActor,
+  "/:leagueId/my-teams",
+  verifyJWT,
+  attachActor,
   validate(leaguesValidation.leagueIdParamSchema, "params"),
-  validate(leaguesValidation.leagueTeamsQuerySchema, "query"),
-  leaguesController.listTeams,
-);
-
-router.get(
-  "/:leagueId/teams/:leagueTeamId/members",
-  optionalJWT,
-  optionalActor,
-  validate(leaguesValidation.leagueTeamParamSchema, "params"),
-  validate(leaguesValidation.membersQuerySchema, "query"),
-  leaguesController.listMembers,
+  leaguesController.listMyTeams,
 );
 
 router.get(
@@ -60,6 +50,32 @@ router.get(
   validate(leaguesValidation.leagueIdParamSchema, "params"),
   validate(leaguesValidation.eligibleTeamsQuerySchema, "query"),
   leaguesController.listEligible,
+);
+
+router.get(
+  "/:leagueId/teams",
+  optionalJWT,
+  optionalActor,
+  validate(leaguesValidation.leagueIdParamSchema, "params"),
+  validate(leaguesValidation.leagueTeamsQuerySchema, "query"),
+  leaguesController.listTeams,
+);
+
+router.get(
+  "/:leagueId/teams/:leagueTeamId",
+  optionalJWT,
+  optionalActor,
+  validate(leaguesValidation.leagueTeamParamSchema, "params"),
+  leaguesController.getTeam,
+);
+
+router.get(
+  "/:leagueId/teams/:leagueTeamId/members",
+  optionalJWT,
+  optionalActor,
+  validate(leaguesValidation.leagueTeamParamSchema, "params"),
+  validate(leaguesValidation.membersQuerySchema, "query"),
+  leaguesController.listMembers,
 );
 
 router.post(

@@ -10,42 +10,25 @@ import {
   isRosterWindowOpen,
 } from "../shared/league.rules.ts";
 import {
+  memberOrderBy,
+  teamSeasonMemberOrderBy,
   toAdminMemberItem,
   toLeagueTeamItem,
   toLeagueTeamMemberRow,
   toPublicMemberItem,
 } from "../shared/league.mapper.ts";
-import { leagueTeamPolicy } from "./leagues.policy.ts";
+import {
+  loadLeagueContext,
+  resolveAccessMap,
+  resolveLeagueTeamAccess,
+  type LeagueContext,
+  type LeagueTeamAccess,
+} from "../shared/league.access.ts";
+import { addHeadCoachToLeagueRoster } from "../shared/league.headcoach.sync.ts";
+import { leagueTeamPolicy, rosterRowPolicy } from "./leagues.policy.ts";
 
-interface LeagueContext {
-  id: number;
-  status: "INACTIVE" | "REGISTRATION" | "ACTIVE" | "FINISHED";
-  rosterDeadline: Date | null;
-  seasonId: number;
-  minBirthDate: Date;
-}
-
-async function loadLeagueForActor(
-  leagueId: number,
-  actor: Actor,
-): Promise<LeagueContext> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    include: { ageCategoryCutoff: { select: { seasonId: true, minBirthDate: true } } },
-  });
-  if (!league) throw new AppError(404, messages.error.league.notFound);
-  if (league.status === "INACTIVE" && !actor.isAdmin)
-    throw new AppError(404, messages.error.league.notFound);
-  return {
-    id: league.id,
-    status: league.status,
-    rosterDeadline: league.rosterDeadline,
-    seasonId: league.ageCategoryCutoff.seasonId,
-    minBirthDate: league.ageCategoryCutoff.minBirthDate,
-  };
-}
-
-function assertCanEdit(
+/** Registration (and unregistration) is for admins and organization managers only. */
+function assertCanRegister(
   actor: Actor,
   league: LeagueContext,
   organizationId: number,
@@ -55,6 +38,17 @@ function assertCanEdit(
   if (!canEditByStatus(league.status, actor.isAdmin))
     throw new AppError(409, messages.error.league.registrationClosed);
   if (!actor.isAdmin && !isRosterWindowOpen(league.rosterDeadline))
+    throw new AppError(409, messages.error.league.rosterClosed);
+}
+
+/** Identity → status → window, using the role-specific rule. */
+function assertRosterEditable(access: LeagueTeamAccess, league: LeagueContext) {
+  if (access.rosterRole === null)
+    throw new AppError(403, messages.error.league.notAuthorized);
+  const isAdmin = access.rosterRole === "ADMIN";
+  if (!canEditByStatus(league.status, isAdmin))
+    throw new AppError(409, messages.error.league.registrationClosed);
+  if (!isAdmin && !isRosterWindowOpen(league.rosterDeadline))
     throw new AppError(409, messages.error.league.rosterClosed);
 }
 
@@ -70,18 +64,26 @@ const leagueTeamInclude = {
   },
 } as const;
 
+const leagueTeamListInclude = {
+  ...leagueTeamInclude,
+  _count: { select: { members: { where: { status: "ACTIVE" } } } },
+} as const;
+
 function toTeamItem(
   row: {
     id: number;
     status: string;
     createdAt: Date;
-    team: { id: number; name: string; logoUrl: string | null; organization: { id: number; name: string } };
+    team: {
+      id: number;
+      name: string;
+      logoUrl: string | null;
+      organization: { id: number; name: string };
+    };
     _count: { members: number };
   },
-  actor: Actor,
-  league: LeagueContext,
+  can: ReturnType<typeof leagueTeamPolicy>,
 ) {
-  const can = leagueTeamPolicy(actor, league, row.team.organization.id);
   return toLeagueTeamItem(
     {
       id: row.id,
@@ -106,7 +108,7 @@ async function listLeagueTeams(
   query: LeagueTeamsQuery,
   actor: Actor,
 ) {
-  const league = await loadLeagueForActor(leagueId, actor);
+  const league = await loadLeagueContext(leagueId, actor);
   const search = query.search?.trim();
   const where: any = {
     leagueId,
@@ -121,16 +123,21 @@ async function listLeagueTeams(
       orderBy: [{ id: "asc" }],
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
-      include: {
-        ...leagueTeamInclude,
-        _count: { select: { members: { where: { status: "ACTIVE" } } } },
-      },
+      include: leagueTeamListInclude,
     }),
     prisma.leagueTeam.count({ where }),
   ]);
 
+  const accessMap = await resolveAccessMap(
+    actor,
+    league,
+    items.map((i) => ({ id: i.id, organizationId: i.team.organization.id })),
+  );
+
   return {
-    items: items.map((row) => toTeamItem(row, actor, league)),
+    items: items.map((row) =>
+      toTeamItem(row, leagueTeamPolicy(league, accessMap.get(row.id)!)),
+    ),
     total,
     page: query.page,
     pageSize: query.pageSize,
@@ -146,7 +153,7 @@ async function listEligibleTeams(
   query: EligibleTeamsQuery,
   actor: Actor,
 ) {
-  const league = await loadLeagueForActor(leagueId, actor);
+  const league = await loadLeagueContext(leagueId, actor);
   const search = query.search?.trim();
   const where: any = {
     status: "ACTIVE",
@@ -215,7 +222,7 @@ async function listEligibleTeams(
 }
 
 async function registerTeam(leagueId: number, teamId: number, actor: Actor) {
-  const league = await loadLeagueForActor(leagueId, actor);
+  const league = await loadLeagueContext(leagueId, actor);
 
   const team = await prisma.team.findUnique({
     where: { id: teamId },
@@ -224,7 +231,7 @@ async function registerTeam(leagueId: number, teamId: number, actor: Actor) {
   if (!team || team.status === "DELETED")
     throw new AppError(404, messages.error.team.notFound);
 
-  assertCanEdit(actor, league, team.organizationId);
+  assertCanRegister(actor, league, team.organizationId);
 
   if (team.status !== "ACTIVE" || team.organization.status !== "ACTIVE")
     throw new AppError(400, messages.error.leagueTeam.teamNotActive);
@@ -243,29 +250,39 @@ async function registerTeam(leagueId: number, teamId: number, actor: Actor) {
   const existing = await prisma.leagueTeam.findUnique({
     where: { leagueId_teamId: { leagueId, teamId } },
   });
+  if (existing?.status === "ACTIVE")
+    throw new AppError(409, messages.error.leagueTeam.alreadyRegistered);
+
   try {
-    let row;
-    if (existing) {
-      if (existing.status === "ACTIVE")
-        throw new AppError(409, messages.error.leagueTeam.alreadyRegistered);
-      row = await prisma.leagueTeam.update({
-        where: { id: existing.id },
-        data: { status: "ACTIVE" },
-        include: {
-          ...leagueTeamInclude,
-          _count: { select: { members: { where: { status: "ACTIVE" } } } },
-        },
+    const row = await prisma.$transaction(async (tx) => {
+      const leagueTeamId = existing
+        ? (
+            await tx.leagueTeam.update({
+              where: { id: existing.id },
+              data: { status: "ACTIVE" },
+            })
+          ).id
+        : (
+            await tx.leagueTeam.create({
+              data: { leagueId, teamId, status: "ACTIVE" },
+            })
+          ).id;
+      await addHeadCoachToLeagueRoster(tx, {
+        leagueTeamId,
+        teamId,
+        seasonId: league.seasonId,
       });
-    } else {
-      row = await prisma.leagueTeam.create({
-        data: { leagueId, teamId, status: "ACTIVE" },
-        include: {
-          ...leagueTeamInclude,
-          _count: { select: { members: { where: { status: "ACTIVE" } } } },
-        },
+      return tx.leagueTeam.findUniqueOrThrow({
+        where: { id: leagueTeamId },
+        include: leagueTeamListInclude,
       });
-    }
-    return toTeamItem(row, actor, league);
+    });
+    // The caller passed assertCanRegister, so they are an admin or a manager.
+    const access: LeagueTeamAccess = {
+      rosterRole: actor.isAdmin ? "ADMIN" : "MANAGER",
+      ownTeamSeasonMemberId: null,
+    };
+    return toTeamItem(row, leagueTeamPolicy(league, access));
   } catch (err: any) {
     if (err instanceof AppError) throw err;
     if (err?.code === "P2002")
@@ -279,18 +296,17 @@ async function unregisterTeam(
   leagueTeamId: number,
   actor: Actor,
 ) {
-  const league = await loadLeagueForActor(leagueId, actor);
-  const leagueTeam = await prisma.leagueTeam.findFirst({
-    where: { id: leagueTeamId, leagueId, status: "ACTIVE" },
-    include: { team: { select: { organizationId: true } } },
-  });
-  if (!leagueTeam)
-    throw new AppError(404, messages.error.leagueTeam.notFound);
+  const league = await loadLeagueContext(leagueId, actor);
+  const leagueTeam = await loadLeagueTeam(league, leagueTeamId);
+
+  // Unregistering is manager/admin only; a head coach is rejected here.
+  if (!actor.isAdmin && !actor.managedOrgIds.has(leagueTeam.team.organizationId))
+    throw new AppError(403, messages.error.league.notAuthorized);
 
   if (league.status === "ACTIVE")
     throw new AppError(409, messages.error.league.cannotUnregisterInActive);
 
-  assertCanEdit(actor, league, leagueTeam.team.organizationId);
+  assertCanRegister(actor, league, leagueTeam.team.organizationId);
 
   await prisma.$transaction([
     prisma.leagueTeam.update({
@@ -311,17 +327,6 @@ async function loadLeagueTeam(league: LeagueContext, leagueTeamId: number) {
   });
   if (!leagueTeam)
     throw new AppError(404, messages.error.leagueTeam.notFound);
-  return leagueTeam;
-}
-
-async function loadLeagueTeamForActor(
-  league: LeagueContext,
-  leagueTeamId: number,
-  actor: Actor,
-) {
-  const leagueTeam = await loadLeagueTeam(league, leagueTeamId);
-  if (!actor.isAdmin && !actor.managedOrgIds.has(leagueTeam.team.organizationId))
-    throw new AppError(403, messages.error.league.notAuthorized);
   return leagueTeam;
 }
 
@@ -358,7 +363,7 @@ async function listMembers(
   actor: Actor,
   options: { admin: boolean },
 ) {
-  const league = await loadLeagueForActor(leagueId, actor);
+  const league = await loadLeagueContext(leagueId, actor);
   const leagueTeam = await loadLeagueTeam(league, leagueTeamId);
   const where: any = { leagueTeamId, status: "ACTIVE" };
   if (query.role) where.teamSeasonMember = { role: query.role };
@@ -366,7 +371,7 @@ async function listMembers(
   const [items, total] = await prisma.$transaction([
     prisma.leagueTeamMember.findMany({
       where,
-      orderBy: [{ id: "asc" }],
+      orderBy: memberOrderBy as any,
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
       include: memberInclude,
@@ -379,7 +384,8 @@ async function listMembers(
       ? toAdminMemberItem(toLeagueTeamMemberRow(row))
       : toPublicMemberItem(toLeagueTeamMemberRow(row)),
   );
-  const can = leagueTeamPolicy(actor, league, leagueTeam.team.organizationId);
+  const access = await resolveLeagueTeamAccess(actor, leagueTeam, league);
+  const can = leagueTeamPolicy(league, access);
   return { items: rows, total, page: query.page, pageSize: query.pageSize, can };
 }
 
@@ -394,8 +400,12 @@ async function listCandidates(
   actor: Actor,
   options: { admin: boolean },
 ) {
-  const league = await loadLeagueForActor(leagueId, actor);
-  const leagueTeam = await loadLeagueTeamForActor(league, leagueTeamId, actor);
+  const league = await loadLeagueContext(leagueId, actor);
+  const leagueTeam = await loadLeagueTeam(league, leagueTeamId);
+  const access = await resolveLeagueTeamAccess(actor, leagueTeam, league);
+  if (access.rosterRole === null)
+    throw new AppError(403, messages.error.league.notAuthorized);
+
   const search = query.search?.trim();
   const where: any = {
     teamId: leagueTeam.team.id,
@@ -411,39 +421,77 @@ async function listCandidates(
     };
   }
 
-  const total = await prisma.teamSeasonMember.count({ where });
-  const [members, selected, otherTeams] = await prisma.$transaction([
-    prisma.teamSeasonMember.findMany({
-      where,
-      orderBy: [{ id: "asc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            avatarUrl: true,
-            phone: true,
-            birthDate: true,
-          },
-        },
-      },
-    }),
-    prisma.leagueTeamMember.findMany({
-      where: { leagueTeamId, status: "ACTIVE" },
-      select: { teamSeasonMemberId: true },
-    }),
-    prisma.leagueTeamMember.findMany({
-      where: {
-        status: "ACTIVE",
-        leagueTeam: { leagueId, status: "ACTIVE", id: { not: leagueTeamId } },
-        teamSeasonMember: { role: "PLAYER" },
-      },
-      select: { teamSeasonMember: { select: { userId: true } } },
-    }),
+  const selectedFilter = {
+    leagueMemberships: { some: { leagueTeamId, status: "ACTIVE" } },
+  };
+  const unselectedFilter = {
+    leagueMemberships: { none: { leagueTeamId, status: "ACTIVE" } },
+  };
+
+  const [total, selectedCount] = await prisma.$transaction([
+    prisma.teamSeasonMember.count({ where }),
+    prisma.teamSeasonMember.count({ where: { ...where, ...selectedFilter } }),
   ]);
-  const selectedIds = new Set(selected.map((s) => s.teamSeasonMemberId));
+
+  // Two-phase paging over the virtual list `selected ++ unselected`.
+  const skip = (query.page - 1) * query.pageSize;
+  const take = query.pageSize;
+  const aTake = skip < selectedCount ? Math.min(take, selectedCount - skip) : 0;
+  const bSkip = Math.max(0, skip - selectedCount);
+  const bTake = take - aTake;
+
+  const include = {
+    user: {
+      select: {
+        id: true,
+        fullName: true,
+        avatarUrl: true,
+        phone: true,
+        birthDate: true,
+      },
+    },
+    leagueMemberships: {
+      where: { leagueTeamId, status: "ACTIVE" },
+      select: { id: true },
+    },
+  } as const;
+
+  const [partA, partB] = await Promise.all([
+    aTake > 0
+      ? prisma.teamSeasonMember.findMany({
+          where: { ...where, ...selectedFilter },
+          orderBy: teamSeasonMemberOrderBy as any,
+          skip,
+          take: aTake,
+          include,
+        })
+      : Promise.resolve([]),
+    bTake > 0
+      ? prisma.teamSeasonMember.findMany({
+          where: { ...where, ...unselectedFilter },
+          orderBy: teamSeasonMemberOrderBy as any,
+          skip: bSkip,
+          take: bTake,
+          include,
+        })
+      : Promise.resolve([]),
+  ]);
+  const members = [...partA, ...partB];
+
+  const playerUserIds = members
+    .filter((m) => m.role === "PLAYER")
+    .map((m) => m.userId);
+  const otherTeams =
+    playerUserIds.length > 0
+      ? await prisma.leagueTeamMember.findMany({
+          where: {
+            status: "ACTIVE",
+            leagueTeam: { leagueId, status: "ACTIVE", id: { not: leagueTeamId } },
+            teamSeasonMember: { role: "PLAYER", userId: { in: playerUserIds } },
+          },
+          select: { teamSeasonMember: { select: { userId: true } } },
+        })
+      : [];
   const otherUserIds = new Set(otherTeams.map((o) => o.teamSeasonMember.userId));
 
   const items = members.map((m) => {
@@ -459,7 +507,13 @@ async function listCandidates(
         ineligibleReason = "IN_OTHER_TEAM";
       }
     }
+    const selected = m.leagueMemberships.length > 0;
+    const decision = rosterRowPolicy(access, league, {
+      teamSeasonMemberId: m.id,
+      isHeadCoach: m.isHeadCoach,
+    });
     const base = {
+      leagueTeamMemberId: selected ? m.leagueMemberships[0].id : null,
       teamSeasonMemberId: m.id,
       userId: m.userId,
       fullName: m.user.fullName,
@@ -467,9 +521,11 @@ async function listCandidates(
       role: m.role,
       jerseyNumber: m.jerseyNumber,
       isHeadCoach: m.isHeadCoach,
-      selected: selectedIds.has(m.id),
+      selected,
       eligible,
       ineligibleReason,
+      canToggle: decision.canToggle && (selected || eligible),
+      toggleLockReason: decision.lockReason,
     };
     return options.admin
       ? {
@@ -489,9 +545,10 @@ async function addMembers(
   teamSeasonMemberIds: number[],
   actor: Actor,
 ) {
-  const league = await loadLeagueForActor(leagueId, actor);
-  const leagueTeam = await loadLeagueTeamForActor(league, leagueTeamId, actor);
-  assertCanEdit(actor, league, leagueTeam.team.organizationId);
+  const league = await loadLeagueContext(leagueId, actor);
+  const leagueTeam = await loadLeagueTeam(league, leagueTeamId);
+  const access = await resolveLeagueTeamAccess(actor, leagueTeam, league);
+  assertRosterEditable(access, league);
 
   const ids = [...new Set(teamSeasonMemberIds)];
   const rows = await prisma.teamSeasonMember.findMany({
@@ -506,6 +563,15 @@ async function addMembers(
   });
   if (rows.length !== ids.length)
     throw new AppError(404, messages.error.leagueRoster.teamMemberNotFound);
+
+  for (const row of rows) {
+    const decision = rosterRowPolicy(access, league, {
+      teamSeasonMemberId: row.id,
+      isHeadCoach: row.isHeadCoach,
+    });
+    if (!decision.canToggle)
+      throw new AppError(403, messages.error.leagueRoster.headCoachRowManagerOnly);
+  }
 
   const playerUserIds = rows.filter((r) => r.role === "PLAYER").map((r) => r.userId);
   const clashRows =
@@ -589,15 +655,25 @@ async function removeMember(
   memberId: number,
   actor: Actor,
 ) {
-  const league = await loadLeagueForActor(leagueId, actor);
-  const leagueTeam = await loadLeagueTeamForActor(league, leagueTeamId, actor);
-  assertCanEdit(actor, league, leagueTeam.team.organizationId);
+  const league = await loadLeagueContext(leagueId, actor);
+  const leagueTeam = await loadLeagueTeam(league, leagueTeamId);
+  const access = await resolveLeagueTeamAccess(actor, leagueTeam, league);
+  assertRosterEditable(access, league);
 
   const row = await prisma.leagueTeamMember.findFirst({
     where: { id: memberId, leagueTeamId, status: "ACTIVE" },
-    include: { teamSeasonMember: { select: { role: true } } },
+    include: {
+      teamSeasonMember: { select: { id: true, role: true, isHeadCoach: true } },
+    },
   });
   if (!row) throw new AppError(404, messages.error.leagueRoster.notFound);
+
+  const decision = rosterRowPolicy(access, league, {
+    teamSeasonMemberId: row.teamSeasonMember.id,
+    isHeadCoach: row.teamSeasonMember.isHeadCoach,
+  });
+  if (!decision.canToggle)
+    throw new AppError(403, messages.error.leagueRoster.headCoachRowManagerOnly);
 
   if (league.status === "ACTIVE" && row.teamSeasonMember.role === "PLAYER") {
     const remainingPlayers = await prisma.leagueTeamMember.count({

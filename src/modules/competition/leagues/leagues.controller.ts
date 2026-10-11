@@ -66,6 +66,41 @@ async function listMine(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+async function listMyTeams(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await leaguesService.listMyTeams(
+      Number(req.params.leagueId),
+      req.actor!,
+    );
+    return apiResponse.sendResponse(
+      res,
+      200,
+      messages.success.leagueTeam.myList,
+      result,
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getTeam(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await leaguesService.getLeagueTeamDetail(
+      Number(req.params.leagueId),
+      Number(req.params.leagueTeamId),
+      req.actor!,
+    );
+    return apiResponse.sendResponse(
+      res,
+      200,
+      messages.success.leagueTeam.found,
+      result,
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function listTeams(req: Request, res: Response, next: NextFunction) {
   try {
     const query = (req.validatedQuery ?? req.query) as {
@@ -246,6 +281,8 @@ export default {
   listPublic,
   getPublic,
   listMine,
+  listMyTeams,
+  getTeam,
   listTeams,
   listMembers,
   listEligible,

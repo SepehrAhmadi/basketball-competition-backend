@@ -9,6 +9,7 @@ import { jalaliToGregorian, gregorianToJalali } from "../../utils/date.util.ts";
 import type { Actor } from "../../authz/actor.ts";
 import { assertAllowed } from "../../authz/assert.ts";
 import { organizationPolicy } from "../organizations/organizations.policy.ts";
+import { syncHeadCoachToRegistrationLeagues } from "../competition/shared/league.headcoach.sync.ts";
 import {
   teamPolicy,
   rosterPolicy,
@@ -504,16 +505,25 @@ async function addRosterMember(
   });
 
   if (existingDeletedMember) {
-    const reactivated = await prisma.teamSeasonMember.update({
-      where: { id: existingDeletedMember.id },
-      data: {
-        status: "ACTIVE",
-        jerseyNumber,
-        isHeadCoach,
-        organizationId: team.organizationId,
-      },
+    return prisma.$transaction(async (tx) => {
+      const reactivated = await tx.teamSeasonMember.update({
+        where: { id: existingDeletedMember.id },
+        data: {
+          status: "ACTIVE",
+          jerseyNumber,
+          isHeadCoach,
+          organizationId: team.organizationId,
+        },
+      });
+      if (isHeadCoach) {
+        await syncHeadCoachToRegistrationLeagues(tx, {
+          teamId,
+          seasonId: data.seasonId,
+          teamSeasonMemberId: reactivated.id,
+        });
+      }
+      return reactivated;
     });
-    return reactivated;
   }
 
   // Create the roster member inside a transaction that handles head-coach demotion
@@ -532,7 +542,7 @@ async function addRosterMember(
         });
       }
 
-      return tx.teamSeasonMember.create({
+      const created = await tx.teamSeasonMember.create({
         data: {
           teamId,
           seasonId: data.seasonId,
@@ -544,6 +554,14 @@ async function addRosterMember(
           status: "ACTIVE",
         },
       });
+      if (isHeadCoach) {
+        await syncHeadCoachToRegistrationLeagues(tx, {
+          teamId,
+          seasonId: data.seasonId,
+          teamSeasonMemberId: created.id,
+        });
+      }
+      return created;
     });
     return member;
   } catch (err: any) {
@@ -661,7 +679,7 @@ async function updateRosterMember(
         });
       }
 
-      return tx.teamSeasonMember.update({
+      const result = await tx.teamSeasonMember.update({
         where: { id: memberId },
         data: {
           ...(data.role !== undefined && { role: data.role }),
@@ -669,6 +687,16 @@ async function updateRosterMember(
           isHeadCoach: effectiveIsHeadCoach,
         },
       });
+
+      // New head coach joins the roster of registration-stage leagues.
+      if (effectiveIsHeadCoach && !member.isHeadCoach) {
+        await syncHeadCoachToRegistrationLeagues(tx, {
+          teamId,
+          seasonId: data.seasonId,
+          teamSeasonMemberId: memberId,
+        });
+      }
+      return result;
     });
     return updated;
   } catch (err: any) {

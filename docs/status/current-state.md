@@ -17,7 +17,7 @@
 | coach-degrees | ✅ Done | Out of scope |
 | referee-levels | ✅ Done | Out of scope |
 | dropdowns | ✅ Done (JWT-required reference lookups) | Out of scope |
-| competition (leagues) | ✅ Done (leagues + league-teams + league-roster) | Out of scope |
+| competition (leagues) | ✅ Done (leagues + league-teams + league-roster; app side rebuilt: head-coach roster access, `my-teams`, team detail) | Out of scope |
 | league-statuses | ✅ Done | Out of scope |
 | games / series | ❌ Not Started | Out of scope |
 | stats | ❌ Not Started | Out of scope |

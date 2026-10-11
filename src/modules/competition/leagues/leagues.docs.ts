@@ -114,7 +114,21 @@ const leagueMemberListDataSchema = z.object({
 });
 
 export const leagueCandidateSchema = leagueMemberSchema
+  .omit({ id: true })
   .extend({
+    leagueTeamMemberId: z
+      .number()
+      .nullable()
+      .openapi({
+        example: 31,
+        description:
+          "Null when `selected` is false. Use as `memberId` for DELETE.",
+      }),
+    canToggle: z.boolean().openapi({ example: true }),
+    toggleLockReason: z
+      .enum(["OWN_ROW", "MANAGER_ONLY"])
+      .nullable()
+      .openapi({ example: null }),
     selected: z.boolean().openapi({ example: false }),
     eligible: z.boolean().openapi({ example: true }),
     ineligibleReason: z
@@ -154,27 +168,71 @@ const eligibleTeamListDataSchema = z.object({
   pageSize: z.number(),
 });
 
+const leagueRoleEnumSchema = z
+  .enum(["MANAGER", "HEAD_COACH", "COACH", "PLAYER"])
+  .openapi("LeagueRoleEnum");
+
 const myLeagueSchema = z
   .object({
     league: leagueSchema,
-    myTeams: z.array(
-      z.object({
-        leagueTeamId: z.number().openapi({ example: 1 }),
-        team: z.object({
-          id: z.number().openapi({ example: 1 }),
-          name: z.string().openapi({ example: "عقاب" }),
-          logoUrl: z.string().nullable().openapi({ example: null }),
-        }),
-        organization: z.object({
-          id: z.number().openapi({ example: 1 }),
-          name: z.string().openapi({ example: "باشگاه عقاب" }),
-        }),
-        roles: z.array(z.string()).openapi({ example: ["MANAGER"] }),
-        can: leagueTeamCanSchema,
-      }),
-    ),
+    myRoles: z
+      .array(leagueRoleEnumSchema)
+      .openapi({ example: ["MANAGER", "HEAD_COACH"] }),
+    myTeamsCount: z.number().openapi({ example: 2 }),
   })
   .openapi("MyLeague");
+
+const leagueSummarySchema = z.object({
+  id: z.number().openapi({ example: 1 }),
+  name: z.string().openapi({ example: "لیگ برتر نوجوانان" }),
+  status: z.string().openapi({ example: "REGISTRATION" }),
+  rosterDeadline: z.string().nullable().openapi({ example: "1404/05/20" }),
+});
+
+const teamRefSchema = z.object({
+  id: z.number().openapi({ example: 12 }),
+  name: z.string().openapi({ example: "عقاب" }),
+  logoUrl: z.string().nullable().openapi({ example: null }),
+});
+
+const organizationRefSchema = z.object({
+  id: z.number().openapi({ example: 3 }),
+  name: z.string().openapi({ example: "باشگاه عقاب" }),
+});
+
+const myLeagueTeamSchema = z
+  .object({
+    leagueTeamId: z.number().openapi({ example: 5 }),
+    team: teamRefSchema,
+    organization: organizationRefSchema,
+    myRoles: z.array(leagueRoleEnumSchema),
+    membersCount: z.number().openapi({ example: 9 }),
+    can: leagueTeamCanSchema,
+  })
+  .openapi("MyLeagueTeam");
+
+const myTeamsResponseSchema = z
+  .object({
+    league: leagueSummarySchema,
+    items: z.array(myLeagueTeamSchema),
+    total: z.number(),
+  })
+  .openapi("MyTeamsResponse");
+
+const leagueTeamDetailSchema = z
+  .object({
+    id: z.number().openapi({ example: 5 }),
+    league: leagueSummarySchema,
+    team: teamRefSchema,
+    organization: organizationRefSchema,
+    counts: z.object({
+      coaches: z.number().openapi({ example: 2 }),
+      players: z.number().openapi({ example: 9 }),
+    }),
+    myRoles: z.array(leagueRoleEnumSchema),
+    can: leagueTeamCanSchema,
+  })
+  .openapi("LeagueTeamDetail");
 
 const myLeagueListDataSchema = z.object({
   items: z.array(myLeagueSchema),
@@ -328,6 +386,72 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/leagues/{leagueId}/my-teams",
+  tags: ["Leagues"],
+  summary: "List my teams in a league",
+  description:
+    "Managers see all ACTIVE league teams of the organizations they manage; " +
+    "everyone else sees only teams where they have an ACTIVE roster row. " +
+    "Not paginated.",
+  request: { params: leagueIdParamSchema },
+  responses: {
+    "200": {
+      description: "My league teams fetched",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(myTeamsResponseSchema, {
+            messageExample: messages.success.leagueTeam.myList,
+          }),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: { "application/json": { schema: unauthorizedError } },
+    },
+    "404": {
+      description: "League not found",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(404, messages.error.league.notFound),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/leagues/{leagueId}/teams/{leagueTeamId}",
+  tags: ["Leagues"],
+  summary: "Get a team registered in a league (public)",
+  description: publicNote,
+  security: [],
+  request: { params: leagueTeamParamSchema },
+  responses: {
+    "200": {
+      description: "League team found",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(leagueTeamDetailSchema, {
+            messageExample: messages.success.leagueTeam.found,
+          }),
+        },
+      },
+    },
+    "404": {
+      description: "League or team not found",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(404, messages.error.leagueTeam.notFound),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/leagues/{leagueId}/eligible-teams",
   tags: ["Leagues"],
   summary: "List my teams eligible for registration",
@@ -452,7 +576,10 @@ registry.registerPath({
   method: "get",
   path: "/leagues/{leagueId}/teams/{leagueTeamId}/members/candidates",
   tags: ["Leagues"],
-  summary: "List roster candidates (manager)",
+  summary: "List roster candidates (manager / league head coach)",
+  description:
+    "Ordered selected first, then head coach, coaches, players. " +
+    "Callers who are not admin, manager or league head coach get 403.",
   request: { params: leagueTeamParamSchema, query: candidatesQuerySchema },
   responses: {
     "200": {

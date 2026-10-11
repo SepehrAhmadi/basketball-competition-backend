@@ -87,6 +87,8 @@ export const messages = {
       birthDateRequired: "تاریخ تولد بازیکن ثبت نشده است",
       ageIneligible: "سن بازیکن با رده سنی این لیگ مطابقت ندارد",
       playerInOtherTeam: "این بازیکن در تیم دیگری از همین لیگ ثبت شده است",
+      headCoachRowManagerOnly:
+        "افزودن یا حذف سرمربی در راستر لیگ فقط توسط مدیر سازمان یا ادمین مجاز است",
     },
     season: {
       nameRequired: "نام فصل الزامی است",
@@ -199,6 +201,8 @@ export const messages = {
       eligibleList: "لیست تیم‌های قابل ثبت‌نام با موفقیت دریافت شد",
       registered: "تیم با موفقیت در لیگ ثبت‌نام شد",
       removed: "تیم با موفقیت از لیگ حذف شد",
+      myList: "تیم‌های شما در این لیگ با موفقیت دریافت شد",
+      found: "تیم لیگ با موفقیت دریافت شد",
     },
     leagueRoster: {
       list: "راستر لیگ با موفقیت دریافت شد",
