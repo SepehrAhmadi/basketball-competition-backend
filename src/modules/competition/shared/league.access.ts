@@ -4,7 +4,7 @@ import { messages } from "../../../language/message.ts";
 import type { Actor } from "../../../authz/actor.ts";
 import { maybeAdvanceSingleLeague } from "./league.auto.ts";
 
-export type RosterRole = "ADMIN" | "MANAGER" | "HEAD_COACH" | null;
+export type RosterRole = "ADMIN" | "MANAGER" | "HEAD_COACH" | "MEMBER" | null;
 
 export interface LeagueTeamAccess {
   rosterRole: RosterRole;
@@ -129,6 +129,13 @@ export function buildAccess(
     };
   if (own)
     return { rosterRole: "HEAD_COACH", ownTeamSeasonMemberId: own.teamSeasonMemberId };
+  // Any other roster row (coach / player) on this team: view-only member.
+  const memberRow = rowsForTeam.find((r) => r.seasonId === leagueSeasonId);
+  if (memberRow)
+    return {
+      rosterRole: "MEMBER",
+      ownTeamSeasonMemberId: memberRow.teamSeasonMemberId,
+    };
   return { rosterRole: null, ownTeamSeasonMemberId: null };
 }
 
@@ -186,6 +193,24 @@ export async function resolveLeagueTeamAccess(
     };
   if (own)
     return { rosterRole: "HEAD_COACH", ownTeamSeasonMemberId: own.teamSeasonMemberId };
+  // Any other roster row (coach / player) on this team: view-only member.
+  const memberRow = await prisma.leagueTeamMember.findFirst({
+    where: {
+      leagueTeamId: leagueTeam.id,
+      status: "ACTIVE",
+      teamSeasonMember: {
+        userId: actor.userId,
+        status: "ACTIVE",
+        seasonId: league.seasonId,
+      },
+    },
+    select: { teamSeasonMemberId: true },
+  });
+  if (memberRow)
+    return {
+      rosterRole: "MEMBER",
+      ownTeamSeasonMemberId: memberRow.teamSeasonMemberId,
+    };
   return { rosterRole: null, ownTeamSeasonMemberId: null };
 }
 

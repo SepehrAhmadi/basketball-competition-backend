@@ -52,6 +52,8 @@ test("leagueTeamPolicy: matrix of role x status x deadline", () => {
     ["HEAD_COACH", league("REGISTRATION"), true, false],
     ["HEAD_COACH", league("REGISTRATION", CLOSED), false, false],
     ["HEAD_COACH", league("ACTIVE"), false, false],
+    ["MEMBER", league("REGISTRATION"), false, false],
+    ["MEMBER", league("ACTIVE"), false, false],
     [null, league("REGISTRATION"), false, false],
   ];
   for (const [role, state, manageRoster, unregister] of cases) {
@@ -136,12 +138,13 @@ test("buildAccess: resolution order and season matching", () => {
     rosterRole: "HEAD_COACH",
     ownTeamSeasonMemberId: 10,
   });
-  // different season, plain coach and player rows do not grant access
+  // different season rows do not grant access; same-season plain coach
+  // and player rows grant view-only MEMBER access
   assert.equal(buildAccess(actor(), 3, [row({ seasonId: 8 })], 7).rosterRole, null);
-  assert.equal(buildAccess(actor(), 3, [row({ isHeadCoach: false })], 7).rosterRole, null);
+  assert.equal(buildAccess(actor(), 3, [row({ isHeadCoach: false })], 7).rosterRole, "MEMBER");
   assert.equal(
     buildAccess(actor(), 3, [row({ role: "PLAYER", isHeadCoach: false })], 7).rosterRole,
-    null,
+    "MEMBER",
   );
 });
 

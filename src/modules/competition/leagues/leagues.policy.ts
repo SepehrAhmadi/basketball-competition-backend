@@ -67,6 +67,9 @@ export function leagueTeamPolicy(
     }
     case "HEAD_COACH":
       return { manageRoster: nonAdminCanEdit(league, now), unregister: false };
+    case "MEMBER":
+      // View-only: may see the roster but never edit it.
+      return { manageRoster: false, unregister: false };
     default:
       return { manageRoster: false, unregister: false };
   }

@@ -43,7 +43,7 @@ function assertCanRegister(
 
 /** Identity → status → window, using the role-specific rule. */
 function assertRosterEditable(access: LeagueTeamAccess, league: LeagueContext) {
-  if (access.rosterRole === null)
+  if (access.rosterRole === null || access.rosterRole === "MEMBER")
     throw new AppError(403, messages.error.league.notAuthorized);
   const isAdmin = access.rosterRole === "ADMIN";
   if (!canEditByStatus(league.status, isAdmin))
