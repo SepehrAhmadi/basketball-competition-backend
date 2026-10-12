@@ -6,6 +6,12 @@ import {
   leagueInclude,
   toLeagueResponse,
 } from "../../../shared/league.mapper.ts";
+import {
+  autoAdvanceExpiredRegistrations,
+  assertRegistrationAllowed,
+  initialStatusForDeadline,
+  maybeAdvanceSingleLeague,
+} from "../../../shared/league.auto.ts";
 
 interface AdminLeagueListQuery {
   page: number;
@@ -45,6 +51,11 @@ function assertDateOrder(startDate: Date | null, endDate: Date | null) {
 }
 
 async function listLeagues(query: AdminLeagueListQuery) {
+  // Lifecycle: REGISTRATION → ACTIVE once the deadline passes.
+  // Best-effort so reads never fail because of the background promotion.
+  try {
+    await autoAdvanceExpiredRegistrations();
+  } catch {}
   const where: any = {};
   if (query.status) where.status = query.status;
   if (query.seasonId || query.ageCategoryId) {
@@ -81,7 +92,10 @@ async function getLeagueById(leagueId: number) {
     include: leagueInclude,
   });
   if (!league) throw new AppError(404, messages.error.league.notFound);
-  return toLeagueResponse(league);
+  const effectiveStatus = await maybeAdvanceSingleLeague(league).catch(
+    () => league.status,
+  );
+  return toLeagueResponse({ ...league, status: effectiveStatus } as any);
 }
 
 async function createLeague(input: CreateLeagueInput) {
@@ -101,21 +115,28 @@ async function createLeague(input: CreateLeagueInput) {
   if (dup) throw new AppError(409, messages.error.league.nameExists);
 
   try {
+    const rosterDeadline = input.rosterDeadline
+      ? jalaliToGregorian(input.rosterDeadline)
+      : null;
     const created = await prisma.league.create({
       data: {
         name: input.name,
         ageCategoryCutoffId: input.ageCategoryCutoffId,
-        status: "INACTIVE",
+        // No deadline → INACTIVE; today/future deadline → REGISTRATION;
+        // past deadline → INACTIVE (admin may still override manually).
+        status: initialStatusForDeadline(rosterDeadline),
         startDate,
         endDate,
-        rosterDeadline: input.rosterDeadline
-          ? jalaliToGregorian(input.rosterDeadline)
-          : null,
+        rosterDeadline,
         description: input.description ?? null,
       },
       include: leagueInclude,
     });
-    return toLeagueResponse(created);
+    // If created with an already-past deadline, apply the default lifecycle.
+    const effectiveStatus = await maybeAdvanceSingleLeague(created).catch(
+      () => created.status,
+    );
+    return toLeagueResponse({ ...created, status: effectiveStatus } as any);
   } catch (err: any) {
     if (err?.code === "P2002")
       throw new AppError(409, messages.error.league.nameExists);
@@ -203,6 +224,21 @@ async function updateLeague(leagueId: number, input: UpdateLeagueInput) {
     return toLeagueResponse(existing);
 
   try {
+    // Keep the stored status consistent with the deadline rule:
+    // clearing the deadline while REGISTRATION → INACTIVE; setting a
+    // today/future deadline while INACTIVE → REGISTRATION.
+    let nextStatus = existing.status;
+    if (deadlineChanged) {
+      if (!newDeadline && existing.status === "REGISTRATION") {
+        nextStatus = "INACTIVE";
+      } else if (
+        newDeadline &&
+        existing.status === "INACTIVE" &&
+        initialStatusForDeadline(newDeadline) === "REGISTRATION"
+      ) {
+        nextStatus = "REGISTRATION";
+      }
+    }
     const updated = await prisma.league.update({
       where: { id: leagueId },
       data: {
@@ -212,10 +248,15 @@ async function updateLeague(leagueId: number, input: UpdateLeagueInput) {
         endDate: newEnd,
         rosterDeadline: newDeadline,
         description: newDescription,
+        status: nextStatus,
       },
       include: leagueInclude,
     });
-    return toLeagueResponse(updated);
+    // If the deadline was moved to the past, apply the default lifecycle.
+    const effectiveStatus = await maybeAdvanceSingleLeague(updated).catch(
+      () => updated.status,
+    );
+    return toLeagueResponse({ ...updated, status: effectiveStatus } as any);
   } catch (err: any) {
     if (err?.code === "P2002")
       throw new AppError(409, messages.error.league.nameExists);
@@ -270,6 +311,11 @@ async function updateLeagueStatus(
 
   if (existing.status === "FINISHED" && adminLevel !== "SUPER_ADMIN")
     throw new AppError(403, messages.error.league.statusChangeForbidden);
+
+  // REGISTRATION is only allowed with no deadline or a today-or-future one.
+  if (status === "REGISTRATION") {
+    assertRegistrationAllowed(existing.rosterDeadline);
+  }
 
   if (status === "ACTIVE") {
     const teams = await prisma.leagueTeam.findMany({

@@ -2,6 +2,7 @@ import prisma from "../../../config/db.config.ts";
 import AppError from "../../../utils/appError.ts";
 import { messages } from "../../../language/message.ts";
 import type { Actor } from "../../../authz/actor.ts";
+import { maybeAdvanceSingleLeague } from "./league.auto.ts";
 
 export type RosterRole = "ADMIN" | "MANAGER" | "HEAD_COACH" | null;
 
@@ -49,12 +50,17 @@ export async function loadLeagueContext(
     },
   });
   if (!league) throw new AppError(404, messages.error.league.notFound);
-  if (league.status === "INACTIVE" && !actor.isAdmin)
+  // Lifecycle: REGISTRATION → ACTIVE once the deadline passes.
+  // Best-effort so a stale stored status never blocks reads.
+  const effectiveStatus = await maybeAdvanceSingleLeague(league).catch(
+    () => league.status,
+  );
+  if (effectiveStatus === "INACTIVE" && !actor.isAdmin)
     throw new AppError(404, messages.error.league.notFound);
   return {
     id: league.id,
     name: league.name,
-    status: league.status,
+    status: effectiveStatus as LeagueContext["status"],
     rosterDeadline: league.rosterDeadline,
     seasonId: league.ageCategoryCutoff.seasonId,
     minBirthDate: league.ageCategoryCutoff.minBirthDate,

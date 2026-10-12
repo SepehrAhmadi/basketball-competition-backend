@@ -98,7 +98,7 @@ registry.registerPath({
   method: "post",
   path: "/admin/leagues",
   tags: ["Admin - Leagues"],
-  summary: "Create a league (status INACTIVE)",
+  summary: "Create a league (status INACTIVE without deadline, else REGISTRATION)",
   request: {
     body: {
       content: { "application/json": { schema: createLeagueSchema } },

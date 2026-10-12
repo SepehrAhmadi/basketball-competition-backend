@@ -18,6 +18,10 @@ import {
   type LeagueRole,
 } from "../shared/league.access.ts";
 import { leaguePolicy, leagueTeamPolicy } from "./leagues.policy.ts";
+import {
+  autoAdvanceExpiredRegistrations,
+  maybeAdvanceSingleLeague,
+} from "../shared/league.auto.ts";
 
 interface PublicLeagueListQuery {
   page: number;
@@ -29,6 +33,10 @@ interface PublicLeagueListQuery {
 }
 
 async function listPublicLeagues(query: PublicLeagueListQuery, actor: Actor) {
+  // Lifecycle: REGISTRATION → ACTIVE once the deadline passes.
+  try {
+    await autoAdvanceExpiredRegistrations();
+  } catch {}
   const where: any = {
     status: query.status ?? { not: "INACTIVE" },
   };
@@ -71,12 +79,16 @@ async function getPublicLeague(leagueId: number, actor: Actor) {
     where: { id: leagueId },
     include: leagueInclude,
   });
-  if (!league || league.status === "INACTIVE")
+  if (!league) throw new AppError(404, messages.error.league.notFound);
+  const effectiveStatus = await maybeAdvanceSingleLeague(league).catch(
+    () => league.status,
+  );
+  if (effectiveStatus === "INACTIVE")
     throw new AppError(404, messages.error.league.notFound);
   return {
-    ...toLeagueResponse(league),
+    ...toLeagueResponse({ ...league, status: effectiveStatus } as any),
     can: leaguePolicy(actor, {
-      status: league.status,
+      status: effectiveStatus as "REGISTRATION" | "ACTIVE" | "FINISHED",
       rosterDeadline: league.rosterDeadline,
     }),
   };
@@ -113,6 +125,9 @@ async function listMyLeagues(
   query: MyLeaguesQuery,
   actor: Actor,
 ) {
+  try {
+    await autoAdvanceExpiredRegistrations();
+  } catch {}
   const where: any = {
     status: query.status ?? { not: "INACTIVE" },
     teams: { some: myLeagueTeamConditions(userId, actor) },

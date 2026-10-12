@@ -69,6 +69,8 @@ export const messages = {
       registrationClosed:
         "ثبت‌نام و ویرایش راستر در وضعیت فعلی لیگ امکان‌پذیر نیست",
       rosterClosed: "مهلت ثبت‌نام و ویرایش راستر این لیگ به پایان رسیده است",
+      registrationRequiresValidDeadline:
+        "برای وضعیت ثبت‌نام باید مهلت ثبت‌نام خالی یا امروز به بعد باشد",
       notAuthorized: "شما مجاز به انجام این عملیات در این لیگ نیستید",
       cannotUnregisterInActive: "حذف تیم از لیگ فعال امکان‌پذیر نیست",
       endDateBeforeStartDate: "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.",
