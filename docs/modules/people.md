@@ -29,4 +29,4 @@ Owns identity, authentication, and role profiles for all human actors.
 - → shared: `users.admin.service` imports `PERMISSION_CATALOG`, `Permission` from `shared/permissions.ts`.
 - → teams: `Coach`/`Player` profiles are referenced by `teams.service` roster adds via `User` + `UserRole` checks (Prisma FK, no service import).
 - → organizations: `User` rows are linked as managers via `OrganizationManager` (Prisma FK, no service import).
-- Internal: `auth.service` imports `userService.deleteOwnAccount` from `../user/user.service.ts`; `users.admin.service` imports `toUserProfile`, `applyProfileUpdate` from `../user.service.ts`.
+- Internal: `auth.service` imports `userService.deleteOwnAccount` from `../user/user.service.ts`; `users.admin.service` imports `toUserProfile` from `../user.service.ts`. The admin controller delegates user update/get-by-id to `applyProfileUpdate` / `userService.getUserById` (after `assertTargetAccessible`) — no admin-service wrappers.

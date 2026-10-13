@@ -1,373 +1,297 @@
-# Plan: Remove the `ORG_MANAGER` Role Completely
+# Leagues Module Refactor Plan
 
-> Supersedes the earlier "block role removal with 409" plan. **Do not implement** that plan
-> (no `cannotRemoveOrgManagerRole` message, no guard in `syncUserRoles`). Once the role no longer
-> exists, that problem cannot occur.
+## 0. Goals and decisions (already agreed)
 
-## 1. Goal and final behavior
+| # | Decision |
+|---|---|
+| D1 | Remove the `competition/` wrapper. The module becomes `src/modules/leagues/` (YAGNI: only one sub-module exists today; games/groups/series can regroup later, it is only an import-path change). |
+| D2 | `competition/shared/` becomes `leagues/lib/` (module-private domain logic, not the global `modules/shared`). |
+| D3 | The three user-facing services move into `leagues/services/`. Project rule: a module with 3+ services uses a `services/` folder; modules with fewer keep a flat layout. |
+| D4 | Rename `leagues.public.service.ts` to `services/leagues.service.ts` (it also holds authenticated reads such as `listMyLeagues`). |
+| D5 | Delete `league-teams.admin.validation.ts` (pure re-export, nothing admin-specific). |
+| D6 | Add `evaluateUnregister` to `leagues.policy.ts` so unregister logic lives in the policy like the other rules. |
+| D7 | `addMembers` not-found error must name the offending ids. |
+| D8 | Admin pattern becomes uniform across ALL modules: if an admin operation has no extra logic, the admin controller calls the main service with `adminActor(req.userId)`. An admin service exists only for admin-specific logic. |
+| D9 | `removeMember` / `loadAddableRows` error message is chosen from `lockReason`; the silent `.catch(() => undefined)` in `updateLeague` must log. |
+| D10 | Cross-module imports are allowed under written rules (section 7). `league.head-coach-sync.ts` stays in `leagues/lib/` and `teams.service` keeps importing it. |
+| D11 | Docs updated (section 8). |
 
-Managing an organization becomes purely a **relationship** (`organization_managers`), never a global role.
+Non-goals: no behavior change except the explicit message/log fixes in D6, D7, D9. No schema or migration changes. No route path changes (`/api/v1/...` stays identical).
 
-| Topic                                            | Behavior after the change                                                                                                                                    |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Who can create an organization                   | Any authenticated user (`POST /organizations`). The creator is automatically inserted into `organization_managers` (already how `createOrganization` works). |
-| Who can edit/delete an organization or its teams | Only its manager (or an admin), enforced by `organizationPolicy` / `teamPolicy` + `assertAllowed` in the services. These checks already exist.               |
-| Who can manage a roster                          | Org manager, team head coach, team coach, admin: enforced by `rosterPolicy` in the service. No role gate in routes.                                          |
-| Transferring management                          | **Admin only**, via the existing `PUT /admin/organizations/:id` with `managerId`. No new endpoint. No manager-side transfer.                                 |
-| Organization limits per user                     | **None** for now (explicitly out of scope).                                                                                                                  |
-| `Role` enum                                      | `COACH`, `PLAYER`, `REFEREE` only.                                                                                                                           |
-| Users with no role                               | Valid state (e.g. someone who only creates an organization).                                                                                                 |
+---
 
-Why this is safe: the `ORG_MANAGER` role carries no profile or extra data (unlike `Player`/`Coach`/`Referee`), and the data model, policies and `Actor` are already relationship-based. The only thing contradicting that is the coarse `verifyRole("ORG_MANAGER")` gate in routes. Removing the role also eliminates the existing inconsistency where `can.edit = true` was returned but the route rejected the call with 403.
+## 1. Target structure
 
-## 2. Decisions taken in this plan (change only if you disagree)
-
-| #   | Decision                                                                                                     | Reason                                                                                                                                                                |
-| --- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | Remove `GET /dropdowns/manager-candidates`; the admin organization form uses `GET /dropdowns/users` instead. | Its only filter was the removed role. Without it, it duplicates `/dropdowns/users`. Keeping it would leave redundant code. (Frontend change required, see section 8.) |
-| D2  | `roles` becomes optional (default `[]`) in self-registration and admin create-user.                          | Otherwise someone who only wants to run an organization must pick a meaningless role. The `min(1)` rule and its message become dead.                                  |
-| D3  | Remove `SELF_REGISTER_ROLES` and its service check plus `invalidSelfRegisterRole`.                           | After this change every `Role` is self-registrable, so the "subset" concept is meaningless. The Zod enum already restricts input.                                     |
-| D4  | `verifyRole` returns 403 (not 401 "No role found") for users with no matching/any role.                      | Roleless users are now normal. A 401 would make clients try a token refresh/logout loop.                                                                              |
-| D5  | Remove stale `"PUBLIC"` from the admin-assignable roles list while editing it.                               | It no longer exists in the DB enum (removed by migration `20260926072520`); sending it already fails at Prisma.                                                       |
-| D6  | One release: code + migration together.                                                                      | Old code against the new enum would fail when writing `ORG_MANAGER`.                                                                                                  |
-
-## 3. Complete inventory of touchpoints
-
-Verified by reading the whole project. Every item below must be changed. Nothing else references the role.
-
-| File                                                                | Reference                                                                                                                    | Action                                             |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `src/prisma/schema.prisma`                                          | `enum Role { ORG_MANAGER ... }`                                                                                              | Remove the value                                   |
-| `src/prisma/migrations/<new>/migration.sql`                         | n/a                                                                                                                          | New migration (section 4.1)                        |
-| `src/modules/organizations/organizations.routes.ts`                 | `verifyRole("ORG_MANAGER")` on POST/PUT/DELETE + import                                                                      | Remove gates and import                            |
-| `src/modules/teams/teams.routes.ts`                                 | `verifyRole("ORG_MANAGER")` (team create/update/delete/logo), `verifyRole("ORG_MANAGER","COACH")` (3 roster routes) + import | Remove all gates and import                        |
-| `src/middleware/auth/verifyRole.middleware.ts`                      | `401 "No role found"` branch                                                                                                 | Simplify (D4)                                      |
-| `src/modules/shared/roles/roles.service.ts`                         | `ROLE_LABELS_FA.ORG_MANAGER`                                                                                                 | Remove entry (TS would error on excess key anyway) |
-| `src/modules/shared/roles/roles.docs.ts`                            | `assignableRoleEnum`                                                                                                         | Remove value                                       |
-| `src/modules/people/auth/auth.validation.ts`                        | `selfRegisterRoles`, `.min(1, atLeastOneRoleRequired)`                                                                       | Remove value, make optional (D2)                   |
-| `src/modules/people/auth/auth.service.ts`                           | `SELF_REGISTER_ROLES` + check                                                                                                | Remove (D3)                                        |
-| `src/modules/people/auth/auth.docs.ts`                              | `roleEnum`                                                                                                                   | Remove value                                       |
-| `src/modules/people/user/user.validation.ts`                        | `allRoles`                                                                                                                   | Remove value                                       |
-| `src/modules/people/user/user.docs.ts`                              | `roleEnum`                                                                                                                   | Remove value                                       |
-| `src/modules/people/user/admin/users.admin.validation.ts`           | `adminAssignableRoles` (also contains stale `"PUBLIC"`), `.min(1, ...)` on create                                            | Remove both values (D5), make optional (D2)        |
-| `src/modules/people/user/admin/users.admin.docs.ts`                 | `roleEnum`, create-user description                                                                                          | Remove value, fix text                             |
-| `src/modules/shared/dropdowns/dropdowns.validation.ts`              | `usersDropdownQuerySchema.role` enum + example `"ORG_MANAGER"`                                                               | Remove value, change example to `"COACH"`          |
-| `src/modules/shared/dropdowns/dropdowns.controller.ts`              | `getUsers` query type, `getManagerCandidates`                                                                                | Fix type, delete handler (D1)                      |
-| `src/modules/shared/dropdowns/dropdowns.service.ts`                 | `getManagerCandidates` filters by role                                                                                       | Delete function and export (D1)                    |
-| `src/modules/shared/dropdowns/dropdowns.routes.ts`                  | `/manager-candidates` route                                                                                                  | Delete (D1)                                        |
-| `src/modules/shared/dropdowns/dropdowns.docs.ts`                    | `/dropdowns/manager-candidates` path, `userDropdownItemSchema` example `["ORG_MANAGER"]`, `/dropdowns/users` description     | Delete path, fix example/text                      |
-| `src/modules/organizations/admin/organizations.admin.service.ts`    | `assertManagerCandidate` checks `UserRole`                                                                                   | Simplify and rename                                |
-| `src/modules/organizations/admin/organizations.admin.validation.ts` | `managerIdField` description "User id with ORG_MANAGER role"                                                                 | Fix text                                           |
-| `src/modules/organizations/admin/organizations.admin.docs.ts`       | `managerId` descriptions, 400 `managerMissingRole`                                                                           | Fix text/responses                                 |
-| `src/modules/organizations/organizations.docs.ts`                   | "Requires ORG_MANAGER or ADMIN" (POST/PUT/DELETE), 403 on POST                                                               | Fix text/responses                                 |
-| `src/modules/teams/teams.docs.ts`                                   | "Requires ORG_MANAGER or ADMIN..." (POST/PUT/DELETE/logo), POST 403 text                                                     | Fix text                                           |
-| `src/language/message.ts`                                           | `organization.managerMissingRole`, `auth.atLeastOneRoleRequired`, `auth.invalidSelfRegisterRole`                             | Delete the three keys                              |
-| `docs/*.md`                                                         | Several mentions                                                                                                             | Update (section 4.9)                               |
-
-Files verified as needing **no** change: `seed.ts`, `accessToken.utils.ts` (old JWTs containing the value are harmless and expire in 15 minutes), `attachActor`, `actor.ts`, `organizations.policy.ts`, `teams.policy.ts`, all org/team services, `user.service.ts` (`syncUserRoles` stays untouched), `players/coaches/referees` routes (they keep `verifyRole` for their own single role), `teams.admin.service.ts`.
-
-## 4. Step-by-step implementation
-
-Do the steps in this order (it keeps the project compiling as you go).
-
-### 4.1 Prisma schema and migration
-
-`schema.prisma`:
-
-```prisma
-enum Role {
-  COACH
-  PLAYER
-  REFEREE
-}
 ```
-
-Create the migration **without applying**, then edit the SQL (Prisma does not generate the `DELETE`):
-
-```bash
-npx prisma migrate dev --create-only --name remove_org_manager_role
+src/modules/leagues/
+├── leagues.routes.ts
+├── leagues.controller.ts
+├── leagues.validation.ts
+├── leagues.docs.ts
+├── leagues.policy.ts
+├── services/
+│   ├── leagues.service.ts          (was leagues.public.service.ts)
+│   ├── league-teams.service.ts
+│   └── league-roster.service.ts
+├── lib/
+│   ├── league.rules.ts
+│   ├── league.rules.test.ts
+│   ├── league.lifecycle.ts
+│   ├── league.types.ts
+│   ├── league.access.ts
+│   ├── league.mapper.ts
+│   ├── league.candidates.ts
+│   ├── league.roster-writes.ts
+│   ├── league.players.ts
+│   └── league.head-coach-sync.ts   (imported by teams.service, see section 7)
+└── admin/
+    ├── leagues.admin.routes.ts
+    ├── leagues.admin.controller.ts
+    ├── leagues.admin.service.ts
+    ├── leagues.admin.validation.ts
+    ├── leagues.admin.docs.ts
+    ├── league-teams.admin.routes.ts     (exports default router + eligibleTeamsRouter)
+    ├── league-teams.admin.controller.ts
+    └── league-teams.admin.docs.ts
 ```
-
-Folder example: `src/prisma/migrations/20261005xxxxxx_remove_org_manager_role/migration.sql`
-
-```sql
--- ORG_MANAGER is no longer a role: management is the organization_managers relation.
--- Delete the role rows first, otherwise shrinking the enum fails or corrupts data.
--- organization_managers is NOT touched, so no manager loses an organization.
-DELETE FROM `user_roles` WHERE `role` = 'ORG_MANAGER';
-
--- AlterTable
-ALTER TABLE `user_roles` MODIFY `role` ENUM('COACH', 'PLAYER', 'REFEREE') NOT NULL;
-```
-
-Then apply and regenerate the client:
-
-```bash
-npx prisma migrate dev
-```
-
-Rules: never edit old migrations (they legitimately contain `ORG_MANAGER`); users left with zero roles are fine.
-
-### 4.2 Routes
-
-`organizations.routes.ts`: delete the `verifyRole` import and the three `verifyRole("ORG_MANAGER")` lines.
-
-```ts
-router.post(
-  "/",
-  verifyJWT,
-  attachActor,
-  organizationLogoUploader.single("logo"),
-  validate(organizationsValidation.createOrganizationSchema),
-  organizationsController.create,
-);
-
-router.put(
-  "/:id",
-  verifyJWT,
-  attachActor,
-  validate(idParamSchema, "params"),
-  organizationLogoUploader.single("logo"),
-  validate(organizationsValidation.updateOrganizationSchema),
-  organizationsController.update,
-);
-
-router.delete(
-  "/:id",
-  verifyJWT,
-  attachActor,
-  validate(idParamSchema, "params"),
-  organizationsController.remove,
-);
-```
-
-`teams.routes.ts`: delete the `verifyRole` import and **every** `verifyRole(...)` line (team create/update/delete/logo and the three roster routes). Chain becomes `verifyJWT, attachActor, <validators / uploader>, controller`. Do **not** replace the roster gate with `verifyRole("COACH")`: org managers without the COACH role must pass, and `rosterPolicy` + `assertCanManageRoster` / `assertCanManageMember` already decide.
 
 Notes:
+- `admin/leagues/` and `admin/league-teams/` sub-folders are flattened to remove the confusing `leagues/admin/leagues/` nesting. File prefixes (`leagues.admin.*`, `league-teams.admin.*`) keep them distinguishable.
+- `league-teams.admin.validation.ts` is deleted. Its routes/docs import from `../leagues.validation.ts` directly.
 
-- The services already call `assertAllowed` and already delete the uploaded file on 403/404, so removing the route gate does not leave orphan files. A non-manager can now cause a transient upload (max 2 MB) that is immediately removed; this matches existing design.
-- Teams and rosters are public reads, so the 404-before-403 order leaks nothing new.
+---
 
-### 4.3 `verifyRole` (D4)
+## 2. File move map
 
-Empty roles is now a normal state, so the special 401 branch is dead. Replace the body with:
+Use `git mv` so history is preserved.
+
+| Old path (under `src/modules/competition/`) | New path (under `src/modules/leagues/`) |
+|---|---|
+| `leagues/leagues.routes.ts` | `leagues.routes.ts` |
+| `leagues/leagues.controller.ts` | `leagues.controller.ts` |
+| `leagues/leagues.validation.ts` | `leagues.validation.ts` |
+| `leagues/leagues.docs.ts` | `leagues.docs.ts` |
+| `leagues/leagues.policy.ts` | `leagues.policy.ts` |
+| `leagues/leagues.public.service.ts` | `services/leagues.service.ts` |
+| `leagues/league-teams.service.ts` | `services/league-teams.service.ts` |
+| `leagues/league-roster.service.ts` | `services/league-roster.service.ts` |
+| `shared/league.rules.ts` | `lib/league.rules.ts` |
+| `shared/league.rules.test.ts` | `lib/league.rules.test.ts` |
+| `shared/league.lifecycle.ts` | `lib/league.lifecycle.ts` |
+| `shared/league.types.ts` | `lib/league.types.ts` |
+| `shared/league.access.ts` | `lib/league.access.ts` |
+| `shared/league.mapper.ts` | `lib/league.mapper.ts` |
+| `shared/league.candidates.ts` | `lib/league.candidates.ts` |
+| `shared/league.roster-writes.ts` | `lib/league.roster-writes.ts` |
+| `shared/league.players.ts` | `lib/league.players.ts` |
+| `shared/league.head-coach-sync.ts` | `lib/league.head-coach-sync.ts` |
+| `leagues/admin/leagues/leagues.admin.routes.ts` | `admin/leagues.admin.routes.ts` |
+| `leagues/admin/leagues/leagues.admin.controller.ts` | `admin/leagues.admin.controller.ts` |
+| `leagues/admin/leagues/leagues.admin.service.ts` | `admin/leagues.admin.service.ts` |
+| `leagues/admin/leagues/leagues.admin.validation.ts` | `admin/leagues.admin.validation.ts` |
+| `leagues/admin/leagues/leagues.admin.docs.ts` | `admin/leagues.admin.docs.ts` |
+| `leagues/admin/league-teams/league-teams.admin.routes.ts` | `admin/league-teams.admin.routes.ts` |
+| `leagues/admin/league-teams/league-teams.admin.controller.ts` | `admin/league-teams.admin.controller.ts` |
+| `leagues/admin/league-teams/league-teams.admin.docs.ts` | `admin/league-teams.admin.docs.ts` |
+| `leagues/admin/league-teams/league-teams.admin.validation.ts` | **deleted** |
+
+---
+
+## 3. Import updates (outside the module)
+
+| File | Change |
+|---|---|
+| `src/routes/index.ts` | Update the 4 league imports to `../modules/leagues/leagues.routes.ts`, `../modules/leagues/admin/leagues.admin.routes.ts`, and `../modules/leagues/admin/league-teams.admin.routes.ts` (default + `eligibleTeamsRouter`). Mount paths do not change. |
+| `src/swagger/swagger.ts` | Update the 3 docs imports: `leagues.docs.ts`, `admin/leagues.admin.docs.ts`, `admin/league-teams.admin.docs.ts`. |
+| `src/server.ts` | `startLeagueLifecycleJob` from `./modules/leagues/lib/league.lifecycle.ts`. |
+| `src/modules/teams/teams.service.ts` | `syncHeadCoachToRegistrationLeagues` from `../leagues/lib/league.head-coach-sync.ts`. |
+
+Inside the module, all relative paths need re-basing (the depth changes). Key edges:
+
+- `services/*` import `../lib/*`, `../leagues.policy.ts`, and the global `../../../...` utilities (one level deeper than before, depth stays the same as old `leagues/` files plus one for `services/`; verify with the compiler).
+- `leagues.policy.ts` imports `./lib/league.rules.ts` and `./lib/league.types.ts`.
+- `lib/league.candidates.ts` and `lib/league.roster-writes.ts` import `../leagues.policy.ts`. This is an import in both directions between `lib` and the module root (policy to rules, candidates to policy). It is not a file-level cycle (rules never import policy), but keep it that way: **`lib/league.rules.ts` and `lib/league.types.ts` must never import `leagues.policy.ts`.**
+- Admin files import `../services/*`, `../leagues.validation.ts`, `../leagues.docs.ts`, `../lib/*`.
+
+Validation after moving (section 9) will catch any missed path.
+
+---
+
+## 4. Policy change: `evaluateUnregister`
+
+File: `leagues.policy.ts`.
+
+1. Extend `Denial` with `"UNREGISTER_IN_ACTIVE"`.
+2. Add:
 
 ```ts
-const verifyRole = (...allowedRoles: Role[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    // Any admin level bypasses domain-role checks entirely.
-    if (req.adminLevel) return next();
-
-    if (!req.roles?.some((role) => allowedRoles.includes(role))) {
-      return next(new AppError(403, "Forbidden"));
-    }
-
-    next();
-  };
-};
+/**
+ * Single source for "may this actor unregister a team?".
+ * Order: identity (403) → ACTIVE league (409) → shared status/window rule.
+ * Head coaches are rejected at the identity step.
+ */
+export function evaluateUnregister(
+  actor: Actor,
+  league: LeagueState,
+  organizationId: number,
+  now?: Date,
+): Evaluation {
+  if (!actor.isAdmin && !actor.managedOrgIds.has(organizationId))
+    return { allowed: false, reason: "NOT_AUTHORIZED" };
+  if (league.status === "ACTIVE")
+    return { allowed: false, reason: "UNREGISTER_IN_ACTIVE" };
+  return evaluateRegister(actor, league, organizationId, now);
+}
 ```
 
-It remains in use by `players`, `coaches`, `referees` routes.
-
-### 4.4 Validation
-
-`auth.validation.ts`:
+3. `throwDenial`: add `case "UNREGISTER_IN_ACTIVE": throw new AppError(409, messages.error.league.cannotUnregisterInActive);`
+4. `leagueTeamPolicy`: for `ADMIN`, keep `unregister: allowed && league.status !== "ACTIVE"` (unchanged output; comment that it mirrors `evaluateUnregister`).
+5. `services/league-teams.service.ts` `unregisterTeam`: replace the two manual checks and the `assertCanRegister` call with:
 
 ```ts
-const selfRegisterRoles = ["PLAYER", "COACH", "REFEREE"] as const;
+const result = evaluateUnregister(actor, league, leagueTeam.team.organizationId);
+if (!result.allowed) throwDenial(result.reason);
+```
+
+Behavior preserved: head coach and other non-managers get 403, ACTIVE league gives 409 `cannotUnregisterInActive` (admin included), otherwise the usual status/window 409s.
+
+Tests to add (new file `leagues.policy.test.ts`): matrix for `evaluateUnregister` (admin / manager / head coach / guest x INACTIVE / REGISTRATION / ACTIVE / FINISHED x window open/closed).
+
+---
+
+## 5. Message and logging fixes
+
+### 5.1 `addMembers`: name the missing ids (D7)
+
+File: `lib/league.roster-writes.ts`, `loadAddableRows`.
+
+```ts
+if (rows.length !== ids.length) {
+  const found = new Set(rows.map((r) => r.id));
+  const missing = ids.filter((id) => !found.has(id));
+  throw new AppError(
+    404,
+    `${messages.error.leagueRoster.teamMemberNotFound}: ${missing.join(", ")}`,
+  );
+}
+```
+
+`messages` stays a constant-string object; only the ids are appended (same pattern as the `validate` middleware's `path: message`). Update the Swagger 404 description to say the ids are listed.
+
+### 5.2 Lock-reason-aware 403 message (D9)
+
+Problem: both `removeMember` and `loadAddableRows` always use `headCoachRowManagerOnly`, which is misleading for `OWN_ROW`.
+
+1. Add to `src/language/message.ts` under `error.leagueRoster`:
+   `ownRowLocked: "سرمربی نمی‌تواند ردیف خودش را در راستر لیگ تغییر دهد"`
+2. Add a small helper next to the policy (pure):
+
+```ts
+export function lockReasonMessage(reason: LockReason): string {
+  return reason === "OWN_ROW"
+    ? messages.error.leagueRoster.ownRowLocked
+    : messages.error.leagueRoster.headCoachRowManagerOnly;
+}
+```
+
+3. In `removeMember` and `loadAddableRows`, replace the hardcoded message with `lockReasonMessage(decision.lockReason)`.
+
+### 5.3 Do not swallow lifecycle errors (D9)
+
+File: `admin/leagues.admin.service.ts`, `updateLeague`.
+
+```ts
+await advanceLeagueIfExpired(updated.id).catch((err) =>
+  console.error("[league-lifecycle] advanceLeagueIfExpired failed", err),
+);
+```
+
+The project has no logger (`LOG_LEVEL` exists in `.env.example` but is unused), so `console.error` matches `league.lifecycle.ts`.
+
+---
+
+## 6. Admin pattern unification (D8)
+
+**Rule:** if an admin endpoint adds no logic beyond what the main service already does, the admin controller calls the main service with `adminActor(req.userId!)`. An admin service is created only for admin-specific logic (different filters, different validation, restore, status workflows, etc.).
+
+Audit of every module:
+
+| Module | Finding | Action |
+|---|---|---|
+| leagues (`league-teams.admin`) | Already direct, no service. | None. |
+| leagues (`leagues.admin.service`) | Real admin logic (CRUD, status machine). | Keep. |
+| teams | `teams.admin.service` has 3 pure wrappers: `adminAddRosterMember`, `adminUpdateRosterMember`, `adminRemoveRosterMember`. | **Remove wrappers**; controller calls `teamsService.*` with `adminActor(req.userId!)`. Remove the `teamsService` and `adminActor` imports from `teams.admin.service.ts`. Keep list/get/create/update/delete/restore/`adminGetRoster` (real admin logic). |
+| organizations | `organizations.admin.service` has independent logic (managerId, status, restore). | None. |
+| people / users | `users.admin.service.updateUserByAdmin` is a pure wrapper over `applyProfileUpdate`; `getUserById` is a duplicate of `user.service.getUserById`. Other methods (create, delete, reset password, admin status, permissions, list with hidden admins) are real logic. | **Remove** `updateUserByAdmin` and `getUserById` from `users.admin.service.ts`. `users.admin.controller` calls `applyProfileUpdate` (named export) and `userService.getUserById` directly. `assertTargetAccessible` stays in the admin service and is still called first. |
+| age-categories | Admin-only module, no user-facing counterpart. | None. |
+| seasons | No admin folder; mutations gated by permissions in the same router. | None. |
+
+Controller change for teams (`teams.admin.controller.ts`):
+
+```ts
+import teamsService from "../teams.service.ts";
+import { adminActor } from "../../../authz/actor.ts";
 // ...
-roles: z
-  .array(z.enum(selfRegisterRoles))
-  .default([])
-  .openapi({ example: ["PLAYER"] }),
+const member = await teamsService.addRosterMember(
+  Number(req.params.teamId), input, adminActor(req.userId as number));
 ```
 
-(Remove `.min(1, messages.error.auth.atLeastOneRoleRequired)`. Keep the `messages` import only if still used elsewhere in the file; it is.)
+(same for update/remove). Behavior is identical; only the call chain is shorter.
 
-`user.validation.ts`: `allRoles = ["COACH", "PLAYER", "REFEREE"] as const`.
+---
 
-`users.admin.validation.ts`:
+## 7. Cross-module import rules (D10)
 
-```ts
-const adminAssignableRoles = ["COACH", "PLAYER", "REFEREE"] as const;
-// adminCreateUserSchema.roles:
-roles: z.array(z.enum(adminAssignableRoles)).default([]).openapi({ example: ["COACH"] }),
-```
+Existing cross-module imports in the codebase: `teams.service` imports `organizations.policy` and the league head-coach sync; `auth.service` imports `user.service`; `users.admin.service` imports `user.service`; `teams.admin.service` imports `teams.service`. The convention below makes these legitimate and uniform:
 
-`dropdowns.validation.ts`:
+1. A module may import from another module's **service, policy, or lib** file. Never from its routes, controller, or docs.
+2. Dependencies are **one-directional**. No cycles (leagues never imports `teams.service`; teams imports leagues' `lib`).
+3. Cross-module imports are listed in the "Relationships" section of that module's doc.
+4. Code that other modules import should live in `lib/` (or the main service) and be named in the docs. Today the only such file is `leagues/lib/league.head-coach-sync.ts`.
 
-```ts
-role: z.enum(["COACH", "PLAYER", "REFEREE"]).optional().openapi({
-  example: "COACH",
-  description: "Filter by domain role. Omit to return users with any role.",
-}),
-```
+Why `head-coach-sync` stays: it runs inside the team's Prisma transaction (`tx`), so moving it behind an event/hook would break atomicity. Moving it into `teams` only inverts the dependency while the code still queries `league*` tables.
 
-Registering with an empty `roles` array is already safe in services: `roles: { create: [] }` is valid Prisma.
+---
 
-### 4.5 Services
+## 8. Documentation updates (D11)
 
-`auth.service.ts` (D3): delete the `SELF_REGISTER_ROLES` constant and the following block from `register`:
+| Doc | Change |
+|---|---|
+| `docs/03-project-structure.md` | Replace `competition/...` line with `leagues/` (`services/`, `lib/`, `admin/`); add a short note on the 3+ services rule. |
+| `docs/08-conventions.md` | Add: (a) `services/` folder when a module has 3+ services; (b) `lib/` for module-private logic, with the cross-module import rules from section 7; (c) admin pattern rule from section 6; (d) `*.admin.validation.ts` exists only when it contains admin-specific schemas. |
+| `docs/modules/competition.md` | Rename to `docs/modules/leagues.md`; update sub-module section and file names (`services/leagues.service.ts`, `lib/*`, flattened `admin/`); mention `evaluateUnregister`; relationships: add "teams imports `lib/league.head-coach-sync.ts`". |
+| `docs/09-authorization.md` | Update the league paragraph (`leagueTeamPolicy`, `rosterRowPolicy`, `evaluateUnregister`) and paths. |
+| `docs/02-architecture.md` | Add one line on the admin pattern and cross-module import rules. |
+| `docs/modules/teams.md` | Admin roster mutations now call `teams.service` directly with `adminActor`; update the head-coach-sync import path. |
+| `docs/modules/people.md` | `users.admin.service` no longer has `updateUserByAdmin` / `getUserById`; admin controller delegates to `user.service`. |
+| `docs/modules/shared.md`, `docs/status/*`, `docs/04-data-model.md` | Update any `competition` path references (search for `competition`). |
 
-```ts
-if (roles.some((role) => !SELF_REGISTER_ROLES.includes(role))) {
-  throw new AppError(400, messages.error.auth.invalidSelfRegisterRole);
-}
-```
+---
 
-Keep `const roles = [...new Set(input.roles)];`. Imports (`Role`, `AppError`, `messages`) remain used elsewhere in the file.
+## 9. Execution order
 
-`organizations.admin.service.ts`: the manager only needs to be an active user. Replace `assertManagerCandidate` and update its two call sites:
+1. **Branch**, make sure the working tree is clean, run `npx tsc --noEmit` and `npm test` to record a green baseline.
+2. **Move files** (section 2) with `git mv`; create `services/`, `lib/`, `admin/`; delete `league-teams.admin.validation.ts`.
+3. **Fix imports** inside the module, then outside (section 3). Run `npx tsc --noEmit` until clean. (`tsx` does not type-check, so the compiler run is mandatory.)
+4. **Rename** `leagues.public.service` to `services/leagues.service.ts` and update the controller import. (Rename the object/import alias consistently.)
+5. **Policy**: add `evaluateUnregister`, `UNREGISTER_IN_ACTIVE`, `lockReasonMessage` (section 4, 5.2); update `unregisterTeam`.
+6. **Messages and logging**: sections 5.1, 5.2 (new message key), 5.3.
+7. **Admin unification**: teams (wrappers removed, controller updated), users (wrapper and duplicate removed). Section 6.
+8. **Tests**: keep `league.rules.test.ts`; add `leagues.policy.test.ts` (unregister + roster-row matrix) and a test for `evaluateActiveRequirements` / `initialStatusForDeadline`.
+9. **Docs** (section 8).
+10. **Verify**:
+    - `npx tsc --noEmit` and `npm test` are green.
+    - Server boots; `/docs` (Swagger) renders all league, admin-league and admin-league-team paths (a wrong docs import silently drops paths).
+    - Smoke test: public `GET /leagues`; admin create league, register team, add members; manager unregister in REGISTRATION (OK) and ACTIVE (409); head coach removing own row (403 with the new message); `addMembers` with a bad id (404 listing the id); teams admin roster add/update/remove; admin users update and get-by-id.
+    - Search the repo for leftover `competition` references: `grep -rn "competition" src docs`.
+11. Commit in small steps (moves alone first, then behavior changes) so the move diff stays reviewable.
 
-```ts
-async function assertActiveUser(userId: number) {
-  const user = await prisma.user.findFirst({
-    where: { id: userId, status: "ACTIVE" },
-    select: { id: true },
-  });
-  if (!user) {
-    throw new AppError(404, messages.error.organization.managerNotFound);
-  }
-}
-// adminCreateOrganization: await assertActiveUser(data.managerId);
-// adminUpdateOrganization: await assertActiveUser(data.managerId);
-```
+---
 
-This removes the `UserRole` query, the unused `fullName` select, the unused return value, and the `managerMissingRole` usage. Single-manager replace logic in `adminUpdateOrganization` stays exactly as is: it is the admin-only transfer mechanism, and the old "role left behind" gap disappears with the role.
+## 10. Risks and notes
 
-`roles.service.ts`: remove `ORG_MANAGER: "مدیر باشگاه"` from `ROLE_LABELS_FA`. `GET /roles` then returns three items automatically from `Object.values(Role)`.
-
-`dropdowns.service.ts` (D1): delete `getManagerCandidates` (and its comment) and remove it from the default export.
-
-### 4.6 Dropdowns controller and routes (D1)
-
-- `dropdowns.controller.ts`: delete `getManagerCandidates`, remove it from the export, and change the `getUsers` query type to `role?: "COACH" | "PLAYER" | "REFEREE"`.
-- `dropdowns.routes.ts`: delete the `/manager-candidates` route block.
-
-### 4.7 Messages (`src/language/message.ts`)
-
-Delete exactly these keys (all become unused after the steps above):
-
-- `error.organization.managerMissingRole`
-- `error.auth.atLeastOneRoleRequired`
-- `error.auth.invalidSelfRegisterRole`
-
-Add nothing.
-
-### 4.8 Swagger docs
-
-Important: `roleEnum` is registered as component `Role` in three files (`auth.docs.ts`, `user.docs.ts`, `users.admin.docs.ts`). All three must be edited **identically** (`["COACH","PLAYER","REFEREE"]`), otherwise the OpenAPI generator throws a duplicate-component conflict at startup.
-
-| File                                | Edit                                                                                                                                                                                                                                            |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `roles.docs.ts`                     | `assignableRoleEnum` -> three values                                                                                                                                                                                                            |
-| `auth.docs.ts`                      | `roleEnum` -> three values. Register description: roles are optional.                                                                                                                                                                           |
-| `user.docs.ts`                      | `roleEnum` -> three values                                                                                                                                                                                                                      |
-| `users.admin.docs.ts`               | `roleEnum` -> three values. Create-user description: "any domain role (COACH, PLAYER, REFEREE), or none".                                                                                                                                       |
-| `dropdowns.docs.ts`                 | Delete the `/dropdowns/manager-candidates` registration. `userDropdownItemSchema` example -> `["COACH"]`. `/dropdowns/users` description: replace "(e.g. ORG_MANAGER)" with "(e.g. COACH)".                                                     |
-| `organizations.docs.ts`             | POST: description "Any authenticated user can create an organization and becomes its manager"; **remove the 403 response** (no gate remains). PUT/DELETE: "Requires being a manager of the organization, or an ADMIN." Keep their 403 (policy). |
-| `organizations.admin.docs.ts`       | `managerId` descriptions -> "Any ACTIVE user". POST 400 -> generic `errorResponseSchema(400, "Validation failed")`. Update 404 description -> "Organization or new manager not found". Add a 404 on POST for "Manager user not found".          |
-| `organizations.admin.validation.ts` | `managerIdField` description -> "Id of an ACTIVE user who becomes the manager"                                                                                                                                                                  |
-| `teams.docs.ts`                     | POST/PUT/DELETE/logo descriptions: replace "Requires ORG_MANAGER or ADMIN..." with "Requires being a manager of the organization, or an ADMIN." POST 403 description -> "Not a manager of the target organization".                             |
-
-### 4.9 Project documentation (`docs/`)
-
-| File                       | Edit                                                                                                                                                                                                                  |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `04-data-model.md`         | Role enum is now `COACH, PLAYER, REFEREE`; add: organization management is the `OrganizationManager` relation, not a role.                                                                                            |
-| `02-architecture.md`       | Note that organization/team authorization is policy-only (no `verifyRole`); `verifyRole` is used only by self-profile routes.                                                                                         |
-| `09-authorization.md`      | Step 5 of the lifecycle: coarse `verifyRole` gates are used only on players/coaches/referees self routes.                                                                                                             |
-| `modules/organizations.md` | Mutations require `verifyJWT` + `attachActor` only; any authenticated user can create and becomes manager; edit/delete via `organizationPolicy`. Admin `PUT` with `managerId` is the only way to transfer management. |
-| `modules/teams.md`         | Mutations require `verifyJWT` + `attachActor`; record checks via `teamPolicy`/`rosterPolicy` (remove the `verifyRole` mentions).                                                                                      |
-| `modules/people.md`        | Self-registration accepts `PLAYER`, `COACH`, `REFEREE`, or no role.                                                                                                                                                   |
-| `modules/shared.md`        | Remove `manager-candidates` from the dropdowns list; roles list updated.                                                                                                                                              |
-| `status/current-state.md`  | Add under "Known Issues Fixed": `ORG_MANAGER` role removed; management is relation-only (migration `<new>`).                                                                                                          |
-
-## 5. Dead-code and cleanliness checklist (mandatory)
-
-The goal is that **no trace of the role or its helpers remains**. No commented-out code, no compatibility shims, no "legacy" notes in code.
-
-- [ ] `verifyRole` imports removed from `organizations.routes.ts` and `teams.routes.ts`
-- [ ] `verifyRole` "No role found" branch removed
-- [ ] `SELF_REGISTER_ROLES` constant and its check removed
-- [ ] `getManagerCandidates`: service function, controller handler, route, Swagger path, export entries all removed
-- [ ] `assertManagerCandidate` replaced; no leftover `UserRole` query, unused `fullName` select or unused return
-- [ ] Messages `managerMissingRole`, `atLeastOneRoleRequired`, `invalidSelfRegisterRole` deleted
-- [ ] `ROLE_LABELS_FA.ORG_MANAGER` removed
-- [ ] `"PUBLIC"` removed from admin-assignable roles
-- [ ] All Swagger descriptions/examples that mention the role fixed (no stale "Requires ORG_MANAGER")
-- [ ] No unused imports left in any touched file (`tsc` will not fail on this; check by eye or ESLint `no-unused-vars`)
-- [ ] Old migrations untouched
-
-## 6. Verification
-
-1. **Type check:** `npx tsc --noEmit` must pass (the `Record<Role, string>` map and enum usages will flag any miss).
-2. **Grep must be clean** outside old migrations:
-
-   ```bash
-   grep -rniE "org_manager|managerMissingRole|manager-candidates|getManagerCandidates|invalidSelfRegisterRole|atLeastOneRoleRequired|SELF_REGISTER_ROLES|\"PUBLIC\"" src docs --include=*.ts --include=*.md --exclude-dir=migrations
-   ```
-
-   (Hits inside `src/prisma/migrations/` are expected history.)
-
-3. **Swagger:** start the server in non-production and open `/docs`; the app must boot (a duplicate `Role` component would throw at import). Confirm no ORG_MANAGER value appears anywhere.
-4. **Migration test on a copy of the DB** containing `ORG_MANAGER` rows: run `SELECT COUNT(*) FROM user_roles WHERE role='ORG_MANAGER';` before, apply, and confirm 0 such rows and `organization_managers` row count unchanged.
-5. **Manual / automated scenarios:**
-
-   | #   | Scenario                                                                   | Expected                                                                                               |
-   | --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-   | 1   | Register with no roles                                                     | 201                                                                                                    |
-   | 2   | Register with `["ORG_MANAGER"]`                                            | 400 (validation)                                                                                       |
-   | 3   | Roleless user `POST /organizations`                                        | 201; appears in `GET /organizations` with `isManager: true`, `can` all true                            |
-   | 4   | Same user `PUT`/`DELETE` own organization                                  | 200                                                                                                    |
-   | 5   | Different user (not manager/member) `PUT /organizations/:id`               | 403 (policy), uploaded file cleaned up                                                                 |
-   | 6   | Manager creates team in own org / in someone else's org                    | 201 / 403                                                                                              |
-   | 7   | Manager without `COACH` role adds roster member                            | 201                                                                                                    |
-   | 8   | Head coach adds a PLAYER; adds a COACH; plain PLAYER member tries to add   | 201; 403 (`coachOnlyManagesPlayer` / not allowed); 403                                                 |
-   | 9   | Admin `PUT /admin/organizations/:id` with new `managerId`                  | New manager can edit; old manager gets 403 on edit and 403 on `GET /organizations/:id` unless a member |
-   | 10  | Admin create/update organization with non-existent or inactive `managerId` | 404                                                                                                    |
-   | 11  | Roleless user calls `GET /players/me`                                      | **403** (not 401)                                                                                      |
-   | 12  | `GET /roles`                                                               | 3 items                                                                                                |
-   | 13  | Admin create user / update roles with `ORG_MANAGER` or `PUBLIC`            | 400                                                                                                    |
-   | 14  | `GET /dropdowns/manager-candidates`                                        | 404 (route gone); `GET /dropdowns/users` works                                                         |
-
-## 7. Deployment and rollback
-
-- Back up the database first.
-- Deploy code and run the migration in the same release (D6). Old tokens still carrying `ORG_MANAGER` in `roles` remain harmless for up to 15 minutes; no forced re-login needed.
-- Rollback: Prisma has no down-migrations. To roll back, restore the backup, or add a new migration re-adding the enum value. Role rows are fully reconstructible, because the role was always redundant with the relation:
-
-  ```sql
-  INSERT IGNORE INTO user_roles (user_id, role)
-  SELECT DISTINCT user_id, 'ORG_MANAGER' FROM organization_managers;
-  ```
-
-## 8. Frontend impact (communicate before release)
-
-1. Remove "club manager" from registration and profile role pickers; `roles` may be empty or omitted.
-2. Show the "Create organization" button to every logged-in user; hide/redirect for guests.
-3. Drive "My organizations" and management menus from `GET /organizations` (`isManager`, `can`) instead of `roles`.
-4. Admin organization form: load manager options from `GET /dropdowns/users` (D1) instead of `manager-candidates`.
-5. Admin user forms: the role list loses `ORG_MANAGER` (and `PUBLIC` if it was ever shown); `GET /roles` already reflects it.
-6. Handle `403` (not `401`) for roleless users on profile-type routes (D4).
-
-## 9. Risks and accepted trade-offs
-
-| Risk                                                 | Note                                                                                                     |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Unlimited organization creation by any user          | Accepted for now (explicit requirement). Revisit later with a per-user cap or `INACTIVE`-until-approved. |
-| Manager cannot hand over management on their own     | Accepted: admin-only transfer via `PUT /admin/organizations/:id`.                                        |
-| Transient upload by non-managers before the 403      | Bounded (2 MB) and cleaned by services; consistent with existing handling.                               |
-| Users who had only `ORG_MANAGER` now have zero roles | Valid and intended; their `organization_managers` access is intact.                                      |
-
-## 10. Noticed while reading (not part of this plan)
-
-- `users.admin.service.listUsers`: the `role` filter is applied only for `SUPER_ADMIN` (`else if`), so a plain ADMIN's `role` query is silently ignored.
-- Messages `organization.managerNotActive` and `team.userNotActive` appear unused.
-
-## 11. Definition of done
-
-- Migration applied; `Role` enum has three values; no `ORG_MANAGER` rows exist.
-- `tsc` passes, grep is clean (section 6), app boots and `/docs` renders.
-- Every scenario in section 6 passes.
-- Section 5 checklist fully ticked: no dead code, no stale docs, no leftover messages or routes.
+- **Import depth errors** are the main risk of the move; the compiler catches them.
+- **Swagger registration** relies on side-effect imports in `swagger.ts`; verify paths load (section 9, step 10).
+- **No behavior change** except: clearer 403 message for own-row lock, ids in the 404 message, logged lifecycle errors. Frontend should be told about the 404 message format change (ids appended after a colon).
+- `lib/` to `leagues.policy.ts` import direction is intentional (see section 3); do not let `league.rules.ts` or `league.types.ts` import the policy.
+- Known follow-ups, not in this plan: shared constant/filter for "team eligible for registration" (`listEligibleTeams` vs `registerTeam`), merging `LeagueTeamStatus` and `LeagueTeamMemberStatus` enums, splitting `league.mapper.ts` into includes and mappers if it grows, a multi-instance-safe scheduler if the API is ever run with more than one process.

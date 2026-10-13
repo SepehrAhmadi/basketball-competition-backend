@@ -87,10 +87,12 @@ is always checked before the policy denial (403).
 ## Adding a new domain
 
 1. Create `<domain>.policy.ts` with a `<Domain>Can` type and a pure policy function.
-2. Add `verifyJWT` + `attachActor` in the domain routes (`optionalJWT` + `optionalActor` remain only for future public routes).
+2. Add `verifyJWT` + `attachActor` in the domain routes; public league routes (`GET /leagues*`) use `optionalJWT` + `optionalActor` so guests read and logged-in callers get `can` flags.
 3. Pass `req.actor` from controller to service; drop the `userId/roles/adminLevel` params it replaces.
 4. In the service: 404 first, compute `can = policy(actor, scope)`, enforce with `assertAllowed`, return `can` in the response.
 5. Register the `...Can` schema in `<domain>.docs.ts` and note authenticated semantics.
+
+> Note — league rosters: `leagueTeamPolicy(league, access)`, `rosterRowPolicy(access, league, target)`, and `evaluateUnregister(actor, league, orgId)` (identity 403 → ACTIVE 409 → status/window 409) are pure; the service loads `LeagueTeamAccess` from the DB (league roster row in the league's season), not from `loadActor` (active season only). Paths live under `src/modules/leagues/` (`leagues.policy.ts`, `services/`, `lib/`).
 
 ## Conventions and pitfalls
 

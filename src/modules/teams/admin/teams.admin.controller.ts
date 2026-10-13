@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import teamsAdminService from "./teams.admin.service.ts";
+import teamsService from "../teams.service.ts";
+import { adminActor } from "../../../authz/actor.ts";
 import { messages } from "../../../language/message.ts";
 import apiResponse from "../../../utils/apiResponse.ts";
 
@@ -101,10 +103,10 @@ async function addRosterMember(req: Request, res: Response, next: NextFunction) 
       jerseyNumber?: number;
       isHeadCoach?: boolean;
     };
-    const member = await teamsAdminService.adminAddRosterMember(
+    const member = await teamsService.addRosterMember(
       Number(req.params.teamId),
       input,
-      req.userId as number,
+      adminActor(req.userId as number),
     );
     return apiResponse.sendResponse(res, 201, messages.success.team.rosterMemberAdded, member);
   } catch (err) {
@@ -120,11 +122,11 @@ async function updateRosterMember(req: Request, res: Response, next: NextFunctio
       jerseyNumber?: number | null;
       isHeadCoach?: boolean;
     };
-    const member = await teamsAdminService.adminUpdateRosterMember(
+    const member = await teamsService.updateRosterMember(
       Number(req.params.teamId),
       Number(req.params.memberId),
       input,
-      req.userId as number,
+      adminActor(req.userId as number),
     );
     return apiResponse.sendResponse(res, 200, messages.success.team.rosterMemberUpdated, member);
   } catch (err) {
@@ -135,11 +137,11 @@ async function updateRosterMember(req: Request, res: Response, next: NextFunctio
 async function removeRosterMember(req: Request, res: Response, next: NextFunction) {
   try {
     const { seasonId } = (req.validatedBody ?? req.body) as { seasonId: number };
-    await teamsAdminService.adminRemoveRosterMember(
+    await teamsService.removeRosterMember(
       Number(req.params.teamId),
       Number(req.params.memberId),
       seasonId,
-      req.userId as number,
+      adminActor(req.userId as number),
     );
     return apiResponse.sendResponse(res, 200, messages.success.team.rosterMemberRemoved);
   } catch (err) {

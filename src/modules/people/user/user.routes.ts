@@ -2,6 +2,7 @@ import { Router } from "express";
 import validate from "../../../middleware/validate.ts";
 import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
 import createUploader from "../../../middleware/upload/createUploader.ts";
+import uploadConfig from "../../../config/upload.config.ts";
 import userValidation from "./user.validation.ts";
 import userController from "./user.controller.ts";
 
@@ -12,8 +13,7 @@ router.use(verifyJWT);
 
 const avatarUpload = createUploader({
   destination: "avatars",
-  maxSizeMb: 2,
-  allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+  ...uploadConfig.avatar,
 });
 
 router.get("/me", userController.getMe);

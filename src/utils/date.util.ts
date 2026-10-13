@@ -25,4 +25,15 @@ export function gregorianToJalali(value: Date | null): string | null {
   return moment.utc(value).format(JALALI_FORMAT);
 }
 
+export function jalaliToGregorianOrNull(
+  value: string | null | undefined,
+): Date | null {
+  if (!value) return null;
+  return jalaliToGregorian(value);
+}
+
+export function sameDate(a: Date | null, b: Date | null): boolean {
+  return (a?.getTime() ?? null) === (b?.getTime() ?? null);
+}
+
 

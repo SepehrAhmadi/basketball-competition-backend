@@ -60,6 +60,31 @@ export const PERMISSION_CATALOG = [
       { code: "age-categories.delete", label: "حذف رده سنی" },
     ],
   },
+  {
+    title: "لیگ‌ها",
+    permissions: [
+      { code: "leagues.view", label: "مشاهده لیگ‌ها" },
+      { code: "leagues.create", label: "ایجاد لیگ" },
+      { code: "leagues.update", label: "ویرایش لیگ" },
+      { code: "leagues.delete", label: "حذف لیگ" },
+    ],
+  },
+  {
+    title: "ثبت‌نام تیم در لیگ",
+    permissions: [
+      { code: "league-teams.view", label: "مشاهده تیم‌های لیگ" },
+      { code: "league-teams.create", label: "ثبت‌نام تیم در لیگ" },
+      { code: "league-teams.delete", label: "حذف تیم از لیگ" },
+    ],
+  },
+  {
+    title: "راستر لیگ",
+    permissions: [
+      { code: "league-roster.view", label: "مشاهده راستر لیگ" },
+      { code: "league-roster.create", label: "افزودن عضو به راستر لیگ" },
+      { code: "league-roster.delete", label: "حذف عضو از راستر لیگ" },
+    ],
+  },
 ] as const;
 
 // Union of the exact code literals — derived from the catalog itself (NOT from

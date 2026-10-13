@@ -1,7 +1,8 @@
 # Architecture
 
 - Style: Modular Monolith — one Express app split into self-contained domain folders under `src/modules/` sharing one Prisma client and one router.
-- Layering inside a module: `routes` (wiring + middleware order) → `controller` (req/res mapping only) → `service` (business logic + Prisma queries). Validation runs as middleware before the controller, never called by it.
+- Layering inside a module: `routes` (wiring + middleware order) → `controller` (req/res mapping only) → `service` (business logic + Prisma queries). Validation runs as middleware before the controller, never called by it. Modules with 3+ services group them in `services/`; module-private logic lives in `lib/`.
+- Admin endpoints without extra logic call the main service directly with `adminActor(req.userId)`; an admin service exists only for admin-specific logic. Cross-module imports target another module's service, policy, or `lib` only — never routes/controller/docs — and stay one-directional (no cycles).
 
 ## Auth flow
 
@@ -9,7 +10,6 @@
 2. Service signs 15-min access token (`userId`, `roles`, `adminLevel`, `permissions`) + 1-day refresh token persisted on `User`.
 3. Client sends `Authorization: Bearer <token>`; `verifyJWT` verifies signature and attaches `req.userId/roles/adminLevel/permissions`.
 4. `verifyRole` / `verifyAdminLevel` / `verifyPermission` check token claims without DB access (`SUPER_ADMIN` bypasses permission checks).
-5. `verifyOrgAccess` / `verifyTeamAccess` do DB ownership checks where record scope matters.
 5. Domain policies (`organizations.policy.ts`, `teams.policy.ts`) compute per-record `can` flags from `req.actor`; services enforce with `assertAllowed` (403). No `verifyOrgAccess`/`verifyTeamAccess` middleware exists — ownership lives in policies + service.
 6. Multi-role supported via `UserRole` rows (`[userId, role]` unique); token carries the full `roles` array.
 

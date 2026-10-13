@@ -23,7 +23,7 @@ import {
 // ---- request schemas (multipart / JSON bodies for docs) ----
 
 const teamLogoField = z.string().openapi({
-  description: "Team logo image (JPEG/PNG/WEBP, max 1MB)",
+  description: "Team logo image (JPEG/PNG/WEBP, max 2MB)",
   type: "string",
   format: "binary",
 });

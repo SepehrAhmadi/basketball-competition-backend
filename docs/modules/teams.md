@@ -15,9 +15,13 @@ Manages teams and their per-season rosters of coaches and players.
 - Team create/update/soft-delete with Jalali `foundedDate` conversion and logo handling (server-generated URL, `basename` + prefix guard, orphan cleanup); org transfer requires managing the target org; `admin/` adds status filter + `POST /:teamId/restore` (`teams.restore`).
 - Roster read (resolved season — explicit `seasonId` or active — `status = ACTIVE`, user include) with top-level `can` (`assignHeadCoach/manageCoaches/managePlayers`) + per-item `can { edit, delete }` (head-coach rows manager-only).
 - Roster add/update/remove with head-coach demotion transaction, `P2002` → 409 mapping, reactivation of `DELETED` rows, jersey-unique handling, and role rules (regular coaches manage players only; only admins/org managers assign head coach).
+- Head-coach sync: `addRosterMember` (new/reactivated head coach) and `updateRosterMember` (promotion) call `syncHeadCoachToRegistrationLeagues` (from `leagues/lib/league.head-coach-sync.ts`, batched via `createMany`/`updateMany`) in the same transaction, adding the head coach to ACTIVE league registrations whose league is in `REGISTRATION` for that season. This is an intentional module-level dependency: teams imports the leagues helper, leagues never imports `teams.service` (no cycle).
+- League guards: `isLockedByLeague` blocks remove and role/jersey updates with 409 `memberInActiveLeague` when the member is in an `ACTIVE`/`FINISHED` league roster; removes and role changes otherwise cascade-soft-delete the league roster rows.
 
 ## Relationships with other modules
 
 - → organizations: `organizationPolicy(actor, organizationId).createTeam` gates team create; `managedOrgIds` drives `teamPolicy`/`rosterPolicy` (shared FK, no service import).
 - → seasons: resolves explicit `seasonId` or active season via `getActiveSeasonOrThrow`; roster rows carry `seasonId` (shared FK, no service import).
 - → people: validates roster adds against `User` + `UserRole` (shared FK, no service import).
+- → leagues: league roster is a selection of `TeamSeasonMember`; guards above keep selections consistent.
+- Admin roster mutations (`admin/` controller) call `teams.service` directly with `adminActor` — no admin-service wrappers.

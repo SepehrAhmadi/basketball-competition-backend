@@ -16,6 +16,12 @@ import refereeLevelsRoutes from "../modules/shared/referee-levels/referee-levels
 import seasonsRoutes from "../modules/seasons/seasons.routes.ts";
 import ageCategoriesAdminRoutes from "../modules/age-categories/admin/age-categories/age-categories.admin.routes.ts";
 import ageCategoryCutoffsAdminRoutes from "../modules/age-categories/admin/age-category-cutoffs/age-category-cutoffs.admin.routes.ts";
+import leagueStatusesRoutes from "../modules/shared/league-statuses/league-statuses.routes.ts";
+import leaguesRoutes from "../modules/leagues/leagues.routes.ts";
+import leaguesAdminRoutes from "../modules/leagues/admin/leagues.admin.routes.ts";
+import leagueTeamsAdminRoutes, {
+  eligibleTeamsRouter,
+} from "../modules/leagues/admin/league-teams.admin.routes.ts";
 
 const router = Router();
 
@@ -36,5 +42,10 @@ router.use("/referee-levels", refereeLevelsRoutes);
 router.use("/seasons", seasonsRoutes);
 router.use("/admin/age-categories", ageCategoriesAdminRoutes);
 router.use("/admin/age-category-cutoffs", ageCategoryCutoffsAdminRoutes);
+router.use("/league-statuses", leagueStatusesRoutes);
+router.use("/leagues", leaguesRoutes);
+router.use("/admin/leagues/:leagueId/teams", leagueTeamsAdminRoutes);
+router.use("/admin/leagues/:leagueId/eligible-teams", eligibleTeamsRouter);
+router.use("/admin/leagues", leaguesAdminRoutes);
 
 export default router;
