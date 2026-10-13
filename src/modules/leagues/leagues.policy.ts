@@ -1,12 +1,12 @@
-import type { Actor } from "../../../authz/actor.ts";
-import AppError from "../../../utils/appError.ts";
-import { messages } from "../../../language/message.ts";
+import type { Actor } from "../../authz/actor.ts";
+import AppError from "../../utils/appError.ts";
+import { messages } from "../../language/message.ts";
 import {
   canEditByStatus,
   isRosterWindowOpen,
-} from "../shared/league.rules.ts";
-import type { LeagueTeamAccess } from "../shared/league.types.ts";
-import type { LeagueStatus } from "../../../prisma/generated/prisma/enums.ts";
+} from "./lib/league.rules.ts";
+import type { LeagueTeamAccess } from "./lib/league.types.ts";
+import type { LeagueStatus } from "../../prisma/generated/prisma/enums.ts";
 
 export interface LeagueCan {
   view: boolean;
@@ -30,7 +30,11 @@ export interface LeagueState {
   rosterDeadline: Date | null;
 }
 
-export type Denial = "NOT_AUTHORIZED" | "STATUS_CLOSED" | "WINDOW_CLOSED";
+export type Denial =
+  | "NOT_AUTHORIZED"
+  | "STATUS_CLOSED"
+  | "WINDOW_CLOSED"
+  | "UNREGISTER_IN_ACTIVE";
 
 export type Evaluation =
   | { allowed: true }
@@ -45,6 +49,8 @@ export function throwDenial(reason: Denial): never {
       throw new AppError(409, messages.error.league.registrationClosed);
     case "WINDOW_CLOSED":
       throw new AppError(409, messages.error.league.rosterClosed);
+    case "UNREGISTER_IN_ACTIVE":
+      throw new AppError(409, messages.error.league.cannotUnregisterInActive);
   }
 }
 
@@ -65,6 +71,24 @@ export function evaluateRegister(
   if (!actor.isAdmin && !isRosterWindowOpen(league.rosterDeadline, now))
     return { allowed: false, reason: "WINDOW_CLOSED" };
   return { allowed: true };
+}
+
+/**
+ * Single source for "may this actor unregister a team?".
+ * Order: identity (403) → ACTIVE league (409) → shared status/window rule.
+ * Head coaches are rejected at the identity step.
+ */
+export function evaluateUnregister(
+  actor: Actor,
+  league: LeagueState,
+  organizationId: number,
+  now?: Date,
+): Evaluation {
+  if (!actor.isAdmin && !actor.managedOrgIds.has(organizationId))
+    return { allowed: false, reason: "NOT_AUTHORIZED" };
+  if (league.status === "ACTIVE")
+    return { allowed: false, reason: "UNREGISTER_IN_ACTIVE" };
+  return evaluateRegister(actor, league, organizationId, now);
 }
 
 /**
@@ -114,6 +138,7 @@ export function leagueTeamPolicy(
     case "ADMIN":
       return {
         manageRoster: allowed,
+        // Mirrors evaluateUnregister: admins may unregister unless ACTIVE.
         unregister: allowed && league.status !== "ACTIVE",
       };
     case "MANAGER":
@@ -147,6 +172,13 @@ export function rosterRowPolicy(
       return { canToggle: false, lockReason: "MANAGER_ONLY" };
   }
   return { canToggle: true, lockReason: null };
+}
+
+/** Picks the 403 message matching why a head-coach row toggle was locked. */
+export function lockReasonMessage(reason: LockReason): string {
+  return reason === "OWN_ROW"
+    ? messages.error.leagueRoster.ownRowLocked
+    : messages.error.leagueRoster.headCoachRowManagerOnly;
 }
 
 

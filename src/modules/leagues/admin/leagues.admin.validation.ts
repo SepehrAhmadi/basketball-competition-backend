@@ -1,10 +1,10 @@
-import "../../../../../swagger/zod-extend.ts";
+import "../../../swagger/zod-extend.ts";
 import { z } from "zod";
-import { paginationQuerySchema } from "../../../../../shared/schemas.validation.ts";
-import { messages } from "../../../../../language/message.ts";
-import { jalaliToGregorian } from "../../../../../utils/date.util.ts";
-import { LEAGUE_STATUS_VALUES } from "../../../shared/league.rules.ts";
-import { leagueIdParamSchema } from "../../leagues.validation.ts";
+import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
+import { messages } from "../../../language/message.ts";
+import { jalaliToGregorian } from "../../../utils/date.util.ts";
+import { LEAGUE_STATUS_VALUES } from "../lib/league.rules.ts";
+import { leagueIdParamSchema } from "../leagues.validation.ts";
 
 export { leagueIdParamSchema };
 

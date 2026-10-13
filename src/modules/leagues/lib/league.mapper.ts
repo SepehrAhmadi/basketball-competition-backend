@@ -5,7 +5,7 @@ import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
 import type {
   LeagueTeamCan,
   LockReason,
-} from "../leagues/leagues.policy.ts";
+} from "../leagues.policy.ts";
 
 export const leagueInclude = {
   ageCategoryCutoff: {

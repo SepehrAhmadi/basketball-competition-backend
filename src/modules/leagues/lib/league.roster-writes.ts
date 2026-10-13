@@ -5,7 +5,7 @@ import { isPlayerAgeEligible } from "./league.rules.ts";
 import { memberInclude } from "./league.mapper.ts";
 import type { LeagueContext, LeagueTeamAccess } from "./league.types.ts";
 import { findPlayerUserIdsInOtherTeams } from "./league.players.ts";
-import { rosterRowPolicy } from "../leagues/leagues.policy.ts";
+import { rosterRowPolicy, lockReasonMessage } from "../leagues.policy.ts";
 
 export type AddableRow = {
   id: number;
@@ -33,8 +33,14 @@ export async function loadAddableRows(
     },
     include: { user: { select: { id: true, birthDate: true } } },
   });
-  if (rows.length !== ids.length)
-    throw new AppError(404, messages.error.leagueRoster.teamMemberNotFound);
+  if (rows.length !== ids.length) {
+    const found = new Set(rows.map((r) => r.id));
+    const missing = ids.filter((id) => !found.has(id));
+    throw new AppError(
+      404,
+      `${messages.error.leagueRoster.teamMemberNotFound}: ${missing.join(", ")}`,
+    );
+  }
 
   for (const row of rows) {
     const decision = rosterRowPolicy(access, league, {
@@ -42,7 +48,7 @@ export async function loadAddableRows(
       isHeadCoach: row.isHeadCoach,
     });
     if (!decision.canToggle)
-      throw new AppError(403, messages.error.leagueRoster.headCoachRowManagerOnly);
+      throw new AppError(403, lockReasonMessage(decision.lockReason));
   }
   return rows;
 }

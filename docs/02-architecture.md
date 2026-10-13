@@ -1,7 +1,8 @@
 # Architecture
 
 - Style: Modular Monolith — one Express app split into self-contained domain folders under `src/modules/` sharing one Prisma client and one router.
-- Layering inside a module: `routes` (wiring + middleware order) → `controller` (req/res mapping only) → `service` (business logic + Prisma queries). Validation runs as middleware before the controller, never called by it.
+- Layering inside a module: `routes` (wiring + middleware order) → `controller` (req/res mapping only) → `service` (business logic + Prisma queries). Validation runs as middleware before the controller, never called by it. Modules with 3+ services group them in `services/`; module-private logic lives in `lib/`.
+- Admin endpoints without extra logic call the main service directly with `adminActor(req.userId)`; an admin service exists only for admin-specific logic. Cross-module imports target another module's service, policy, or `lib` only — never routes/controller/docs — and stay one-directional (no cycles).
 
 ## Auth flow
 

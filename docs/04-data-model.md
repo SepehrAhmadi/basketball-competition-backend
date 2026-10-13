@@ -10,7 +10,7 @@
 - `Coach` — 1-1 coach profile with `CoachDegree`.
 - `Referee` — 1-1 referee profile with `RefreeLevel`.
 
-## Competition Structure
+## Leagues Structure
 
 - `Season` — standalone timebox (`startDate`/`endDate` required, `isActive`); no `organizationId`; has `members` + `ageCategoryCutoffs` relations.
 - `Organization` — club with status; owns `teams` + `teamSeasonMembers`.

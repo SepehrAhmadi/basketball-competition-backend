@@ -1,8 +1,8 @@
 import { Router } from "express";
-import validate from "../../../../../middleware/validate.ts";
-import verifyJWT from "../../../../../middleware/auth/verifyJWT.middleware.ts";
-import verifyAdminLevel from "../../../../../middleware/auth/verifyAdminLevel.middleware.ts";
-import verifyPermission from "../../../../../middleware/auth/verifyPermission.middleware.ts";
+import validate from "../../../middleware/validate.ts";
+import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
+import verifyAdminLevel from "../../../middleware/auth/verifyAdminLevel.middleware.ts";
+import verifyPermission from "../../../middleware/auth/verifyPermission.middleware.ts";
 import leaguesAdminValidation from "./leagues.admin.validation.ts";
 import leaguesAdminController from "./leagues.admin.controller.ts";
 

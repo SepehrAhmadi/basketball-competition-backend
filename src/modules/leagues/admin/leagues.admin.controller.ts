@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import { messages } from "../../../../../language/message.ts";
-import apiResponse from "../../../../../utils/apiResponse.ts";
+import { messages } from "../../../language/message.ts";
+import apiResponse from "../../../utils/apiResponse.ts";
 import leaguesAdminService from "./leagues.admin.service.ts";
 
 async function list(req: Request, res: Response, next: NextFunction) {

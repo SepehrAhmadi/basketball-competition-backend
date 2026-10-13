@@ -1,6 +1,6 @@
-import "../../../swagger/zod-extend.ts";
+import "../../swagger/zod-extend.ts";
 import { z } from "zod";
-import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
+import { paginationQuerySchema } from "../../shared/schemas.validation.ts";
 
 const idField = (example: number) =>
   z.coerce

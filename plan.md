@@ -1,304 +1,297 @@
-# League Module Refactor Plan (`src/modules/competition`)
+# Leagues Module Refactor Plan
 
-Goal: keep every existing behavior, but make the module cleaner, faster, and free of duplicated logic.
+## 0. Goals and decisions (already agreed)
 
-## 0. Ground rules (from the brief)
-
-| Rule | How it is applied |
+| # | Decision |
 |---|---|
-| `leagues/admin/` stays inside `leagues/` | Routes, controllers, validation and docs of `admin/leagues` and `admin/league-teams` do not move. |
-| The big league service gets split | `league-teams.service.ts` is split by responsibility (see Phase 4). `leagues.service.ts` is renamed. |
-| Slow paths are changed | See Phase 5 (writes on GET, N+1 loops, duplicate queries). |
-| Duplicated work is removed | See Phase 2 and Phase 3. |
-| `any` stays unless a real type already exists | See section "Type policy". Nothing new is invented just to remove an `any`. |
-| No behavior change unless listed under "Decisions required" | Every phase must pass the existing tests and `tsc --noEmit`. |
+| D1 | Remove the `competition/` wrapper. The module becomes `src/modules/leagues/` (YAGNI: only one sub-module exists today; games/groups/series can regroup later, it is only an import-path change). |
+| D2 | `competition/shared/` becomes `leagues/lib/` (module-private domain logic, not the global `modules/shared`). |
+| D3 | The three user-facing services move into `leagues/services/`. Project rule: a module with 3+ services uses a `services/` folder; modules with fewer keep a flat layout. |
+| D4 | Rename `leagues.public.service.ts` to `services/leagues.service.ts` (it also holds authenticated reads such as `listMyLeagues`). |
+| D5 | Delete `league-teams.admin.validation.ts` (pure re-export, nothing admin-specific). |
+| D6 | Add `evaluateUnregister` to `leagues.policy.ts` so unregister logic lives in the policy like the other rules. |
+| D7 | `addMembers` not-found error must name the offending ids. |
+| D8 | Admin pattern becomes uniform across ALL modules: if an admin operation has no extra logic, the admin controller calls the main service with `adminActor(req.userId)`. An admin service exists only for admin-specific logic. |
+| D9 | `removeMember` / `loadAddableRows` error message is chosen from `lockReason`; the silent `.catch(() => undefined)` in `updateLeague` must log. |
+| D10 | Cross-module imports are allowed under written rules (section 7). `league.head-coach-sync.ts` stays in `leagues/lib/` and `teams.service` keeps importing it. |
+| D11 | Docs updated (section 8). |
+
+Non-goals: no behavior change except the explicit message/log fixes in D6, D7, D9. No schema or migration changes. No route path changes (`/api/v1/...` stays identical).
 
 ---
 
 ## 1. Target structure
 
-`shared/` stays under `competition/` because games/groups/series will reuse rules, access and lifecycle. Only names change.
-
 ```
-src/modules/competition/
-├── leagues/
-│   ├── leagues.routes.ts
-│   ├── leagues.controller.ts            # calls the three services below
-│   ├── leagues.validation.ts
-│   ├── leagues.docs.ts
-│   ├── leagues.policy.ts                # pure; single source of truth for rules (Phase 3)
-│   ├── leagues.policy.test.ts
-│   ├── leagues.public.service.ts        # was leagues.service.ts (public list/detail, my leagues, my teams, team detail)
-│   ├── league-teams.service.ts          # registration only: list, eligible, register, unregister
-│   ├── league-roster.service.ts         # NEW: members, candidates, add, remove
-│   └── admin/                           # stays here
-│       ├── leagues/                     # routes, controller, validation, docs, service (unchanged location)
-│       └── league-teams/                # routes, controller, validation, docs (service wrapper removed, see 4.4)
-└── shared/
-    ├── league.rules.ts                  # pure rules (unchanged name)
-    ├── league.types.ts                  # NEW: LeagueContext, LeagueTeamAccess, MyRosterRow, RosterRole, LeagueRole
-    ├── league.access.ts                 # DB loaders + pure buildAccess/rolesForTeam
-    ├── league.lifecycle.ts              # was league.auto.ts
-    ├── league.head-coach-sync.ts        # was league.headcoach.sync.ts
-    ├── league.players.ts                # NEW: findPlayerUserIdsInOtherTeams
-    └── league.mapper.ts                 # + includes and candidate mapper moved here
+src/modules/leagues/
+├── leagues.routes.ts
+├── leagues.controller.ts
+├── leagues.validation.ts
+├── leagues.docs.ts
+├── leagues.policy.ts
+├── services/
+│   ├── leagues.service.ts          (was leagues.public.service.ts)
+│   ├── league-teams.service.ts
+│   └── league-roster.service.ts
+├── lib/
+│   ├── league.rules.ts
+│   ├── league.rules.test.ts
+│   ├── league.lifecycle.ts
+│   ├── league.types.ts
+│   ├── league.access.ts
+│   ├── league.mapper.ts
+│   ├── league.candidates.ts
+│   ├── league.roster-writes.ts
+│   ├── league.players.ts
+│   └── league.head-coach-sync.ts   (imported by teams.service, see section 7)
+└── admin/
+    ├── leagues.admin.routes.ts
+    ├── leagues.admin.controller.ts
+    ├── leagues.admin.service.ts
+    ├── leagues.admin.validation.ts
+    ├── leagues.admin.docs.ts
+    ├── league-teams.admin.routes.ts     (exports default router + eligibleTeamsRouter)
+    ├── league-teams.admin.controller.ts
+    └── league-teams.admin.docs.ts
 ```
 
-Naming convention for the whole module: `<kebab-entity>.<role>.ts` (`league-teams.service.ts`, `league.rules.ts`, `league.head-coach-sync.ts`). Use `git mv` so history is preserved.
-
-Note on the head-coach sync file: `teams.service.ts` imports it, so teams depends on competition at the module level. It is not an import cycle (competition never imports `teams.service`), so no restructuring is needed. Treat the file as an intentional public helper and mention it in `docs/modules/teams.md` and `competition.md`.
+Notes:
+- `admin/leagues/` and `admin/league-teams/` sub-folders are flattened to remove the confusing `leagues/admin/leagues/` nesting. File prefixes (`leagues.admin.*`, `league-teams.admin.*`) keep them distinguishable.
+- `league-teams.admin.validation.ts` is deleted. Its routes/docs import from `../leagues.validation.ts` directly.
 
 ---
 
-## 2. Type policy (`any` handling)
+## 2. File move map
 
-**Replace only where a real type already exists:**
+Use `git mv` so history is preserved.
 
-| Current code | Replace with | Why it is safe |
+| Old path (under `src/modules/competition/`) | New path (under `src/modules/leagues/`) |
+|---|---|
+| `leagues/leagues.routes.ts` | `leagues.routes.ts` |
+| `leagues/leagues.controller.ts` | `leagues.controller.ts` |
+| `leagues/leagues.validation.ts` | `leagues.validation.ts` |
+| `leagues/leagues.docs.ts` | `leagues.docs.ts` |
+| `leagues/leagues.policy.ts` | `leagues.policy.ts` |
+| `leagues/leagues.public.service.ts` | `services/leagues.service.ts` |
+| `leagues/league-teams.service.ts` | `services/league-teams.service.ts` |
+| `leagues/league-roster.service.ts` | `services/league-roster.service.ts` |
+| `shared/league.rules.ts` | `lib/league.rules.ts` |
+| `shared/league.rules.test.ts` | `lib/league.rules.test.ts` |
+| `shared/league.lifecycle.ts` | `lib/league.lifecycle.ts` |
+| `shared/league.types.ts` | `lib/league.types.ts` |
+| `shared/league.access.ts` | `lib/league.access.ts` |
+| `shared/league.mapper.ts` | `lib/league.mapper.ts` |
+| `shared/league.candidates.ts` | `lib/league.candidates.ts` |
+| `shared/league.roster-writes.ts` | `lib/league.roster-writes.ts` |
+| `shared/league.players.ts` | `lib/league.players.ts` |
+| `shared/league.head-coach-sync.ts` | `lib/league.head-coach-sync.ts` |
+| `leagues/admin/leagues/leagues.admin.routes.ts` | `admin/leagues.admin.routes.ts` |
+| `leagues/admin/leagues/leagues.admin.controller.ts` | `admin/leagues.admin.controller.ts` |
+| `leagues/admin/leagues/leagues.admin.service.ts` | `admin/leagues.admin.service.ts` |
+| `leagues/admin/leagues/leagues.admin.validation.ts` | `admin/leagues.admin.validation.ts` |
+| `leagues/admin/leagues/leagues.admin.docs.ts` | `admin/leagues.admin.docs.ts` |
+| `leagues/admin/league-teams/league-teams.admin.routes.ts` | `admin/league-teams.admin.routes.ts` |
+| `leagues/admin/league-teams/league-teams.admin.controller.ts` | `admin/league-teams.admin.controller.ts` |
+| `leagues/admin/league-teams/league-teams.admin.docs.ts` | `admin/league-teams.admin.docs.ts` |
+| `leagues/admin/league-teams/league-teams.admin.validation.ts` | **deleted** |
+
+---
+
+## 3. Import updates (outside the module)
+
+| File | Change |
+|---|---|
+| `src/routes/index.ts` | Update the 4 league imports to `../modules/leagues/leagues.routes.ts`, `../modules/leagues/admin/leagues.admin.routes.ts`, and `../modules/leagues/admin/league-teams.admin.routes.ts` (default + `eligibleTeamsRouter`). Mount paths do not change. |
+| `src/swagger/swagger.ts` | Update the 3 docs imports: `leagues.docs.ts`, `admin/leagues.admin.docs.ts`, `admin/league-teams.admin.docs.ts`. |
+| `src/server.ts` | `startLeagueLifecycleJob` from `./modules/leagues/lib/league.lifecycle.ts`. |
+| `src/modules/teams/teams.service.ts` | `syncHeadCoachToRegistrationLeagues` from `../leagues/lib/league.head-coach-sync.ts`. |
+
+Inside the module, all relative paths need re-basing (the depth changes). Key edges:
+
+- `services/*` import `../lib/*`, `../leagues.policy.ts`, and the global `../../../...` utilities (one level deeper than before, depth stays the same as old `leagues/` files plus one for `services/`; verify with the compiler).
+- `leagues.policy.ts` imports `./lib/league.rules.ts` and `./lib/league.types.ts`.
+- `lib/league.candidates.ts` and `lib/league.roster-writes.ts` import `../leagues.policy.ts`. This is an import in both directions between `lib` and the module root (policy to rules, candidates to policy). It is not a file-level cycle (rules never import policy), but keep it that way: **`lib/league.rules.ts` and `lib/league.types.ts` must never import `leagues.policy.ts`.**
+- Admin files import `../services/*`, `../leagues.validation.ts`, `../leagues.docs.ts`, `../lib/*`.
+
+Validation after moving (section 9) will catch any missed path.
+
+---
+
+## 4. Policy change: `evaluateUnregister`
+
+File: `leagues.policy.ts`.
+
+1. Extend `Denial` with `"UNREGISTER_IN_ACTIVE"`.
+2. Add:
+
+```ts
+/**
+ * Single source for "may this actor unregister a team?".
+ * Order: identity (403) → ACTIVE league (409) → shared status/window rule.
+ * Head coaches are rejected at the identity step.
+ */
+export function evaluateUnregister(
+  actor: Actor,
+  league: LeagueState,
+  organizationId: number,
+  now?: Date,
+): Evaluation {
+  if (!actor.isAdmin && !actor.managedOrgIds.has(organizationId))
+    return { allowed: false, reason: "NOT_AUTHORIZED" };
+  if (league.status === "ACTIVE")
+    return { allowed: false, reason: "UNREGISTER_IN_ACTIVE" };
+  return evaluateRegister(actor, league, organizationId, now);
+}
+```
+
+3. `throwDenial`: add `case "UNREGISTER_IN_ACTIVE": throw new AppError(409, messages.error.league.cannotUnregisterInActive);`
+4. `leagueTeamPolicy`: for `ADMIN`, keep `unregister: allowed && league.status !== "ACTIVE"` (unchanged output; comment that it mirrors `evaluateUnregister`).
+5. `services/league-teams.service.ts` `unregisterTeam`: replace the two manual checks and the `assertCanRegister` call with:
+
+```ts
+const result = evaluateUnregister(actor, league, leagueTeam.team.organizationId);
+if (!result.allowed) throwDenial(result.reason);
+```
+
+Behavior preserved: head coach and other non-managers get 403, ACTIVE league gives 409 `cannotUnregisterInActive` (admin included), otherwise the usual status/window 409s.
+
+Tests to add (new file `leagues.policy.test.ts`): matrix for `evaluateUnregister` (admin / manager / head coach / guest x INACTIVE / REGISTRATION / ACTIVE / FINISHED x window open/closed).
+
+---
+
+## 5. Message and logging fixes
+
+### 5.1 `addMembers`: name the missing ids (D7)
+
+File: `lib/league.roster-writes.ts`, `loadAddableRows`.
+
+```ts
+if (rows.length !== ids.length) {
+  const found = new Set(rows.map((r) => r.id));
+  const missing = ids.filter((id) => !found.has(id));
+  throw new AppError(
+    404,
+    `${messages.error.leagueRoster.teamMemberNotFound}: ${missing.join(", ")}`,
+  );
+}
+```
+
+`messages` stays a constant-string object; only the ids are appended (same pattern as the `validate` middleware's `path: message`). Update the Swagger 404 description to say the ids are listed.
+
+### 5.2 Lock-reason-aware 403 message (D9)
+
+Problem: both `removeMember` and `loadAddableRows` always use `headCoachRowManagerOnly`, which is misleading for `OWN_ROW`.
+
+1. Add to `src/language/message.ts` under `error.leagueRoster`:
+   `ownRowLocked: "سرمربی نمی‌تواند ردیف خودش را در راستر لیگ تغییر دهد"`
+2. Add a small helper next to the policy (pure):
+
+```ts
+export function lockReasonMessage(reason: LockReason): string {
+  return reason === "OWN_ROW"
+    ? messages.error.leagueRoster.ownRowLocked
+    : messages.error.leagueRoster.headCoachRowManagerOnly;
+}
+```
+
+3. In `removeMember` and `loadAddableRows`, replace the hardcoded message with `lockReasonMessage(decision.lockReason)`.
+
+### 5.3 Do not swallow lifecycle errors (D9)
+
+File: `admin/leagues.admin.service.ts`, `updateLeague`.
+
+```ts
+await advanceLeagueIfExpired(updated.id).catch((err) =>
+  console.error("[league-lifecycle] advanceLeagueIfExpired failed", err),
+);
+```
+
+The project has no logger (`LOG_LEVEL` exists in `.env.example` but is unused), so `console.error` matches `league.lifecycle.ts`.
+
+---
+
+## 6. Admin pattern unification (D8)
+
+**Rule:** if an admin endpoint adds no logic beyond what the main service already does, the admin controller calls the main service with `adminActor(req.userId!)`. An admin service is created only for admin-specific logic (different filters, different validation, restore, status workflows, etc.).
+
+Audit of every module:
+
+| Module | Finding | Action |
 |---|---|---|
-| `where: any` in league/leagueTeam/team/teamSeasonMember queries | `Prisma.LeagueWhereInput`, `Prisma.LeagueTeamWhereInput`, `Prisma.TeamWhereInput`, `Prisma.TeamSeasonMemberWhereInput` | Generated by Prisma. Import from the generated client (`src/prisma/generated/prisma/client.ts`; verify the exact export path once). |
-| `orderBy: memberOrderBy as any` and `teamSeasonMemberOrderBy as any` | Declare the constants as `Prisma.LeagueTeamMemberOrderByWithRelationInput[]` and `Prisma.TeamSeasonMemberOrderByWithRelationInput[]` instead of `as const`, then remove the casts | The types exist; `as const` is what forces the cast today. |
-| `toLeagueResponse({ ...league, status } as any)` | Change `LeagueRow.status` from `string` to the existing `LeagueStatus` enum type and pass the status as a normal field | `LeagueStatus` already exists in generated enums. |
-| `can?: unknown` in `LeagueTeamRow` / `toLeagueTeamItem` | `LeagueTeamCan` | Type already exists in `leagues.policy.ts`. |
-| Repeated status unions (`"INACTIVE" \| "REGISTRATION" \| ...`) in `LeagueState`, `LeagueContext`, controllers, services | `LeagueStatus` from generated enums (validation can keep `LEAGUE_STATUS_VALUES` for zod) | One source instead of five copies. |
-| `effectiveStatus as LeagueContext["status"]` casts | Disappear once status is typed `LeagueStatus` | |
+| leagues (`league-teams.admin`) | Already direct, no service. | None. |
+| leagues (`leagues.admin.service`) | Real admin logic (CRUD, status machine). | Keep. |
+| teams | `teams.admin.service` has 3 pure wrappers: `adminAddRosterMember`, `adminUpdateRosterMember`, `adminRemoveRosterMember`. | **Remove wrappers**; controller calls `teamsService.*` with `adminActor(req.userId!)`. Remove the `teamsService` and `adminActor` imports from `teams.admin.service.ts`. Keep list/get/create/update/delete/restore/`adminGetRoster` (real admin logic). |
+| organizations | `organizations.admin.service` has independent logic (managerId, status, restore). | None. |
+| people / users | `users.admin.service.updateUserByAdmin` is a pure wrapper over `applyProfileUpdate`; `getUserById` is a duplicate of `user.service.getUserById`. Other methods (create, delete, reset password, admin status, permissions, list with hidden admins) are real logic. | **Remove** `updateUserByAdmin` and `getUserById` from `users.admin.service.ts`. `users.admin.controller` calls `applyProfileUpdate` (named export) and `userService.getUserById` directly. `assertTargetAccessible` stays in the admin service and is still called first. |
+| age-categories | Admin-only module, no user-facing counterpart. | None. |
+| seasons | No admin folder; mutations gated by permissions in the same router. | None. |
 
-**Intentionally kept as `any` (no suitable existing type, or changing it risks runtime behavior):**
-
-- `catch (err: any)` with `err?.code === "P2002" | "P2003" | "P2025"` (same pattern as the rest of the project).
-- Any other `any` that has no generated type behind it. Do not create new interfaces only to remove an `any`.
-
----
-
-## 3. Decisions required before coding
-
-These are existing contradictions found in the code. Pick one option each; the plan assumes the recommended one.
-
-1. **REGISTRATION without a deadline.**
-   `assertRegistrationAllowed` allows an admin to set REGISTRATION with no deadline, but `maybeAdvanceSingleLeague` silently writes it back to INACTIVE on the next read.
-   *Recommended:* the manual admin override wins. Remove the "flip back to INACTIVE" behavior entirely. `isRosterWindowOpen(null) === true` already treats it as an open window. Add a one-off SQL cleanup only if such rows exist: `UPDATE leagues SET status='INACTIVE' WHERE status='REGISTRATION' AND roster_deadline IS NULL;`
-2. **Status freshness after the deadline passes.**
-   Today reads promote REGISTRATION → ACTIVE lazily. After Phase 5 only the background job writes, so promotion can lag by up to one job interval.
-   *Recommended:* run the job at startup and every 1–2 minutes (cheap, see 5.1). Accept the small lag.
-3. **Admin `addMembers` response shape.**
-   `docs` says admin members include `phone` and `birthDate`, but the service returns the public shape. *Recommended:* return the admin shape for the admin route (small, additive change). If not wanted, fix the docs instead.
-
----
-
-## Phase 0: Safety net (do first)
-
-1. Run `npm test` and `npx tsc --noEmit`; record the baseline.
-2. Add small characterization tests for pure code that the refactor will touch (cheap, no DB):
-   - `isRosterWindowOpen` (Tehran day boundary, null deadline).
-   - `canEditByStatus`, `isPlayerAgeEligible`.
-   - `initialStatusForDeadline`, `assertRegistrationAllowed`.
-3. The existing `leagues.policy.test.ts` matrix is the contract for Phase 3; keep it unchanged and green.
-
-Exit criteria: baseline green, committed.
-
----
-
-## Phase 1: Zero-risk cleanup (renames, dead code, types)
-
-1. `git mv` and fix imports (including `teams.service.ts` and `league.access` imports in `leagues.policy.test.ts`):
-   - `league.auto.ts` → `league.lifecycle.ts`
-   - `league.headcoach.sync.ts` → `league.head-coach-sync.ts`
-   - `leagues.service.ts` → `leagues.public.service.ts`
-2. Create `shared/league.types.ts` and move the types out of `league.access.ts` (`RosterRole`, `LeagueTeamAccess`, `LeagueRole`, `LeagueContext`, `MyRosterRow`, `LEAGUE_ROLE_ORDER`). `leagues.policy.ts` then imports types from `league.types.ts`, so the pure policy no longer imports the DB-layer file.
-3. Remove unused `export default { ... }` blocks in `league.mapper.ts`, `league.access.ts`, `league.lifecycle.ts`, `league.head-coach-sync.ts`, `league.rules.ts`. **First verify with a search** that every consumer uses named imports (all imports seen so far do). Keep a default export only where it is actually imported.
-4. Remove `assertNoGames` (empty function). Leave one `// TODO(Game)` comment at the call site in `updateLeagueStatus`.
-5. Delete the dead branch in `createLeague`: the "created with a past deadline, apply lifecycle" call can never do anything because a new league is INACTIVE or REGISTRATION-with-open-window and `maybeAdvance*` only acts on REGISTRATION with a closed window.
-6. Fix comments: remove "(user request)" in the lifecycle header; rewrite the lifecycle comment in `createLeague` and `server.ts` so it matches the real rules (single description lives in `league.lifecycle.ts`).
-7. Apply the type policy from section 2.
-8. Replace the repeated `x ? jalaliToGregorian(x) : null` with one helper `jalaliToGregorianOrNull(value)` (put it in `utils/date.util.ts` next to the other date helpers) and a tiny `sameDate(a, b)` for the `startChanged/endChanged/deadlineChanged` comparisons in `updateLeague`.
-9. Controller `updateStatus`: stop passing a raw `adminLevel` string; pass a boolean (`canReopenFinished = req.adminLevel === "SUPER_ADMIN"`). Admin routes do not run `attachActor`, so do not rely on `req.actor` there.
-
-Exit criteria: `tsc` and tests green; no behavior change.
-
----
-
-## Phase 2: Remove duplicated logic
-
-### 2.1 Players already in another team of the same league
-Identical query exists in `listCandidates` (`otherTeams`) and `addMembers` (`clashRows`).
-Create in `shared/league.players.ts`:
+Controller change for teams (`teams.admin.controller.ts`):
 
 ```ts
-findPlayerUserIdsInOtherTeams(leagueId, excludeLeagueTeamId, userIds): Promise<Set<number>>
+import teamsService from "../teams.service.ts";
+import { adminActor } from "../../../authz/actor.ts";
+// ...
+const member = await teamsService.addRosterMember(
+  Number(req.params.teamId), input, adminActor(req.userId as number));
 ```
-Both services call it; returns an empty set without querying when `userIds` is empty.
 
-### 2.2 "Can this league become ACTIVE?"
-Duplicated in `meetsActiveRequirements` (league.auto) and inline in `updateLeagueStatus` (admin service).
-In `league.lifecycle.ts` create one function:
-
-```ts
-checkActiveRequirements(leagueId): Promise<{ ok: true } | { ok: false; reason: "MIN_TEAMS" | "TEAM_WITHOUT_PLAYERS" }>
-```
-- `updateLeagueStatus` maps `reason` to the existing `minTeamsRequired` / `teamWithoutPlayers` messages (same 409 codes, same messages).
-- The cron uses the batch version (Phase 5.1) built from the same pure counting rule.
-
-### 2.3 Mapping and includes
-- Move `leagueTeamInclude`, `leagueTeamListInclude`, `memberInclude` from `league-teams.service.ts` into `league.mapper.ts` next to `leagueInclude`.
-- Merge `toTeamItem` (service wrapper) into `toLeagueTeamItem` (mapper) so only one function exists.
-- Move the inline `base` object of `listCandidates` into `toCandidateItem(member, extras, { admin })` in the mapper, reusing `toAdminMemberItem` fields for `phone`/`birthDate`.
-
-### 2.4 Repeated filters
-Extract small constants in the mapper/shared file instead of repeating literals:
-`activeLeagueTeamWhere(leagueId)` (`status: ACTIVE`, `team.status != DELETED`) used by `listLeagueTeams`, `meetsActiveRequirements`, `updateLeagueStatus`, `myLeagueTeamConditions`.
-
-### 2.5 Access resolution duplicated in DB and pure form
-`resolveLeagueTeamAccess` re-implements `buildAccess` with two sequential queries. Handled in Phase 5.2.
-
-### 2.6 Thin admin wrapper
-`league-teams.admin.service.ts` only forwards to the main service with `adminActor(callerUserId)`. Handled in Phase 4.4.
+(same for update/remove). Behavior is identical; only the call chain is shorter.
 
 ---
 
-## Phase 3: One source of truth for rules (policy ↔ service)
+## 7. Cross-module import rules (D10)
 
-Problem: the same rules exist twice. `assertCanRegister` and `assertRosterEditable` in the service duplicate `leaguePolicy`, `leagueTeamPolicy` and `canEditByStatus` / `isRosterWindowOpen`.
+Existing cross-module imports in the codebase: `teams.service` imports `organizations.policy` and the league head-coach sync; `auth.service` imports `user.service`; `users.admin.service` imports `user.service`; `teams.admin.service` imports `teams.service`. The convention below makes these legitimate and uniform:
 
-Plan:
-1. In `leagues.policy.ts` add pure evaluators that return a reason, not just a boolean:
-   ```ts
-   type Denial = "NOT_AUTHORIZED" | "STATUS_CLOSED" | "WINDOW_CLOSED";
-   evaluateRegister(actor, league, organizationId, now?) : { allowed: true } | { allowed: false; reason: Denial }
-   evaluateRosterEdit(access, league, now?)             : { allowed: true } | { allowed: false; reason: Denial }
-   ```
-   Check order stays exactly: identity (403) → status (409 `registrationClosed`) → window (409 `rosterClosed`).
-2. Rebuild `leaguePolicy.registerTeam` and `leagueTeamPolicy.manageRoster/unregister` on top of these evaluators (so booleans and errors can never disagree).
-3. Services shrink to a mapper from `Denial` to `AppError`:
-   - `NOT_AUTHORIZED` → 403 `league.notAuthorized`
-   - `STATUS_CLOSED` → 409 `league.registrationClosed`
-   - `WINDOW_CLOSED` → 409 `league.rosterClosed`
-4. Keep the existing policy matrix test green and add cases for the new `reason` values.
+1. A module may import from another module's **service, policy, or lib** file. Never from its routes, controller, or docs.
+2. Dependencies are **one-directional**. No cycles (leagues never imports `teams.service`; teams imports leagues' `lib`).
+3. Cross-module imports are listed in the "Relationships" section of that module's doc.
+4. Code that other modules import should live in `lib/` (or the main service) and be named in the docs. Today the only such file is `leagues/lib/league.head-coach-sync.ts`.
 
-Result: rules change in one file; services stop re-deriving them.
+Why `head-coach-sync` stays: it runs inside the team's Prisma transaction (`tx`), so moving it behind an event/hook would break atomicity. Moving it into `teams` only inverts the dependency while the code still queries `league*` tables.
 
 ---
 
-## Phase 4: Split services and tidy admin
+## 8. Documentation updates (D11)
 
-### 4.1 Split `league-teams.service.ts` (~450 lines, two responsibilities)
-
-| New file | Functions |
+| Doc | Change |
 |---|---|
-| `league-teams.service.ts` | `listLeagueTeams`, `listEligibleTeams`, `registerTeam`, `unregisterTeam`, `loadLeagueTeam` |
-| `league-roster.service.ts` | `listMembers`, `listCandidates`, `addMembers`, `removeMember` |
-
-- Export `loadLeagueTeam` from `league-teams.service.ts` (or move it to `shared/league.access.ts`, which already holds loaders) so the roster service can use it.
-- Public function signatures stay identical, so controllers only change their imports.
-
-### 4.2 Break up long functions
-- `listCandidates` → `buildCandidateFilters`, `paginateSelectedFirst` (generic two-phase paging helper), `mapCandidate`.
-- `addMembers` → `loadAddableRows`, `assertPlayersEligible` (age + other-team), `persistRosterRows` (Phase 5.3).
-- `updateLeague` → `assertCutoffChangeAllowed`, `resolveNextStatusOnDeadlineChange`, `assertUniqueName`; keep the "nothing changed → return existing" short-circuit.
-- `updateLeagueStatus` → `assertStatusTransitionAllowed` + `checkActiveRequirements` (Phase 2.2).
-
-Rule of thumb: no function over ~40 lines; each helper has one reason to exist.
-
-### 4.3 `leagues.public.service.ts`
-Same functions as today (`listPublicLeagues`, `getPublicLeague`, `listMyLeagues`, `listMyTeams`, `getLeagueTeamDetail`), only the rename plus the Phase 5.1 change (no writes while reading).
-
-### 4.4 Admin folder stays; remove the pass-through service
-- Keep `leagues/admin/leagues/*` and `leagues/admin/league-teams/*` where they are.
-- Delete `league-teams.admin.service.ts`. The admin controller calls `league-teams.service` / `league-roster.service` directly with `adminActor(req.userId!)` (one small local helper in the controller).
-- Keep `leagues.admin.service.ts` (it has real logic).
+| `docs/03-project-structure.md` | Replace `competition/...` line with `leagues/` (`services/`, `lib/`, `admin/`); add a short note on the 3+ services rule. |
+| `docs/08-conventions.md` | Add: (a) `services/` folder when a module has 3+ services; (b) `lib/` for module-private logic, with the cross-module import rules from section 7; (c) admin pattern rule from section 6; (d) `*.admin.validation.ts` exists only when it contains admin-specific schemas. |
+| `docs/modules/competition.md` | Rename to `docs/modules/leagues.md`; update sub-module section and file names (`services/leagues.service.ts`, `lib/*`, flattened `admin/`); mention `evaluateUnregister`; relationships: add "teams imports `lib/league.head-coach-sync.ts`". |
+| `docs/09-authorization.md` | Update the league paragraph (`leagueTeamPolicy`, `rosterRowPolicy`, `evaluateUnregister`) and paths. |
+| `docs/02-architecture.md` | Add one line on the admin pattern and cross-module import rules. |
+| `docs/modules/teams.md` | Admin roster mutations now call `teams.service` directly with `adminActor`; update the head-coach-sync import path. |
+| `docs/modules/people.md` | `users.admin.service` no longer has `updateUserByAdmin` / `getUserById`; admin controller delegates to `user.service`. |
+| `docs/modules/shared.md`, `docs/status/*`, `docs/04-data-model.md` | Update any `competition` path references (search for `competition`). |
 
 ---
 
-## Phase 5: Performance fixes
+## 9. Execution order
 
-### 5.1 No database writes on GET requests (highest impact)
-Today `autoAdvanceExpiredRegistrations()` runs inside `listPublicLeagues`, `listLeagues` (admin), `listMyLeagues`, and `maybeAdvanceSingleLeague` (an UPDATE) runs in `loadLeagueContext`, `getPublicLeague`, `getLeagueById`, `createLeague`, `updateLeague`. Reads therefore cost extra queries, can write, and can race with each other and with the interval in `server.ts`.
-
-Plan (`league.lifecycle.ts`):
-1. Reads use the stored status only. Remove every lifecycle call from read paths, including the empty `try { ... } catch {}` blocks.
-2. Write paths that change the deadline (`updateLeague`) call `advanceLeagueIfExpired(leagueId)` once after the update. `createLeague` does not need it (see Phase 1.5).
-3. One background job owns promotion:
-   ```ts
-   advanceExpiredRegistrations(now?): Promise<number>
-   startLeagueLifecycleJob(intervalMs): void   // called from server.ts
-   ```
-   - Compute "today in Tehran" once and filter in SQL (`rosterDeadline < todayTehranDate`) instead of loading all REGISTRATION leagues and filtering in JS.
-   - Load teams with their ACTIVE player counts for **all** expired leagues in one `findMany`, group by `leagueId` in memory, and evaluate the same pure rule used by `checkActiveRequirements`. This replaces today's one-query-per-league loop.
-   - Promote with a conditional write (`updateMany({ where: { id: { in: ids }, status: "REGISTRATION" }, data: { status: "ACTIVE" } })`) so concurrent runs and multi-instance deploys are idempotent.
-   - Guard against overlapping runs (`isRunning` flag) and log errors with `console.error`; run once at startup, then every 1–2 minutes (Decision 2).
-4. Remove the "REGISTRATION without deadline → INACTIVE" write (Decision 1).
-
-Effect: every league read loses 1–2 queries, GET becomes side-effect free, the race disappears.
-
-### 5.2 Access resolution in one pass
-`resolveLeagueTeamAccess` runs two sequential queries (`own`, then `memberRow`) and duplicates `buildAccess`.
-New version:
-- Admin or guest → no query (as today).
-- Manager → no query: `rosterRowPolicy` only uses `ownTeamSeasonMemberId` for HEAD_COACH rows.
-- Everyone else → one `loadMyRosterRows(userId, { leagueTeamIds: [id] })` + pure `buildAccess(...)`.
-`resolveAccessMap` already works this way; the single-team function becomes a thin variant of it. Confirm the equivalence with unit tests on `buildAccess` (existing tests already cover resolution order).
-
-### 5.3 Batch writes in `addMembers`
-Replace the `for` loop of sequential `create` / `update` calls (up to 50) inside the transaction with:
-1. `updateMany` to set `status: ACTIVE` for ids that already have a (DELETED) row.
-2. `createMany` for the ids without a row.
-3. One `findMany` with `memberInclude` to build the response (keeps the response order by requested ids).
-Same transaction, same error mapping (`P2002` → `alreadyInRoster`).
-
-### 5.4 Batch head-coach sync
-`syncHeadCoachToRegistrationLeagues` runs one `upsert` per league team. Replace with one `findMany` of target league teams, then `createMany({ skipDuplicates: true })` for missing rows and one `updateMany` setting ACTIVE for existing ones. Same helper also serves `addHeadCoachToLeagueRoster` (single target).
-
-### 5.5 `listCandidates`
-Keep the two-count + two-page selected-first strategy (it is correct) but isolate it in `paginateSelectedFirst` so it is testable, and make sure the "other team" lookup only runs when the page contains PLAYER rows (already true; keep it behind the shared helper from 2.1).
-
-### 5.6 Things to measure, not guess
-- `listMyLeagues` (nested `some` filters): capture `EXPLAIN` on real data volume before changing anything. MySQL/MariaDB already index foreign keys, so do **not** add indexes speculatively.
-- `leagueInclude._count.teams` on list endpoints: acceptable now; revisit only if list latency becomes an issue.
+1. **Branch**, make sure the working tree is clean, run `npx tsc --noEmit` and `npm test` to record a green baseline.
+2. **Move files** (section 2) with `git mv`; create `services/`, `lib/`, `admin/`; delete `league-teams.admin.validation.ts`.
+3. **Fix imports** inside the module, then outside (section 3). Run `npx tsc --noEmit` until clean. (`tsx` does not type-check, so the compiler run is mandatory.)
+4. **Rename** `leagues.public.service` to `services/leagues.service.ts` and update the controller import. (Rename the object/import alias consistently.)
+5. **Policy**: add `evaluateUnregister`, `UNREGISTER_IN_ACTIVE`, `lockReasonMessage` (section 4, 5.2); update `unregisterTeam`.
+6. **Messages and logging**: sections 5.1, 5.2 (new message key), 5.3.
+7. **Admin unification**: teams (wrappers removed, controller updated), users (wrapper and duplicate removed). Section 6.
+8. **Tests**: keep `league.rules.test.ts`; add `leagues.policy.test.ts` (unregister + roster-row matrix) and a test for `evaluateActiveRequirements` / `initialStatusForDeadline`.
+9. **Docs** (section 8).
+10. **Verify**:
+    - `npx tsc --noEmit` and `npm test` are green.
+    - Server boots; `/docs` (Swagger) renders all league, admin-league and admin-league-team paths (a wrong docs import silently drops paths).
+    - Smoke test: public `GET /leagues`; admin create league, register team, add members; manager unregister in REGISTRATION (OK) and ACTIVE (409); head coach removing own row (403 with the new message); `addMembers` with a bad id (404 listing the id); teams admin roster add/update/remove; admin users update and get-by-id.
+    - Search the repo for leftover `competition` references: `grep -rn "competition" src docs`.
+11. Commit in small steps (moves alone first, then behavior changes) so the move diff stays reviewable.
 
 ---
 
-## Phase 6: Tests and docs
+## 10. Risks and notes
 
-Add pure (no-DB) tests:
-- `league.lifecycle`: next-status resolution on deadline change, expired detection, requirement evaluation from grouped counts.
-- `leagues.policy`: new `evaluateRegister` / `evaluateRosterEdit` reasons.
-- `paginateSelectedFirst`: page boundaries (selected-only page, mixed page, unselected-only page, empty).
-- Mapper: `toCandidateItem` admin vs public shape.
-
-Update docs:
-- `docs/modules/competition.md`: new file list, lifecycle job (reads never write), single rules source.
-- `docs/03-project-structure.md`: new file names.
-- `docs/modules/teams.md`: note the head-coach-sync helper dependency.
-- Swagger: replace generic `"Conflict"` / `"Bad request"` strings in league docs with real `messages.error.*` keys where the exact error is known (docs only, low priority).
-
----
-
-## Execution order and checklist
-
-Each step is its own commit; run `npm test` and `npx tsc --noEmit` after every step.
-
-- [ ] **Phase 0**: baseline + characterization tests
-- [ ] **Phase 1**: renames, `league.types.ts`, dead code, comments, type policy, date helpers
-- [ ] **Phase 2**: `league.players.ts`, `checkActiveRequirements`, mapper/includes merge, shared filters
-- [ ] **Phase 3**: policy evaluators, services use them
-- [ ] **Phase 4**: split `league-teams.service` → `league-roster.service`, break up long functions, remove admin wrapper
-- [ ] **Phase 5.1**: lifecycle job, remove writes from reads (needs Decisions 1 and 2)
-- [ ] **Phase 5.2–5.4**: access in one pass, batch `addMembers`, batch head-coach sync
-- [ ] **Phase 6**: tests and docs
-
-## Risk notes
-
-| Risk | Mitigation |
-|---|---|
-| Error order changes (403 vs 409) | Evaluators keep identity → status → window; policy matrix test stays green. |
-| Promotion lag after removing lazy writes | Job runs at startup and every 1–2 min; documented (Decision 2). |
-| Batch `createMany` skipping a conflicting row silently | Pre-check existing rows (already done in `addMembers`) and keep `P2002` mapping inside the transaction. |
-| Broken imports after renames | Rename in Phase 1 with `git mv`, compile after each move, update the test imports. |
-| Behavior drift in `listCandidates` | Extract helper without changing queries; add paging boundary tests before touching it. |
-
-## Definition of done
-
-- No GET endpoint in the module performs a write.
-- No duplicated query/rule for: players in another team, ACTIVE requirements, access resolution, register/roster-edit rules.
-- No file over ~300 lines and no function over ~40 lines in the league module (excluding docs files).
-- `any` remains only where no existing type applies (Prisma error `catch` blocks).
-- All tests and `tsc --noEmit` pass; docs updated.
+- **Import depth errors** are the main risk of the move; the compiler catches them.
+- **Swagger registration** relies on side-effect imports in `swagger.ts`; verify paths load (section 9, step 10).
+- **No behavior change** except: clearer 403 message for own-row lock, ids in the 404 message, logged lifecycle errors. Frontend should be told about the 404 message format change (ids appended after a colon).
+- `lib/` to `leagues.policy.ts` import direction is intentional (see section 3); do not let `league.rules.ts` or `league.types.ts` import the policy.
+- Known follow-ups, not in this plan: shared constant/filter for "team eligible for registration" (`listEligibleTeams` vs `registerTeam`), merging `LeagueTeamStatus` and `LeagueTeamMemberStatus` enums, splitting `league.mapper.ts` into includes and mappers if it grows, a multi-instance-safe scheduler if the API is ever run with more than one process.

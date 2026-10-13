@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { messages } from "../../../language/message.ts";
-import { registry } from "../../../swagger/registry.ts";
+import { messages } from "../../language/message.ts";
+import { registry } from "../../swagger/registry.ts";
 import {
   errorResponseSchema,
   successResponseSchema,
-} from "../../../swagger/helpers.ts";
+} from "../../swagger/helpers.ts";
 import {
   leagueIdParamSchema,
   leagueTeamParamSchema,
@@ -647,7 +647,7 @@ registry.registerPath({
       content: { "application/json": { schema: forbiddenError } },
     },
     "404": {
-      description: "Team or member not found",
+      description: "Team or member not found (missing member ids are listed)",
       content: {
         "application/json": {
           schema: errorResponseSchema(404, messages.error.leagueTeam.notFound),

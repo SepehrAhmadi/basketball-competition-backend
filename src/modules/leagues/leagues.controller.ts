@@ -1,9 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
-import { messages } from "../../../language/message.ts";
-import apiResponse from "../../../utils/apiResponse.ts";
-import leaguesService from "./leagues.public.service.ts";
-import leagueTeamsService from "./league-teams.service.ts";
-import leagueRosterService from "./league-roster.service.ts";
+import { messages } from "../../language/message.ts";
+import apiResponse from "../../utils/apiResponse.ts";
+import leaguesService from "./services/leagues.service.ts";
+import leagueTeamsService from "./services/league-teams.service.ts";
+import leagueRosterService from "./services/league-roster.service.ts";
 
 async function listPublic(req: Request, res: Response, next: NextFunction) {
   try {

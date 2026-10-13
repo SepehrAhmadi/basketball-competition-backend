@@ -9,7 +9,7 @@ import { jalaliToGregorian, gregorianToJalali } from "../../utils/date.util.ts";
 import type { Actor } from "../../authz/actor.ts";
 import { assertAllowed } from "../../authz/assert.ts";
 import { organizationPolicy } from "../organizations/organizations.policy.ts";
-import { syncHeadCoachToRegistrationLeagues } from "../competition/shared/league.head-coach-sync.ts";
+import { syncHeadCoachToRegistrationLeagues } from "../leagues/lib/league.head-coach-sync.ts";
 import {
   teamPolicy,
   rosterPolicy,

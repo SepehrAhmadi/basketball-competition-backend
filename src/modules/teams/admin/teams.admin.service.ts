@@ -3,8 +3,6 @@ import AppError from "../../../utils/appError.ts";
 import { messages } from "../../../language/message.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
 import { jalaliToGregorian, gregorianToJalali } from "../../../utils/date.util.ts";
-import teamsService from "../teams.service.ts";
-import { adminActor } from "../../../authz/actor.ts";
 
 const baseUrl = process.env.BASE_URL;
 
@@ -233,35 +231,6 @@ async function adminGetRoster(teamId: number, query: AdminRosterQuery) {
   };
 }
 
-// Roster mutations reuse the main service (head-coach demotion + reactivation).
-// Permission gating happens at the router; pass an admin actor so the
-// org-manager self-check is bypassed.
-async function adminAddRosterMember(
-  teamId: number,
-  data: { userId: number; seasonId: number; role: "COACH" | "PLAYER"; jerseyNumber?: number; isHeadCoach?: boolean },
-  callerUserId: number,
-) {
-  return teamsService.addRosterMember(teamId, data, adminActor(callerUserId));
-}
-
-async function adminUpdateRosterMember(
-  teamId: number,
-  memberId: number,
-  data: { seasonId: number; role?: "COACH" | "PLAYER"; jerseyNumber?: number | null; isHeadCoach?: boolean },
-  callerUserId: number,
-) {
-  return teamsService.updateRosterMember(teamId, memberId, data, adminActor(callerUserId));
-}
-
-async function adminRemoveRosterMember(
-  teamId: number,
-  memberId: number,
-  seasonId: number,
-  callerUserId: number,
-) {
-  return teamsService.removeRosterMember(teamId, memberId, seasonId, adminActor(callerUserId));
-}
-
 export default {
   adminListTeams,
   adminGetTeamById,
@@ -270,7 +239,4 @@ export default {
   adminDeleteTeam,
   adminRestoreTeam,
   adminGetRoster,
-  adminAddRosterMember,
-  adminUpdateRosterMember,
-  adminRemoveRosterMember,
 };

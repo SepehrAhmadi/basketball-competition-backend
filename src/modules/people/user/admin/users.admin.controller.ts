@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import adminUsersService from "./users.admin.service.ts";
+import userService, { applyProfileUpdate } from "../user.service.ts";
 import { messages } from "../../../../language/message.ts";
 import apiResponse from "../../../../utils/apiResponse.ts";
 import type {
@@ -43,7 +44,7 @@ async function getUserById(req: Request, res: Response, next: NextFunction) {
   try {
     const params = (req.validatedParams ?? req.params) as { id: number };
     await adminUsersService.assertTargetAccessible(params.id, req.adminLevel ?? null);
-    const profile = await adminUsersService.getUserById(params.id);
+    const profile = await userService.getUserById(params.id);
     return apiResponse.sendResponse(
       res,
       200,
@@ -60,7 +61,7 @@ async function updateUser(req: Request, res: Response, next: NextFunction) {
     const params = (req.validatedParams ?? req.params) as { id: number };
     await adminUsersService.assertTargetAccessible(params.id, req.adminLevel ?? null);
     const input = (req.validatedBody ?? req.body) as UpdateUserByAdminInput;
-    const profile = await adminUsersService.updateUserByAdmin(params.id, input);
+    const profile = await applyProfileUpdate(params.id, input);
     return apiResponse.sendResponse(
       res,
       200,

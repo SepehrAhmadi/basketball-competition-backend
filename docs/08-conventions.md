@@ -3,6 +3,11 @@
 ## Module files
 
 - Every module uses `*.routes.ts` (wiring) → `*.controller.ts` (req/res) → `*.service.ts` (logic + Prisma) → `*.validation.ts` (Zod input) → `*.docs.ts` (Swagger response + `registerPath`); policy-gated modules add `*.policy.ts` (pure `(actor, scope) => can`).
+- A module with 3+ services groups them in `services/`; modules with fewer keep a flat layout.
+- `lib/` holds module-private domain logic (rules, loaders, mappers, lifecycle). Code other modules import lives in `lib/` (or the main service) and is named in that module's doc.
+- Cross-module imports: a module may import from another module's service, policy, or `lib` file — never from its routes, controller, or docs. Dependencies are one-directional (no cycles).
+- Admin pattern: if an admin operation has no extra logic, the admin controller calls the main service with `adminActor(req.userId)`. An admin service exists only for admin-specific logic (different filters, validation, restore, status workflows).
+- `*.admin.validation.ts` exists only when it contains admin-specific schemas; otherwise admin routes/docs import from the main `*.validation.ts` directly.
 - Validation files import `swagger/zod-extend.ts` at top for `.openapi()` support.
 - Routes reuse shared `idParamSchema` (or domain `*IdParamSchema`, e.g. `teamIdParamSchema`) from `shared/schemas.validation.ts`.
 - All messages come from `src/language/message.ts`; no inline strings.

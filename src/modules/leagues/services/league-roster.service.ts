@@ -10,35 +10,36 @@ import {
   toAdminMemberItem,
   toLeagueTeamMemberRow,
   toPublicMemberItem,
-} from "../shared/league.mapper.ts";
+} from "../lib/league.mapper.ts";
 import {
   buildCandidateFilters,
   candidateInclude,
   mapCandidate,
   paginateSelectedFirst,
   type CandidatesQuery,
-} from "../shared/league.candidates.ts";
+} from "../lib/league.candidates.ts";
 import {
   assertPlayersEligible,
   loadAddableRows,
   persistRosterRows,
-} from "../shared/league.roster-writes.ts";
+} from "../lib/league.roster-writes.ts";
 import {
   loadLeagueContext,
   loadLeagueTeam,
   resolveLeagueTeamAccess,
-} from "../shared/league.access.ts";
+} from "../lib/league.access.ts";
 import type {
   LeagueContext,
   LeagueTeamAccess,
-} from "../shared/league.types.ts";
-import { findPlayerUserIdsInOtherTeams } from "../shared/league.players.ts";
+} from "../lib/league.types.ts";
+import { findPlayerUserIdsInOtherTeams } from "../lib/league.players.ts";
 import {
   evaluateRosterEdit,
   leagueTeamPolicy,
+  lockReasonMessage,
   rosterRowPolicy,
   throwDenial,
-} from "./leagues.policy.ts";
+} from "../leagues.policy.ts";
 
 /** Identity → status → window, using the role-specific rule. */
 function assertRosterEditable(access: LeagueTeamAccess, league: LeagueContext) {
@@ -232,7 +233,7 @@ async function removeMember(
     isHeadCoach: row.teamSeasonMember.isHeadCoach,
   });
   if (!decision.canToggle)
-    throw new AppError(403, messages.error.leagueRoster.headCoachRowManagerOnly);
+    throw new AppError(403, lockReasonMessage(decision.lockReason));
 
   if (league.status === "ACTIVE" && row.teamSeasonMember.role === "PLAYER") {
     const remainingPlayers = await prisma.leagueTeamMember.count({

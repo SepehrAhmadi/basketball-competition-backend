@@ -8,22 +8,23 @@ import {
   activeLeagueTeamWhere,
   leagueTeamListInclude,
   toLeagueTeamListItem,
-} from "../shared/league.mapper.ts";
+} from "../lib/league.mapper.ts";
 import {
   loadLeagueContext,
   loadLeagueTeam,
   resolveAccessMap,
-} from "../shared/league.access.ts";
+} from "../lib/league.access.ts";
 import type {
   LeagueContext,
   LeagueTeamAccess,
-} from "../shared/league.types.ts";
-import { addHeadCoachToLeagueRoster } from "../shared/league.head-coach-sync.ts";
+} from "../lib/league.types.ts";
+import { addHeadCoachToLeagueRoster } from "../lib/league.head-coach-sync.ts";
 import {
   evaluateRegister,
+  evaluateUnregister,
   leagueTeamPolicy,
   throwDenial,
-} from "./leagues.policy.ts";
+} from "../leagues.policy.ts";
 
 /** Registration (and unregistration) is for admins and organization managers only. */
 function assertCanRegister(
@@ -238,14 +239,12 @@ async function unregisterTeam(
   const league = await loadLeagueContext(leagueId, actor);
   const leagueTeam = await loadLeagueTeam(league, leagueTeamId);
 
-  // Unregistering is manager/admin only; a head coach is rejected here.
-  if (!actor.isAdmin && !actor.managedOrgIds.has(leagueTeam.team.organizationId))
-    throw new AppError(403, messages.error.league.notAuthorized);
-
-  if (league.status === "ACTIVE")
-    throw new AppError(409, messages.error.league.cannotUnregisterInActive);
-
-  assertCanRegister(actor, league, leagueTeam.team.organizationId);
+  const result = evaluateUnregister(
+    actor,
+    league,
+    leagueTeam.team.organizationId,
+  );
+  if (!result.allowed) throwDenial(result.reason);
 
   await prisma.$transaction([
     prisma.leagueTeam.update({

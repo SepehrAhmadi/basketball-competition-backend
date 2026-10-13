@@ -2,7 +2,7 @@ import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
 import { isPlayerAgeEligible } from "./league.rules.ts";
 import { toCandidateItem } from "./league.mapper.ts";
 import type { LeagueContext, LeagueTeamAccess } from "./league.types.ts";
-import { rosterRowPolicy } from "../leagues/leagues.policy.ts";
+import { rosterRowPolicy } from "../leagues.policy.ts";
 
 export interface CandidatesQuery {
   page: number;

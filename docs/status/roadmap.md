@@ -1,6 +1,6 @@
 # Roadmap (backend only)
 
-- Competition: leagues / league-teams / league-roster done; groups, series, games next.
+- Leagues: leagues / league-teams / league-roster done; groups, series, games next.
 - Games: add `Game`/series models, scheduling, results, referee assignment endpoints.
 - Stats: add atomic per-player-per-game table plus report aggregations.
 - Media: decide dedicated module vs current inline uploader + URL-string approach.

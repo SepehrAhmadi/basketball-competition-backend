@@ -5,12 +5,8 @@ import AppError from "../../../../utils/appError.ts";
 import findOrFail from "../../../../utils/findOrFail.ts";
 import { jalaliToGregorian } from "../../../../utils/date.util.ts";
 import type { AdminLevel, Role } from "../../../../prisma/generated/prisma/enums.ts";
-import type {
-  ListUsersQuery,
-  UpdateUserByAdminInput,
-  UserProfile,
-} from "../user.types.ts";
-import { toUserProfile, applyProfileUpdate } from "../user.service.ts";
+import type { ListUsersQuery } from "../user.types.ts";
+import { toUserProfile } from "../user.service.ts";
 import { PERMISSION_CATALOG, type Permission } from "../../../../shared/permissions.ts";
 
 interface AdminCreateUserInput {
@@ -128,24 +124,6 @@ async function listUsers(
   };
 }
 
-async function getUserById(userId: number): Promise<UserProfile> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { roles: true, userAdmin: true },
-  });
-  if (!user) {
-    throw new AppError(404, messages.error.user.notFound);
-  }
-  return toUserProfile(user);
-}
-
-async function updateUserByAdmin(
-  userId: number,
-  data: UpdateUserByAdminInput,
-): Promise<UserProfile> {
-  return applyProfileUpdate(userId, data);
-}
-
 async function resetUserPasswordByAdmin(
   userId: number,
   newPassword: string,
@@ -234,8 +212,6 @@ export default {
   adminDeleteUser,
   assertTargetAccessible,
   listUsers,
-  getUserById,
-  updateUserByAdmin,
   resetUserPasswordByAdmin,
   setAdminStatus,
   listPermissionCatalog,

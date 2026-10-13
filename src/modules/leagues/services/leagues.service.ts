@@ -8,7 +8,7 @@ import { gregorianToJalali } from "../../../utils/date.util.ts";
 import {
   leagueInclude,
   toLeagueResponse,
-} from "../shared/league.mapper.ts";
+} from "../lib/league.mapper.ts";
 import {
   buildAccess,
   groupRowsByTeam,
@@ -17,8 +17,8 @@ import {
   rolesForTeam,
   sortRoles,
   type LeagueRole,
-} from "../shared/league.access.ts";
-import { leaguePolicy, leagueTeamPolicy } from "./leagues.policy.ts";
+} from "../lib/league.access.ts";
+import { leaguePolicy, leagueTeamPolicy } from "../leagues.policy.ts";
 
 interface PublicLeagueListQuery {
   page: number;

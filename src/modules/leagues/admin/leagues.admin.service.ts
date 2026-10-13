@@ -1,21 +1,21 @@
-import prisma from "../../../../../config/db.config.ts";
-import AppError from "../../../../../utils/appError.ts";
-import { messages } from "../../../../../language/message.ts";
-import type { Prisma } from "../../../../../prisma/generated/prisma/client.ts";
+import prisma from "../../../config/db.config.ts";
+import AppError from "../../../utils/appError.ts";
+import { messages } from "../../../language/message.ts";
+import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
 import {
   jalaliToGregorianOrNull,
   sameDate,
-} from "../../../../../utils/date.util.ts";
+} from "../../../utils/date.util.ts";
 import {
   leagueInclude,
   toLeagueResponse,
-} from "../../../shared/league.mapper.ts";
+} from "../lib/league.mapper.ts";
 import {
   advanceLeagueIfExpired,
   assertRegistrationAllowed,
   checkActiveRequirements,
   initialStatusForDeadline,
-} from "../../../shared/league.lifecycle.ts";
+} from "../lib/league.lifecycle.ts";
 
 interface AdminLeagueListQuery {
   page: number;
@@ -253,7 +253,9 @@ async function updateLeague(leagueId: number, input: UpdateLeagueInput) {
       include: leagueInclude,
     });
     // If the deadline moved to the past, promote once after the write.
-    await advanceLeagueIfExpired(updated.id).catch(() => undefined);
+    await advanceLeagueIfExpired(updated.id).catch((err) =>
+      console.error("[league-lifecycle] advanceLeagueIfExpired failed", err),
+    );
     const fresh = await prisma.league.findUnique({
       where: { id: leagueId },
       include: leagueInclude,

@@ -27,4 +27,4 @@ Owns age-category definitions and their per-season birth-date cutoffs for eligib
 ## Relationships with other modules
 
 - → seasons: cutoff create/update validates `Season` existence and reads `Season` for response includes (shared FK, no service import).
-- → competition: any league linked to a cutoff blocks cutoff edit/delete with 409 (`assertCutoffEditable` via `prisma.league.count`).
+- → leagues: any league linked to a cutoff blocks cutoff edit/delete with 409 (`assertCutoffEditable` via `prisma.league.count`).

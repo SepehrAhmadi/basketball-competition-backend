@@ -91,6 +91,7 @@ export const messages = {
       playerInOtherTeam: "این بازیکن در تیم دیگری از همین لیگ ثبت شده است",
       headCoachRowManagerOnly:
         "افزودن یا حذف سرمربی در راستر لیگ فقط توسط مدیر سازمان یا ادمین مجاز است",
+      ownRowLocked: "سرمربی نمی‌تواند ردیف خودش را در راستر لیگ تغییر دهد",
     },
     season: {
       nameRequired: "نام فصل الزامی است",

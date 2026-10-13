@@ -1,7 +1,7 @@
 import "./swagger/zod-extend.ts";
 import "dotenv/config";
 import app from "./app.ts";
-import { startLeagueLifecycleJob } from "./modules/competition/shared/league.lifecycle.ts";
+import { startLeagueLifecycleJob } from "./modules/leagues/lib/league.lifecycle.ts";
 
 const PORT = process.env.PORT || 8081;
 

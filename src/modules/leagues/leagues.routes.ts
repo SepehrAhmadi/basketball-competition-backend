@@ -1,11 +1,11 @@
 import { Router } from "express";
-import validate from "../../../middleware/validate.ts";
-import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
-import optionalJWT from "../../../middleware/auth/optionalJWT.middleware.ts";
+import validate from "../../middleware/validate.ts";
+import verifyJWT from "../../middleware/auth/verifyJWT.middleware.ts";
+import optionalJWT from "../../middleware/auth/optionalJWT.middleware.ts";
 import {
   attachActor,
   optionalActor,
-} from "../../../middleware/auth/attachActor.middleware.ts";
+} from "../../middleware/auth/attachActor.middleware.ts";
 import leaguesValidation from "./leagues.validation.ts";
 import leaguesController from "./leagues.controller.ts";
 
