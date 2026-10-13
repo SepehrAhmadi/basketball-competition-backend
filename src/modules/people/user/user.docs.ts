@@ -24,7 +24,7 @@ export const userProfileSchema = z
     phone: z.string().openapi({ example: "09121234567" }),
     email: z.string().openapi({ example: "ali@example.com" }),
     avatarUrl: z.string().nullable().openapi({
-      description: "Absolute public URL built from PROJECT_URL",
+      description: "Absolute public URL built from BASE_URL",
       example: "http://localhost:8081/uploads/avatars/12.webp",
     }),
     birthDate: z.string().nullable().openapi({ example: "1381/05/20" }),
@@ -40,7 +40,7 @@ export const userProfileSchema = z
 
 const avatarDataSchema = z.object({
   avatarUrl: z.string().openapi({
-    description: "Absolute public URL built from PROJECT_URL",
+    description: "Absolute public URL built from BASE_URL",
     example: "http://localhost:8081/uploads/avatars/12.webp",
   }),
 });

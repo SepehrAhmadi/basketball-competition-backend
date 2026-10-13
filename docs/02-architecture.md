@@ -10,7 +10,6 @@
 2. Service signs 15-min access token (`userId`, `roles`, `adminLevel`, `permissions`) + 1-day refresh token persisted on `User`.
 3. Client sends `Authorization: Bearer <token>`; `verifyJWT` verifies signature and attaches `req.userId/roles/adminLevel/permissions`.
 4. `verifyRole` / `verifyAdminLevel` / `verifyPermission` check token claims without DB access (`SUPER_ADMIN` bypasses permission checks).
-5. `verifyOrgAccess` / `verifyTeamAccess` do DB ownership checks where record scope matters.
 5. Domain policies (`organizations.policy.ts`, `teams.policy.ts`) compute per-record `can` flags from `req.actor`; services enforce with `assertAllowed` (403). No `verifyOrgAccess`/`verifyTeamAccess` middleware exists — ownership lives in policies + service.
 6. Multi-role supported via `UserRole` rows (`[userId, role]` unique); token carries the full `roles` array.
 

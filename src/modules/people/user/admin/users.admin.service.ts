@@ -89,7 +89,9 @@ async function listUsers(
   // Regular ADMINs must not see users holding any admin level.
   if (requesterAdminLevel !== "SUPER_ADMIN") {
     where.userAdmin = null;
-  } else if (query.role) {
+  }
+
+  if (query.role) {
     where.roles = { some: { role: query.role } };
   }
 

@@ -2,7 +2,7 @@
 export default {
   avatar: {
     maxSizeMb: 2,
-    allowedMimeTypes: ["image/png", "image/jpeg"],
+    allowedMimeTypes: ["image/png", "image/jpeg", "image/webp"],
   },
   organizationLogo: {
     maxSizeMb: 2,

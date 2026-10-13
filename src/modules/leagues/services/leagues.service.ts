@@ -74,7 +74,9 @@ async function getPublicLeague(leagueId: number, actor: Actor) {
     include: leagueInclude,
   });
   if (!league) throw new AppError(404, messages.error.league.notFound);
-  if (league.status === "INACTIVE")
+    // Matches loadLeagueContext + leaguePolicy.view: INACTIVE is hidden from
+  // everyone except admins (admins normally use /admin, this is just consistency).
+  if (league.status === "INACTIVE" && !actor.isAdmin)
     throw new AppError(404, messages.error.league.notFound);
   return {
     ...toLeagueResponse(league),

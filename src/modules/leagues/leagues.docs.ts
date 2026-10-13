@@ -576,10 +576,10 @@ registry.registerPath({
   method: "get",
   path: "/leagues/{leagueId}/teams/{leagueTeamId}/members/candidates",
   tags: ["Leagues"],
-  summary: "List roster candidates (manager / league head coach)",
+  summary: "List roster candidates (league team members)",
   description:
     "Ordered selected first, then head coach, coaches, players. " +
-    "Callers who are not admin, manager or league head coach get 403.",
+    "Any ACTIVE member of this league team (manager, league head coach, coach, player) may view; outsiders get 403. Editing is still gated per-row via canToggle.",
   request: { params: leagueTeamParamSchema, query: candidatesQuerySchema },
   responses: {
     "200": {
@@ -597,7 +597,7 @@ registry.registerPath({
       content: { "application/json": { schema: unauthorizedError } },
     },
     "403": {
-      description: "Not the manager of the team organization",
+      description: "Not a member of this league team",
       content: { "application/json": { schema: forbiddenError } },
     },
     "404": {

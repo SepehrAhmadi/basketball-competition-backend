@@ -15,6 +15,7 @@ router.get(
   "/",
   verifyPermission("league-teams.view"),
   validate(leagueTeamsAdminValidation.leagueTeamsQuerySchema, "query"),
+  validate(leagueTeamsAdminValidation.leagueIdParamSchema, "params"),
   leagueTeamsAdminController.list,
 );
 
@@ -22,6 +23,7 @@ router.post(
   "/",
   verifyPermission("league-teams.create"),
   validate(leagueTeamsAdminValidation.registerTeamSchema),
+  validate(leagueTeamsAdminValidation.leagueIdParamSchema, "params"),
   leagueTeamsAdminController.register,
 );
 
