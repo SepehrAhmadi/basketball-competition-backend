@@ -2,42 +2,16 @@ import prisma from "../../../config/db.config.ts";
 import AppError from "../../../utils/appError.ts";
 import { messages } from "../../../language/message.ts";
 import type { Actor } from "../../../authz/actor.ts";
-import { maybeAdvanceSingleLeague } from "./league.auto.ts";
+import type {
+  LeagueContext,
+  LeagueRole,
+  LeagueTeamAccess,
+  MyRosterRow,
+} from "./league.types.ts";
+import { LEAGUE_ROLE_ORDER } from "./league.types.ts";
 
-export type RosterRole = "ADMIN" | "MANAGER" | "HEAD_COACH" | "MEMBER" | null;
-
-export interface LeagueTeamAccess {
-  rosterRole: RosterRole;
-  // teamSeasonMemberId of the caller's own league-roster row, if any
-  ownTeamSeasonMemberId: number | null;
-}
-
-export type LeagueRole = "MANAGER" | "HEAD_COACH" | "COACH" | "PLAYER";
-
-export const LEAGUE_ROLE_ORDER: readonly LeagueRole[] = [
-  "MANAGER",
-  "HEAD_COACH",
-  "COACH",
-  "PLAYER",
-];
-
-export interface LeagueContext {
-  id: number;
-  name: string;
-  status: "INACTIVE" | "REGISTRATION" | "ACTIVE" | "FINISHED";
-  rosterDeadline: Date | null;
-  seasonId: number;
-  minBirthDate: Date;
-}
-
-export interface MyRosterRow {
-  leagueId: number;
-  leagueTeamId: number;
-  teamSeasonMemberId: number;
-  role: "COACH" | "PLAYER";
-  isHeadCoach: boolean;
-  seasonId: number;
-}
+export type { LeagueContext, LeagueRole, LeagueTeamAccess, MyRosterRow };
+export { LEAGUE_ROLE_ORDER };
 
 export async function loadLeagueContext(
   leagueId: number,
@@ -50,17 +24,13 @@ export async function loadLeagueContext(
     },
   });
   if (!league) throw new AppError(404, messages.error.league.notFound);
-  // Lifecycle: REGISTRATION → ACTIVE once the deadline passes.
-  // Best-effort so a stale stored status never blocks reads.
-  const effectiveStatus = await maybeAdvanceSingleLeague(league).catch(
-    () => league.status,
-  );
-  if (effectiveStatus === "INACTIVE" && !actor.isAdmin)
+  // Reads use the stored status; promotion is owned by the background job.
+  if (league.status === "INACTIVE" && !actor.isAdmin)
     throw new AppError(404, messages.error.league.notFound);
   return {
     id: league.id,
     name: league.name,
-    status: effectiveStatus as LeagueContext["status"],
+    status: league.status,
     rosterDeadline: league.rosterDeadline,
     seasonId: league.ageCategoryCutoff.seasonId,
     minBirthDate: league.ageCategoryCutoff.minBirthDate,
@@ -159,8 +129,9 @@ export function sortRoles(roles: Iterable<LeagueRole>): LeagueRole[] {
 }
 
 /**
- * Single league team. Admin and manager need no query; everybody else costs
- * exactly one query.
+ * Single league team. Admin, guest, and manager need no query (a manager's
+ * own row is only used for HEAD_COACH rows, which managers never have);
+ * everybody else costs exactly one query via the pure buildAccess.
  */
 export async function resolveLeagueTeamAccess(
   actor: Actor,
@@ -171,47 +142,17 @@ export async function resolveLeagueTeamAccess(
     return { rosterRole: "ADMIN", ownTeamSeasonMemberId: null };
   if (actor.userId === null)
     return { rosterRole: null, ownTeamSeasonMemberId: null };
-
-  const own = await prisma.leagueTeamMember.findFirst({
-    where: {
-      leagueTeamId: leagueTeam.id,
-      status: "ACTIVE",
-      teamSeasonMember: {
-        userId: actor.userId,
-        role: "COACH",
-        isHeadCoach: true,
-        status: "ACTIVE",
-        seasonId: league.seasonId,
-      },
-    },
-    select: { teamSeasonMemberId: true },
-  });
   if (actor.managedOrgIds.has(leagueTeam.team.organizationId))
-    return {
-      rosterRole: "MANAGER",
-      ownTeamSeasonMemberId: own?.teamSeasonMemberId ?? null,
-    };
-  if (own)
-    return { rosterRole: "HEAD_COACH", ownTeamSeasonMemberId: own.teamSeasonMemberId };
-  // Any other roster row (coach / player) on this team: view-only member.
-  const memberRow = await prisma.leagueTeamMember.findFirst({
-    where: {
-      leagueTeamId: leagueTeam.id,
-      status: "ACTIVE",
-      teamSeasonMember: {
-        userId: actor.userId,
-        status: "ACTIVE",
-        seasonId: league.seasonId,
-      },
-    },
-    select: { teamSeasonMemberId: true },
+    return { rosterRole: "MANAGER", ownTeamSeasonMemberId: null };
+  const rows = await loadMyRosterRows(actor.userId, {
+    leagueTeamIds: [leagueTeam.id],
   });
-  if (memberRow)
-    return {
-      rosterRole: "MEMBER",
-      ownTeamSeasonMemberId: memberRow.teamSeasonMemberId,
-    };
-  return { rosterRole: null, ownTeamSeasonMemberId: null };
+  return buildAccess(
+    actor,
+    leagueTeam.team.organizationId,
+    rows,
+    league.seasonId,
+  );
 }
 
 /** Batch variant for lists: one query regardless of the number of teams. */
@@ -247,13 +188,18 @@ export function groupRowsByTeam(rows: MyRosterRow[]): Map<number, MyRosterRow[]>
   return byTeam;
 }
 
-export default {
-  loadLeagueContext,
-  loadMyRosterRows,
-  buildAccess,
-  rolesForTeam,
-  sortRoles,
-  resolveLeagueTeamAccess,
-  resolveAccessMap,
-  groupRowsByTeam,
-};
+/** Loads one ACTIVE league team of the given league (or 404). */
+export async function loadLeagueTeam(
+  league: LeagueContext,
+  leagueTeamId: number,
+) {
+  const leagueTeam = await prisma.leagueTeam.findFirst({
+    where: { id: leagueTeamId, leagueId: league.id, status: "ACTIVE" },
+    include: { team: { select: { id: true, organizationId: true } } },
+  });
+  if (!leagueTeam)
+    throw new AppError(404, messages.error.leagueTeam.notFound);
+  return leagueTeam;
+}
+
+

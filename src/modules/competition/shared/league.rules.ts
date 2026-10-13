@@ -22,7 +22,7 @@ export function isRosterWindowOpen(
 }
 
 export function canEditByStatus(
-  status: LeagueStatus | LeagueStatusValue,
+  status: LeagueStatus,
   isAdmin: boolean,
 ): boolean {
   if (isAdmin) return status === "REGISTRATION" || status === "ACTIVE";
@@ -39,9 +39,4 @@ export function isPlayerAgeEligible(
   return { ok: true };
 }
 
-export default {
-  LEAGUE_STATUS_VALUES,
-  isRosterWindowOpen,
-  canEditByStatus,
-  isPlayerAgeEligible,
-};
+

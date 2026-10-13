@@ -1,7 +1,7 @@
 import "./swagger/zod-extend.ts";
 import "dotenv/config";
 import app from "./app.ts";
-import { autoAdvanceExpiredRegistrations } from "./modules/competition/shared/league.auto.ts";
+import { startLeagueLifecycleJob } from "./modules/competition/shared/league.lifecycle.ts";
 
 const PORT = process.env.PORT || 8081;
 
@@ -9,13 +9,10 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Lifecycle: no deadline → INACTIVE; today/future deadline → REGISTRATION;
-// past deadline → ACTIVE (if requirements hold). Background sweep every
-// 10 minutes; reads also advance best-effort. Manual status changes by an
-// admin always remain possible (override).
-const LEAGUE_AUTO_ADVANCE_MS = 10 * 60 * 1000;
-setInterval(() => {
-  autoAdvanceExpiredRegistrations().catch((err) => {
-    console.error("[league-auto-advance]", err);
-  });
-}, LEAGUE_AUTO_ADVANCE_MS).unref?.();
+// Lifecycle (single description lives in league.lifecycle.ts): REGISTRATION
+// always carries a today-or-future deadline; once it passes, the job below
+// promotes to ACTIVE when requirements hold (≥2 teams, each with ≥1 player).
+// Reads never write. Manual admin changes always remain possible (override),
+// except FINISHED which only SUPER_ADMIN may reopen.
+const LEAGUE_LIFECYCLE_INTERVAL_MS = 90 * 1000;
+startLeagueLifecycleJob(LEAGUE_LIFECYCLE_INTERVAL_MS);

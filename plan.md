@@ -1,508 +1,304 @@
-# League Module (App Side) — Teardown and Rebuild Plan
+# League Module Refactor Plan (`src/modules/competition`)
 
-Scope: remove the app-facing part of the `competition/leagues` module and rebuild it from scratch.
-The admin side (`/competition/leagues/admin`) must keep working unchanged.
+Goal: keep every existing behavior, but make the module cleaner, faster, and free of duplicated logic.
 
----
+## 0. Ground rules (from the brief)
 
-## 1. Final Decisions
-
-| # | Decision |
+| Rule | How it is applied |
 |---|---|
-| D1 | The league head coach is the team's head coach (`TeamSeasonMember.isHeadCoach = true`, role `COACH`, status `ACTIVE`) **who has an ACTIVE row in the league roster**. No new column or role. |
-| D2 | When a team is registered in a league, its head coach for the league's season is **automatically added** to the league roster. |
-| D3 | When the head coach changes at team level (assigned/promoted) while the team is registered in a league in `REGISTRATION`, the new head coach is automatically added to that league roster. |
-| D4 | The **manager (or admin) can deactivate** the head coach's league row. After that the head coach loses all league access until re-added by the manager (or re-assigned/re-registered, see D2/D3). |
-| D5 | The head coach **cannot toggle their own row**, and cannot toggle any head-coach row. Only manager/admin can. |
-| D6 | The head coach **can toggle COACH and PLAYER rows** in the league roster (while the league is in `REGISTRATION` and before the roster deadline). |
-| D7 | Regular coaches and players are **view-only**. |
-| D8 | `teams` are removed from `GET /leagues/me`. Teams of one league for the current user come from the new `GET /leagues/:leagueId/my-teams`. |
-| D9 | Authorization for roster edits is derived from the DB (league roster row), **not** from `loadActor` (which only loads active-season memberships). Policies stay pure; the service loads the facts and passes them in. |
-| D10 | A user who is both manager and head coach is treated as **manager** (manager rules win). |
-
-Terminology used below: **roster** = league roster (`LeagueTeamMember`); **team roster** = `TeamSeasonMember`.
+| `leagues/admin/` stays inside `leagues/` | Routes, controllers, validation and docs of `admin/leagues` and `admin/league-teams` do not move. |
+| The big league service gets split | `league-teams.service.ts` is split by responsibility (see Phase 4). `leagues.service.ts` is renamed. |
+| Slow paths are changed | See Phase 5 (writes on GET, N+1 loops, duplicate queries). |
+| Duplicated work is removed | See Phase 2 and Phase 3. |
+| `any` stays unless a real type already exists | See section "Type policy". Nothing new is invented just to remove an `any`. |
+| No behavior change unless listed under "Decisions required" | Every phase must pass the existing tests and `tsc --noEmit`. |
 
 ---
 
-## 2. What Gets Deleted, Kept, and Rewritten
+## 1. Target structure
 
-### 2.1 Delete (app-only)
-
-| File | Reason |
-|---|---|
-| `competition/leagues/leagues.routes.ts` | Rebuilt. |
-| `competition/leagues/leagues.controller.ts` | Rebuilt. |
-| `competition/leagues/leagues.service.ts` | Rebuilt (list/detail/me/my-teams). |
-| `competition/admin/league-teams/*` (stale duplicate folder) | Dead code. Its service/docs are not mounted/aggregated and its docs import a validation file that does not exist there. |
-| All app `registerPath(...)` blocks in `leagues.docs.ts` | Re-registered after rebuild. |
-
-### 2.2 Shared with admin — rewrite in place, keep export names
-
-Admin currently imports these, so they cannot simply be removed:
-
-| File | Admin dependency | Plan |
-|---|---|---|
-| `leagues/league-teams.service.ts` | `league-teams.admin.service.ts` calls it with `adminActor()` | Rewrite in place; keep every exported function name and parameter order; only add optional behaviour. |
-| `leagues/leagues.policy.ts` | used by the service above | Rewrite (new inputs, see §5). |
-| `leagues/leagues.validation.ts` | admin validation re-exports `leagueIdParamSchema`, `leagueTeamParamSchema`, etc. | Keep all existing exports; add new ones. |
-| `leagues/leagues.docs.ts` | admin docs import `leagueSchema`, `leagueTeamItemSchema`, `leagueMemberSchema`, `leagueCandidateSchema`, `eligibleTeamSchema` | Keep these exported schemas; extend additively. |
-
-### 2.3 Keep as-is
-
-`competition/shared/league.rules.ts`, `competition/shared/league.mapper.ts` (extended), `leagues/admin/**`, Prisma schema (no migration needed), `routes/index.ts` mounts.
-
-### 2.4 Order of work (important)
-
-1. Write admin regression tests against the **current** behaviour (see §10) — before touching anything.
-2. Delete app-only files and stale folder.
-3. Rebuild (sections 5–8).
-4. Run admin tests again; update docs.
-
----
-
-## 3. Target File Layout
+`shared/` stays under `competition/` because games/groups/series will reuse rules, access and lifecycle. Only names change.
 
 ```
 src/modules/competition/
-├── shared/
-│   ├── league.rules.ts              # existing (unchanged)
-│   ├── league.mapper.ts             # extended: ordering helpers, myRoles mapper
-│   ├── league.access.ts             # NEW: DB loaders (resolve access, head coach lookup)
-│   └── league.headcoach.sync.ts     # NEW: auto-add head coach to league rosters
-└── leagues/
-    ├── leagues.routes.ts            # NEW (rebuilt)
-    ├── leagues.controller.ts        # NEW
-    ├── leagues.service.ts           # NEW: list, detail, me, my-teams, team detail
-    ├── league-teams.service.ts      # REWRITTEN: register, unregister, members, candidates, add/remove
-    ├── leagues.policy.ts            # REWRITTEN (pure)
-    ├── leagues.validation.ts        # extended
-    ├── leagues.docs.ts              # rebuilt
-    └── admin/**                     # untouched (except additive response fields)
+├── leagues/
+│   ├── leagues.routes.ts
+│   ├── leagues.controller.ts            # calls the three services below
+│   ├── leagues.validation.ts
+│   ├── leagues.docs.ts
+│   ├── leagues.policy.ts                # pure; single source of truth for rules (Phase 3)
+│   ├── leagues.policy.test.ts
+│   ├── leagues.public.service.ts        # was leagues.service.ts (public list/detail, my leagues, my teams, team detail)
+│   ├── league-teams.service.ts          # registration only: list, eligible, register, unregister
+│   ├── league-roster.service.ts         # NEW: members, candidates, add, remove
+│   └── admin/                           # stays here
+│       ├── leagues/                     # routes, controller, validation, docs, service (unchanged location)
+│       └── league-teams/                # routes, controller, validation, docs (service wrapper removed, see 4.4)
+└── shared/
+    ├── league.rules.ts                  # pure rules (unchanged name)
+    ├── league.types.ts                  # NEW: LeagueContext, LeagueTeamAccess, MyRosterRow, RosterRole, LeagueRole
+    ├── league.access.ts                 # DB loaders + pure buildAccess/rolesForTeam
+    ├── league.lifecycle.ts              # was league.auto.ts
+    ├── league.head-coach-sync.ts        # was league.headcoach.sync.ts
+    ├── league.players.ts                # NEW: findPlayerUserIdsInOtherTeams
+    └── league.mapper.ts                 # + includes and candidate mapper moved here
 ```
 
-Messages: add keys in `src/language/message.ts` (Persian text, per project convention; keys listed in §9).
+Naming convention for the whole module: `<kebab-entity>.<role>.ts` (`league-teams.service.ts`, `league.rules.ts`, `league.head-coach-sync.ts`). Use `git mv` so history is preserved.
+
+Note on the head-coach sync file: `teams.service.ts` imports it, so teams depends on competition at the module level. It is not an import cycle (competition never imports `teams.service`), so no restructuring is needed. Treat the file as an intentional public helper and mention it in `docs/modules/teams.md` and `competition.md`.
 
 ---
 
-## 4. Endpoint Map (App Side)
+## 2. Type policy (`any` handling)
 
-All paths are relative to `/api/v1`. `P` = public with optional token (`optionalJWT` + `optionalActor`), `A` = authenticated (`verifyJWT` + `attachActor`).
+**Replace only where a real type already exists:**
 
-Route registration order matters: `/me` must be registered **before** `/:leagueId`.
-
-| # | Method & Path | Auth | Status | Purpose |
-|---|---|---|---|---|
-| 1 | `GET /leagues` | P | rebuilt | Public list (default excludes `INACTIVE`); `status=REGISTRATION` powers the Competitions page. |
-| 2 | `GET /leagues/me` | A | rebuilt, **changed** | Leagues the user is part of (profile page). No teams inside. |
-| 3 | `GET /leagues/:leagueId` | P | rebuilt | League details + `can`. |
-| 4 | `GET /leagues/:leagueId/my-teams` | A | **new** | Only the teams the user is involved in, with `myRoles` and `can`. |
-| 5 | `GET /leagues/:leagueId/eligible-teams` | A | rebuilt | Teams the manager can register. |
-| 6 | `POST /leagues/:leagueId/teams` | A | rebuilt, **changed** | Register a team (auto-adds head coach). |
-| 7 | `DELETE /leagues/:leagueId/teams/:leagueTeamId` | A | rebuilt | Withdraw a team (manager only). |
-| 8 | `GET /leagues/:leagueId/teams` | P | rebuilt | Public list of all teams of a league (optional for UI; no `myRoles`). |
-| 9 | `GET /leagues/:leagueId/teams/:leagueTeamId` | P | **new** | Single team-in-league details + `myRoles` + `can`. |
-| 10 | `GET /leagues/:leagueId/teams/:leagueTeamId/members` | P | rebuilt, **changed** | Current league roster, server-ordered. |
-| 11 | `GET /leagues/:leagueId/teams/:leagueTeamId/members/candidates` | A | rebuilt, **changed** | Toggle list for editing (manager / league head coach). |
-| 12 | `POST /leagues/:leagueId/teams/:leagueTeamId/members` | A | rebuilt, **changed** | Toggle ON (bulk). |
-| 13 | `DELETE /leagues/:leagueId/teams/:leagueTeamId/members/:memberId` | A | rebuilt, **changed** | Toggle OFF. `memberId` = `LeagueTeamMember.id`. |
-
-Common behaviour for non-admin callers: a league in `INACTIVE` status responds `404` on every endpoint (same as today).
-
----
-
-## 5. Authorization Model
-
-### 5.1 Facts loaded by the service (DB), then passed to a pure policy
-
-```ts
-// competition/shared/league.access.ts
-export type RosterRole = "ADMIN" | "MANAGER" | "HEAD_COACH" | null;
-
-export interface LeagueTeamAccess {
-  rosterRole: RosterRole;
-  // teamSeasonMemberId of the caller's own league-roster row, if any
-  ownTeamSeasonMemberId: number | null;
-}
-```
-
-Resolution order in `resolveLeagueTeamAccess(actor, leagueTeam, league)`:
-
-1. `actor.isAdmin` → `ADMIN` (no query).
-2. `actor.managedOrgIds.has(team.organizationId)` → `MANAGER` (no query).
-3. Otherwise, one query (league-season based, **not** `memberTeamIds`):
-
-```ts
-prisma.leagueTeamMember.findFirst({
-  where: {
-    leagueTeamId,
-    status: "ACTIVE",
-    teamSeasonMember: {
-      userId: actor.userId,
-      role: "COACH",
-      isHeadCoach: true,
-      status: "ACTIVE",
-      seasonId: league.seasonId,
-    },
-  },
-  select: { teamSeasonMemberId: true },
-});
-```
-   Found → `HEAD_COACH`. Not found → `null`.
-
-Guests (`userId === null`) skip the query and get `null`.
-
-### 5.2 Pure policy (`leagues.policy.ts`)
-
-```ts
-interface LeagueState { status: LeagueStatus; rosterDeadline: Date | null; }
-
-export function leaguePolicy(actor, league): LeagueCan
-// unchanged semantics: view, registerTeam
-//  - admin: canEditByStatus(status, true)
-//  - user managing >= 1 org: status === REGISTRATION && isRosterWindowOpen(deadline)
-
-export function leagueTeamPolicy(actor, league, access): LeagueTeamCan
-// { manageRoster, unregister }
-
-export function rosterRowPolicy(access, league, target): { canToggle; lockReason }
-// target = { teamSeasonMemberId, isHeadCoach }
-```
-
-`leagueTeamPolicy` rules:
-
-| Role | `manageRoster` | `unregister` |
+| Current code | Replace with | Why it is safe |
 |---|---|---|
-| ADMIN | `canEditByStatus(status, true)` | same and `status !== ACTIVE` |
-| MANAGER | `status === REGISTRATION && windowOpen` | same |
-| HEAD_COACH | `status === REGISTRATION && windowOpen` | **false** |
-| null | false | false |
+| `where: any` in league/leagueTeam/team/teamSeasonMember queries | `Prisma.LeagueWhereInput`, `Prisma.LeagueTeamWhereInput`, `Prisma.TeamWhereInput`, `Prisma.TeamSeasonMemberWhereInput` | Generated by Prisma. Import from the generated client (`src/prisma/generated/prisma/client.ts`; verify the exact export path once). |
+| `orderBy: memberOrderBy as any` and `teamSeasonMemberOrderBy as any` | Declare the constants as `Prisma.LeagueTeamMemberOrderByWithRelationInput[]` and `Prisma.TeamSeasonMemberOrderByWithRelationInput[]` instead of `as const`, then remove the casts | The types exist; `as const` is what forces the cast today. |
+| `toLeagueResponse({ ...league, status } as any)` | Change `LeagueRow.status` from `string` to the existing `LeagueStatus` enum type and pass the status as a normal field | `LeagueStatus` already exists in generated enums. |
+| `can?: unknown` in `LeagueTeamRow` / `toLeagueTeamItem` | `LeagueTeamCan` | Type already exists in `leagues.policy.ts`. |
+| Repeated status unions (`"INACTIVE" \| "REGISTRATION" \| ...`) in `LeagueState`, `LeagueContext`, controllers, services | `LeagueStatus` from generated enums (validation can keep `LEAGUE_STATUS_VALUES` for zod) | One source instead of five copies. |
+| `effectiveStatus as LeagueContext["status"]` casts | Disappear once status is typed `LeagueStatus` | |
 
-`rosterRowPolicy` rules (evaluated only if `manageRoster` is true, otherwise `canToggle=false`):
+**Intentionally kept as `any` (no suitable existing type, or changing it risks runtime behavior):**
 
-| Target row | ADMIN / MANAGER | HEAD_COACH |
-|---|---|---|
-| Head-coach row | toggle allowed | locked, `lockReason = "MANAGER_ONLY"` (or `"OWN_ROW"` when it is their own) |
-| Any other COACH row | allowed | allowed |
-| PLAYER row | allowed | allowed |
-
-`lockReason`: `null | "OWN_ROW" | "MANAGER_ONLY"`. Check `OWN_ROW` first.
-
-### 5.3 Enforcement in mutations (server-side, not only UI)
-
-`addMembers` and `removeMember` must:
-
-1. Load league (404 first), league-team (404), compute `access`.
-2. `access.rosterRole === null` → `403 league.notAuthorized`.
-3. Window/status check (existing `registrationClosed` / `rosterClosed`) using the role-specific rule above.
-4. For every target row, run `rosterRowPolicy`. Any locked row → `403 leagueRoster.headCoachRowManagerOnly`.
-5. Existing business rules stay (player age rule, one team per league for players, last-player rule in ACTIVE league, duplicates, etc.).
-
-`403` precedes `409` for window checks only after identity is resolved (keeps the project's "identity → status → window" order).
+- `catch (err: any)` with `err?.code === "P2002" | "P2003" | "P2025"` (same pattern as the rest of the project).
+- Any other `any` that has no generated type behind it. Do not create new interfaces only to remove an `any`.
 
 ---
 
-## 6. Auto-Activation of the Head Coach
+## 3. Decisions required before coding
 
-New helper `competition/shared/league.headcoach.sync.ts`:
+These are existing contradictions found in the code. Pick one option each; the plan assumes the recommended one.
+
+1. **REGISTRATION without a deadline.**
+   `assertRegistrationAllowed` allows an admin to set REGISTRATION with no deadline, but `maybeAdvanceSingleLeague` silently writes it back to INACTIVE on the next read.
+   *Recommended:* the manual admin override wins. Remove the "flip back to INACTIVE" behavior entirely. `isRosterWindowOpen(null) === true` already treats it as an open window. Add a one-off SQL cleanup only if such rows exist: `UPDATE leagues SET status='INACTIVE' WHERE status='REGISTRATION' AND roster_deadline IS NULL;`
+2. **Status freshness after the deadline passes.**
+   Today reads promote REGISTRATION → ACTIVE lazily. After Phase 5 only the background job writes, so promotion can lag by up to one job interval.
+   *Recommended:* run the job at startup and every 1–2 minutes (cheap, see 5.1). Accept the small lag.
+3. **Admin `addMembers` response shape.**
+   `docs` says admin members include `phone` and `birthDate`, but the service returns the public shape. *Recommended:* return the admin shape for the admin route (small, additive change). If not wanted, fix the docs instead.
+
+---
+
+## Phase 0: Safety net (do first)
+
+1. Run `npm test` and `npx tsc --noEmit`; record the baseline.
+2. Add small characterization tests for pure code that the refactor will touch (cheap, no DB):
+   - `isRosterWindowOpen` (Tehran day boundary, null deadline).
+   - `canEditByStatus`, `isPlayerAgeEligible`.
+   - `initialStatusForDeadline`, `assertRegistrationAllowed`.
+3. The existing `leagues.policy.test.ts` matrix is the contract for Phase 3; keep it unchanged and green.
+
+Exit criteria: baseline green, committed.
+
+---
+
+## Phase 1: Zero-risk cleanup (renames, dead code, types)
+
+1. `git mv` and fix imports (including `teams.service.ts` and `league.access` imports in `leagues.policy.test.ts`):
+   - `league.auto.ts` → `league.lifecycle.ts`
+   - `league.headcoach.sync.ts` → `league.head-coach-sync.ts`
+   - `leagues.service.ts` → `leagues.public.service.ts`
+2. Create `shared/league.types.ts` and move the types out of `league.access.ts` (`RosterRole`, `LeagueTeamAccess`, `LeagueRole`, `LeagueContext`, `MyRosterRow`, `LEAGUE_ROLE_ORDER`). `leagues.policy.ts` then imports types from `league.types.ts`, so the pure policy no longer imports the DB-layer file.
+3. Remove unused `export default { ... }` blocks in `league.mapper.ts`, `league.access.ts`, `league.lifecycle.ts`, `league.head-coach-sync.ts`, `league.rules.ts`. **First verify with a search** that every consumer uses named imports (all imports seen so far do). Keep a default export only where it is actually imported.
+4. Remove `assertNoGames` (empty function). Leave one `// TODO(Game)` comment at the call site in `updateLeagueStatus`.
+5. Delete the dead branch in `createLeague`: the "created with a past deadline, apply lifecycle" call can never do anything because a new league is INACTIVE or REGISTRATION-with-open-window and `maybeAdvance*` only acts on REGISTRATION with a closed window.
+6. Fix comments: remove "(user request)" in the lifecycle header; rewrite the lifecycle comment in `createLeague` and `server.ts` so it matches the real rules (single description lives in `league.lifecycle.ts`).
+7. Apply the type policy from section 2.
+8. Replace the repeated `x ? jalaliToGregorian(x) : null` with one helper `jalaliToGregorianOrNull(value)` (put it in `utils/date.util.ts` next to the other date helpers) and a tiny `sameDate(a, b)` for the `startChanged/endChanged/deadlineChanged` comparisons in `updateLeague`.
+9. Controller `updateStatus`: stop passing a raw `adminLevel` string; pass a boolean (`canReopenFinished = req.adminLevel === "SUPER_ADMIN"`). Admin routes do not run `attachActor`, so do not rely on `req.actor` there.
+
+Exit criteria: `tsc` and tests green; no behavior change.
+
+---
+
+## Phase 2: Remove duplicated logic
+
+### 2.1 Players already in another team of the same league
+Identical query exists in `listCandidates` (`otherTeams`) and `addMembers` (`clashRows`).
+Create in `shared/league.players.ts`:
 
 ```ts
-export async function addHeadCoachToLeagueRoster(
-  tx: TransactionClient,
-  params: { leagueTeamId: number; teamId: number; seasonId: number },
-): Promise<void>
-// finds the team's ACTIVE head coach for seasonId; upserts LeagueTeamMember ACTIVE.
-// No-op when the team has no head coach.
-
-export async function syncHeadCoachToRegistrationLeagues(
-  tx: TransactionClient,
-  params: { teamId: number; seasonId: number; teamSeasonMemberId: number },
-): Promise<void>
-// for every ACTIVE LeagueTeam of the team in a league with status REGISTRATION
-// whose cutoff.seasonId === seasonId: upsert the row ACTIVE.
+findPlayerUserIdsInOtherTeams(leagueId, excludeLeagueTeamId, userIds): Promise<Set<number>>
 ```
+Both services call it; returns an empty set without querying when `userIds` is empty.
 
-Trigger points:
-
-| Trigger | Where | Behaviour |
-|---|---|---|
-| Team registered / re-registered | `league-teams.service.registerTeam` (admin and app both) | Make registration **transactional**: create/reactivate `LeagueTeam`, then `addHeadCoachToLeagueRoster`. |
-| Head coach created at team level | `teams.service.addRosterMember` (new row and reactivated row with `isHeadCoach = true`) | `syncHeadCoachToRegistrationLeagues` inside the same transaction. |
-| Member promoted to head coach | `teams.service.updateRosterMember` when `effectiveIsHeadCoach && !member.isHeadCoach` | same helper, same transaction. |
-
-Not triggered on demotion: the old head coach's league row stays as an ordinary coach row; their head-coach access disappears automatically because access is derived from `isHeadCoach` at request time.
-
-Not re-triggered after the manager deactivates the row (D4). Only a manager re-toggle, a re-registration, or a new head-coach assignment brings the row back.
-
-Documentation note: `teams.service` gains a function import from `competition/shared` (helper, not service). Update `docs/modules/teams.md` and `docs/modules/competition.md` accordingly.
-
----
-
-## 7. Endpoint Specifications
-
-### 7.1 `GET /leagues` (public)
-
-Query: `page`, `pageSize`, `status` (`REGISTRATION|ACTIVE|FINISHED`), `seasonId`, `ageCategoryId`, `search`.
-Behaviour: same as before (default excludes `INACTIVE`; `can` from `leaguePolicy`).
-Response item: `League` (see §8) with `can: { view, registerTeam }`.
-
-### 7.2 `GET /leagues/me` (auth) — changed
-
-Query: `page`, `pageSize`, `status` (`REGISTRATION|ACTIVE|FINISHED`).
-
-A league is included when the user is **either**:
-- manager of an organization that has an ACTIVE, non-deleted team registered in it, **or**
-- selected in the league roster (`LeagueTeamMember.status = ACTIVE`, `teamSeasonMember.status = ACTIVE`, `teamSeasonMember.userId = me`) of an ACTIVE league team of a non-deleted team.
-
-`INACTIVE` leagues are excluded.
-
-Pagination must happen **in the database** (the old version paginated in memory):
+### 2.2 "Can this league become ACTIVE?"
+Duplicated in `meetsActiveRequirements` (league.auto) and inline in `updateLeagueStatus` (admin service).
+In `league.lifecycle.ts` create one function:
 
 ```ts
-where: {
-  status: query.status ?? { not: "INACTIVE" },
-  teams: { some: {
-    status: "ACTIVE",
-    team: { status: { not: "DELETED" } },
-    OR: [
-      { team: { organizationId: { in: [...actor.managedOrgIds] } } },
-      { members: { some: { status: "ACTIVE",
-          teamSeasonMember: { userId, status: "ACTIVE" } } } },
-    ],
-  } },
-}
+checkActiveRequirements(leagueId): Promise<{ ok: true } | { ok: false; reason: "MIN_TEAMS" | "TEAM_WITHOUT_PLAYERS" }>
 ```
-(skip the manager branch when `managedOrgIds` is empty). Then run **one** extra query for the returned league ids to compute `myRoles` and `myTeamsCount`.
+- `updateLeagueStatus` maps `reason` to the existing `minTeamsRequired` / `teamWithoutPlayers` messages (same 409 codes, same messages).
+- The cron uses the batch version (Phase 5.1) built from the same pure counting rule.
 
-Response item:
-```json
-{
-  "league": { "...League fields..." },
-  "myRoles": ["MANAGER", "HEAD_COACH"],
-  "myTeamsCount": 2
-}
-```
-`myRoles` is the de-duplicated union across the user's teams in that league, values `MANAGER | HEAD_COACH | COACH | PLAYER`. Ordering: `MANAGER, HEAD_COACH, COACH, PLAYER`.
-Order of leagues: `id desc`. `teams` is **removed** from this response (D8).
+### 2.3 Mapping and includes
+- Move `leagueTeamInclude`, `leagueTeamListInclude`, `memberInclude` from `league-teams.service.ts` into `league.mapper.ts` next to `leagueInclude`.
+- Merge `toTeamItem` (service wrapper) into `toLeagueTeamItem` (mapper) so only one function exists.
+- Move the inline `base` object of `listCandidates` into `toCandidateItem(member, extras, { admin })` in the mapper, reusing `toAdminMemberItem` fields for `phone`/`birthDate`.
 
-### 7.3 `GET /leagues/:leagueId`
+### 2.4 Repeated filters
+Extract small constants in the mapper/shared file instead of repeating literals:
+`activeLeagueTeamWhere(leagueId)` (`status: ACTIVE`, `team.status != DELETED`) used by `listLeagueTeams`, `meetsActiveRequirements`, `updateLeagueStatus`, `myLeagueTeamConditions`.
 
-`404` if missing or `INACTIVE` (non-admin). Returns `League` + `can: { view, registerTeam }`.
-Frontend rule: show "Add team" **only** when `can.registerTeam === true` (it already combines status, roster deadline, and "manages at least one org").
+### 2.5 Access resolution duplicated in DB and pure form
+`resolveLeagueTeamAccess` re-implements `buildAccess` with two sequential queries. Handled in Phase 5.2.
 
-### 7.4 `GET /leagues/:leagueId/my-teams` (auth) — new
-
-Rules:
-- MANAGER: **all** ACTIVE league teams of the organizations they manage.
-- Others: only league teams where they have an ACTIVE roster row.
-- Union when both apply. Deleted teams excluded. `404` for missing/`INACTIVE` league.
-
-Response:
-```json
-{
-  "league": { "id": 1, "name": "...", "status": "REGISTRATION", "rosterDeadline": "1404/05/20" },
-  "items": [
-    {
-      "leagueTeamId": 5,
-      "team": { "id": 12, "name": "...", "logoUrl": "https://..." },
-      "organization": { "id": 3, "name": "..." },
-      "myRoles": ["MANAGER", "HEAD_COACH"],
-      "membersCount": 9,
-      "can": { "manageRoster": true, "unregister": true }
-    }
-  ],
-  "total": 1
-}
-```
-No pagination (a person has few teams in one league). `can` uses `leagueTeamPolicy` with the resolved access per team. To avoid N+1: load all of the user's roster rows for the league in one query and build a map `leagueTeamId → { isHeadCoach, role }`.
-
-`myRoles` for a roster row: `HEAD_COACH` if `isHeadCoach`, else `teamSeasonMember.role` (`COACH` or `PLAYER`). `HEAD_COACH` replaces `COACH` for that row.
-
-### 7.5 `GET /leagues/:leagueId/eligible-teams` (auth)
-
-Unchanged logic: ACTIVE teams of ACTIVE organizations the caller manages, having at least one ACTIVE member in the league's season; returns `alreadyRegistered` and `activeRosterCount`. Non-managers get an empty list.
-
-### 7.6 `POST /leagues/:leagueId/teams` (auth)
-
-Body: `{ "teamId": number }` (strict).
-Checks (order): league → team (404) → manager of team org (403) → status/window (409) → team & org ACTIVE (400) → season roster exists (400) → not already registered (409).
-Behaviour changes: runs in a **transaction**; after creating/reactivating the `LeagueTeam`, calls `addHeadCoachToLeagueRoster` (reactivation still starts with an empty roster, then the head coach is added).
-Response: league team item including `id` (= `leagueTeamId`, used by the frontend to redirect to the team page), `membersCount`, and `can`.
-
-### 7.7 `DELETE /leagues/:leagueId/teams/:leagueTeamId` (auth)
-
-Unchanged rules: manager only, not allowed in `ACTIVE` league (409), only before deadline in `REGISTRATION`. Soft-deletes the `LeagueTeam` and its `LeagueTeamMember` rows.
-
-### 7.8 `GET /leagues/:leagueId/teams` (public)
-
-All ACTIVE teams of the league, with `membersCount` and `can`. No `myRoles` (use `my-teams`). Kept for the public/Competitions views.
-
-### 7.9 `GET /leagues/:leagueId/teams/:leagueTeamId` (public) — new
-
-```json
-{
-  "id": 5,
-  "league": { "id": 1, "name": "...", "status": "REGISTRATION", "rosterDeadline": "1404/05/20" },
-  "team": { "id": 12, "name": "...", "logoUrl": "..." },
-  "organization": { "id": 3, "name": "..." },
-  "counts": { "coaches": 2, "players": 9 },
-  "myRoles": [],
-  "can": { "manageRoster": false, "unregister": false }
-}
-```
-`myRoles` is `[]` for guests and non-involved users. `404` if league/league-team is missing or deleted.
-
-### 7.10 `GET .../members` (public) — changed
-
-Query: `page`, `pageSize`, `role`.
-Server ordering (fixed, with pagination):
-1. head coach first,
-2. `COACH` before `PLAYER`,
-3. `jerseyNumber asc` (nulls last, players),
-4. `id asc`.
-
-Prisma: `orderBy: [{ teamSeasonMember: { isHeadCoach: "desc" } }, { teamSeasonMember: { role: "asc" } }, { teamSeasonMember: { jerseyNumber: "asc" } }, { id: "asc" }]` (enum order `COACH < PLAYER`; verify null handling on MariaDB and, if needed, sort by `jerseyNumber IS NULL` via raw query or drop jersey from the ordering).
-
-Public safe fields only (`id`, `teamSeasonMemberId`, `userId`, `fullName`, `avatarUrl`, `role`, `jerseyNumber`, `isHeadCoach`). Top-level `can` for the viewer.
-
-### 7.11 `GET .../members/candidates` (auth) — changed
-
-Who may call: `ADMIN`, `MANAGER`, `HEAD_COACH` of that league team. Everyone else `403`. (Coaches/players use `/members`.)
-
-Query: `page`, `pageSize`, `role`, `search`.
-
-Each item:
-```json
-{
-  "leagueTeamMemberId": 31,
-  "teamSeasonMemberId": 8,
-  "userId": 7,
-  "fullName": "...",
-  "avatarUrl": "...",
-  "role": "PLAYER",
-  "jerseyNumber": 10,
-  "isHeadCoach": false,
-  "selected": true,
-  "eligible": true,
-  "ineligibleReason": null,
-  "canToggle": true,
-  "toggleLockReason": null
-}
-```
-- `leagueTeamMemberId` is `null` when `selected` is false. It is the `memberId` for the DELETE call (removes the extra lookup call).
-- `eligible` / `ineligibleReason` (`BIRTH_DATE_MISSING | TOO_OLD | IN_OTHER_TEAM`) apply to players only.
-- `canToggle` comes from `rosterRowPolicy` AND (`selected` OR `eligible`) — a selected row can always be removed; an unselected ineligible player cannot be added.
-- Admin variant additionally returns `phone` and `birthDate` (Jalali).
-
-**Ordering with pagination** (selected first, then head coach, coaches, players):
-`selected` is not a column of `TeamSeasonMember`, so use two-phase paging:
-1. `S` = count of selected members (ACTIVE rows that match the filters).
-2. Page slice `[skip, skip+take)` over the virtual list `selected ++ unselected`:
-   - part A: selected rows ordered `isHeadCoach desc, role asc, jerseyNumber asc, id asc` with offset `skip`, limit `min(take, S - skip)` when `skip < S`;
-   - part B: unselected rows with the same order, offset `max(0, skip - S)`, limit `take - len(A)`.
-3. `total` is the total member count.
-
-### 7.12 `POST .../members` (auth) — changed
-
-Body: `{ "teamSeasonMemberIds": number[] }` (1–50, strict, de-duplicated).
-Access and row rules: §5.3. Idempotence: reactivates a previously `DELETED` row, rejects already `ACTIVE` with `409`.
-Response: the created/reactivated rows in the public member shape plus `leagueTeamMemberId` mapping (`id`).
-
-### 7.13 `DELETE .../members/:memberId` (auth) — changed
-
-`memberId` = `LeagueTeamMember.id`. Access and row rules: §5.3.
-Additional rule: head-coach rows are removable by `MANAGER`/`ADMIN` only (D4/D5). Existing last-player rule in an `ACTIVE` league stays.
+### 2.6 Thin admin wrapper
+`league-teams.admin.service.ts` only forwards to the main service with `adminActor(callerUserId)`. Handled in Phase 4.4.
 
 ---
 
-## 8. Response Models (Swagger)
+## Phase 3: One source of truth for rules (policy ↔ service)
 
-Register in `leagues.docs.ts`:
+Problem: the same rules exist twice. `assertCanRegister` and `assertRosterEditable` in the service duplicate `leaguePolicy`, `leagueTeamPolicy` and `canEditByStatus` / `isRosterWindowOpen`.
 
-| Schema | Fields |
+Plan:
+1. In `leagues.policy.ts` add pure evaluators that return a reason, not just a boolean:
+   ```ts
+   type Denial = "NOT_AUTHORIZED" | "STATUS_CLOSED" | "WINDOW_CLOSED";
+   evaluateRegister(actor, league, organizationId, now?) : { allowed: true } | { allowed: false; reason: Denial }
+   evaluateRosterEdit(access, league, now?)             : { allowed: true } | { allowed: false; reason: Denial }
+   ```
+   Check order stays exactly: identity (403) → status (409 `registrationClosed`) → window (409 `rosterClosed`).
+2. Rebuild `leaguePolicy.registerTeam` and `leagueTeamPolicy.manageRoster/unregister` on top of these evaluators (so booleans and errors can never disagree).
+3. Services shrink to a mapper from `Denial` to `AppError`:
+   - `NOT_AUTHORIZED` → 403 `league.notAuthorized`
+   - `STATUS_CLOSED` → 409 `league.registrationClosed`
+   - `WINDOW_CLOSED` → 409 `league.rosterClosed`
+4. Keep the existing policy matrix test green and add cases for the new `reason` values.
+
+Result: rules change in one file; services stop re-deriving them.
+
+---
+
+## Phase 4: Split services and tidy admin
+
+### 4.1 Split `league-teams.service.ts` (~450 lines, two responsibilities)
+
+| New file | Functions |
 |---|---|
-| `League` | existing fields; `can?: LeagueCan` |
-| `LeagueCan` | `view`, `registerTeam` |
-| `LeagueTeamCan` | `manageRoster`, `unregister` |
-| `LeagueRoleEnum` | `MANAGER \| HEAD_COACH \| COACH \| PLAYER` |
-| `MyLeague` | `league: League`, `myRoles: LeagueRoleEnum[]`, `myTeamsCount: number` |
-| `MyLeagueTeam` | `leagueTeamId`, `team`, `organization`, `myRoles`, `membersCount`, `can` |
-| `MyTeamsResponse` | `league` (summary), `items: MyLeagueTeam[]`, `total` |
-| `LeagueTeamDetail` | see §7.9 |
-| `LeagueMember` | public fields |
-| `LeagueCandidate` | see §7.11 (admin extends with `phone`, `birthDate`) |
-| `EligibleTeam`, `LeagueTeamItem` | existing, unchanged |
+| `league-teams.service.ts` | `listLeagueTeams`, `listEligibleTeams`, `registerTeam`, `unregisterTeam`, `loadLeagueTeam` |
+| `league-roster.service.ts` | `listMembers`, `listCandidates`, `addMembers`, `removeMember` |
 
-Keep exported names `leagueSchema`, `leagueTeamItemSchema`, `leagueMemberSchema`, `leagueCandidateSchema`, `eligibleTeamSchema` (admin docs import them). Admin docs extend `LeagueCandidate` additively.
+- Export `loadLeagueTeam` from `league-teams.service.ts` (or move it to `shared/league.access.ts`, which already holds loaders) so the roster service can use it.
+- Public function signatures stay identical, so controllers only change their imports.
 
-Update `docs/modules/competition.md`, `docs/modules/teams.md`, `docs/09-authorization.md` (new policy inputs), `docs/status/current-state.md`.
+### 4.2 Break up long functions
+- `listCandidates` → `buildCandidateFilters`, `paginateSelectedFirst` (generic two-phase paging helper), `mapCandidate`.
+- `addMembers` → `loadAddableRows`, `assertPlayersEligible` (age + other-team), `persistRosterRows` (Phase 5.3).
+- `updateLeague` → `assertCutoffChangeAllowed`, `resolveNextStatusOnDeadlineChange`, `assertUniqueName`; keep the "nothing changed → return existing" short-circuit.
+- `updateLeagueStatus` → `assertStatusTransitionAllowed` + `checkActiveRequirements` (Phase 2.2).
+
+Rule of thumb: no function over ~40 lines; each helper has one reason to exist.
+
+### 4.3 `leagues.public.service.ts`
+Same functions as today (`listPublicLeagues`, `getPublicLeague`, `listMyLeagues`, `listMyTeams`, `getLeagueTeamDetail`), only the rename plus the Phase 5.1 change (no writes while reading).
+
+### 4.4 Admin folder stays; remove the pass-through service
+- Keep `leagues/admin/leagues/*` and `leagues/admin/league-teams/*` where they are.
+- Delete `league-teams.admin.service.ts`. The admin controller calls `league-teams.service` / `league-roster.service` directly with `adminActor(req.userId!)` (one small local helper in the controller).
+- Keep `leagues.admin.service.ts` (it has real logic).
 
 ---
 
-## 9. Messages to Add (`src/language/message.ts`, Persian text)
+## Phase 5: Performance fixes
 
-| Key | Meaning |
+### 5.1 No database writes on GET requests (highest impact)
+Today `autoAdvanceExpiredRegistrations()` runs inside `listPublicLeagues`, `listLeagues` (admin), `listMyLeagues`, and `maybeAdvanceSingleLeague` (an UPDATE) runs in `loadLeagueContext`, `getPublicLeague`, `getLeagueById`, `createLeague`, `updateLeague`. Reads therefore cost extra queries, can write, and can race with each other and with the interval in `server.ts`.
+
+Plan (`league.lifecycle.ts`):
+1. Reads use the stored status only. Remove every lifecycle call from read paths, including the empty `try { ... } catch {}` blocks.
+2. Write paths that change the deadline (`updateLeague`) call `advanceLeagueIfExpired(leagueId)` once after the update. `createLeague` does not need it (see Phase 1.5).
+3. One background job owns promotion:
+   ```ts
+   advanceExpiredRegistrations(now?): Promise<number>
+   startLeagueLifecycleJob(intervalMs): void   // called from server.ts
+   ```
+   - Compute "today in Tehran" once and filter in SQL (`rosterDeadline < todayTehranDate`) instead of loading all REGISTRATION leagues and filtering in JS.
+   - Load teams with their ACTIVE player counts for **all** expired leagues in one `findMany`, group by `leagueId` in memory, and evaluate the same pure rule used by `checkActiveRequirements`. This replaces today's one-query-per-league loop.
+   - Promote with a conditional write (`updateMany({ where: { id: { in: ids }, status: "REGISTRATION" }, data: { status: "ACTIVE" } })`) so concurrent runs and multi-instance deploys are idempotent.
+   - Guard against overlapping runs (`isRunning` flag) and log errors with `console.error`; run once at startup, then every 1–2 minutes (Decision 2).
+4. Remove the "REGISTRATION without deadline → INACTIVE" write (Decision 1).
+
+Effect: every league read loses 1–2 queries, GET becomes side-effect free, the race disappears.
+
+### 5.2 Access resolution in one pass
+`resolveLeagueTeamAccess` runs two sequential queries (`own`, then `memberRow`) and duplicates `buildAccess`.
+New version:
+- Admin or guest → no query (as today).
+- Manager → no query: `rosterRowPolicy` only uses `ownTeamSeasonMemberId` for HEAD_COACH rows.
+- Everyone else → one `loadMyRosterRows(userId, { leagueTeamIds: [id] })` + pure `buildAccess(...)`.
+`resolveAccessMap` already works this way; the single-team function becomes a thin variant of it. Confirm the equivalence with unit tests on `buildAccess` (existing tests already cover resolution order).
+
+### 5.3 Batch writes in `addMembers`
+Replace the `for` loop of sequential `create` / `update` calls (up to 50) inside the transaction with:
+1. `updateMany` to set `status: ACTIVE` for ids that already have a (DELETED) row.
+2. `createMany` for the ids without a row.
+3. One `findMany` with `memberInclude` to build the response (keeps the response order by requested ids).
+Same transaction, same error mapping (`P2002` → `alreadyInRoster`).
+
+### 5.4 Batch head-coach sync
+`syncHeadCoachToRegistrationLeagues` runs one `upsert` per league team. Replace with one `findMany` of target league teams, then `createMany({ skipDuplicates: true })` for missing rows and one `updateMany` setting ACTIVE for existing ones. Same helper also serves `addHeadCoachToLeagueRoster` (single target).
+
+### 5.5 `listCandidates`
+Keep the two-count + two-page selected-first strategy (it is correct) but isolate it in `paginateSelectedFirst` so it is testable, and make sure the "other team" lookup only runs when the page contains PLAYER rows (already true; keep it behind the shared helper from 2.1).
+
+### 5.6 Things to measure, not guess
+- `listMyLeagues` (nested `some` filters): capture `EXPLAIN` on real data volume before changing anything. MySQL/MariaDB already index foreign keys, so do **not** add indexes speculatively.
+- `leagueInclude._count.teams` on list endpoints: acceptable now; revisit only if list latency becomes an issue.
+
+---
+
+## Phase 6: Tests and docs
+
+Add pure (no-DB) tests:
+- `league.lifecycle`: next-status resolution on deadline change, expired detection, requirement evaluation from grouped counts.
+- `leagues.policy`: new `evaluateRegister` / `evaluateRosterEdit` reasons.
+- `paginateSelectedFirst`: page boundaries (selected-only page, mixed page, unselected-only page, empty).
+- Mapper: `toCandidateItem` admin vs public shape.
+
+Update docs:
+- `docs/modules/competition.md`: new file list, lifecycle job (reads never write), single rules source.
+- `docs/03-project-structure.md`: new file names.
+- `docs/modules/teams.md`: note the head-coach-sync helper dependency.
+- Swagger: replace generic `"Conflict"` / `"Bad request"` strings in league docs with real `messages.error.*` keys where the exact error is known (docs only, low priority).
+
+---
+
+## Execution order and checklist
+
+Each step is its own commit; run `npm test` and `npx tsc --noEmit` after every step.
+
+- [ ] **Phase 0**: baseline + characterization tests
+- [ ] **Phase 1**: renames, `league.types.ts`, dead code, comments, type policy, date helpers
+- [ ] **Phase 2**: `league.players.ts`, `checkActiveRequirements`, mapper/includes merge, shared filters
+- [ ] **Phase 3**: policy evaluators, services use them
+- [ ] **Phase 4**: split `league-teams.service` → `league-roster.service`, break up long functions, remove admin wrapper
+- [ ] **Phase 5.1**: lifecycle job, remove writes from reads (needs Decisions 1 and 2)
+- [ ] **Phase 5.2–5.4**: access in one pass, batch `addMembers`, batch head-coach sync
+- [ ] **Phase 6**: tests and docs
+
+## Risk notes
+
+| Risk | Mitigation |
 |---|---|
-| `error.leagueRoster.headCoachRowManagerOnly` | Only the organization manager or an admin can add/remove the head coach in the league roster. |
-| `error.leagueRoster.notAuthorized` (or reuse `error.league.notAuthorized`) | Caller cannot edit this team's league roster. |
-| `success.leagueTeam.myList` | My teams in this league fetched. |
-| `success.leagueTeam.found` | League team fetched. |
+| Error order changes (403 vs 409) | Evaluators keep identity → status → window; policy matrix test stays green. |
+| Promotion lag after removing lazy writes | Job runs at startup and every 1–2 min; documented (Decision 2). |
+| Batch `createMany` skipping a conflicting row silently | Pre-check existing rows (already done in `addMembers`) and keep `P2002` mapping inside the transaction. |
+| Broken imports after renames | Rename in Phase 1 with `git mv`, compile after each move, update the test imports. |
+| Behavior drift in `listCandidates` | Extract helper without changing queries; add paging boundary tests before touching it. |
 
-Reuse existing keys everywhere else (`registrationClosed`, `rosterClosed`, `playerInOtherTeam`, `ageIneligible`, `teamWithoutPlayers`, …). Keep 403/404 keys stable.
+## Definition of done
 
----
-
-## 10. Implementation Phases
-
-**Phase 0 — Safety net**
-- Write admin regression tests (supertest) for: register/unregister, candidates, add/remove members, status machine. They must pass before and after.
-
-**Phase 1 — Teardown**
-- Delete app-only files and the stale `competition/admin/league-teams` folder.
-- Remove app `registerPath` blocks; keep exported schemas used by admin.
-- Temporarily unmount `/leagues` in `routes/index.ts` until Phase 4.
-
-**Phase 2 — Core (shared)**
-1. `league.access.ts` + rewritten `leagues.policy.ts` (+ unit tests with hand-built actors, no DB).
-2. `league.headcoach.sync.ts`.
-3. Rewrite `league-teams.service.ts` (transactional register, access resolution, row rules, ordering, `leagueTeamMemberId`).
-4. Hook `teams.service` (add/promote head coach) to the sync helper.
-
-**Phase 3 — App services**
-- `leagues.service.ts`: `listPublicLeagues`, `getPublicLeague`, `listMyLeagues` (DB-paginated, roles aggregation), `listMyTeams`, `getLeagueTeamDetail`.
-
-**Phase 4 — HTTP layer**
-- Validation (`leagueIdParamSchema`, `leagueTeamParamSchema`, `leagueMemberParamSchema`, queries), controller, routes (order: `/me` first), remount, Swagger docs.
-
-**Phase 5 — Docs and cleanup**
-- Update docs listed in §8; update `current-state.md`.
-
----
-
-## 11. Test Matrix
-
-Policy (pure, no DB):
-- ADMIN / MANAGER / HEAD_COACH / null × status (`INACTIVE`, `REGISTRATION`, `ACTIVE`, `FINISHED`) × deadline (open/closed) → `manageRoster`, `unregister`.
-- `rosterRowPolicy`: head-coach row for manager (allowed), for head coach (`MANAGER_ONLY`), own row (`OWN_ROW`), ordinary coach/player rows.
-
-API:
-1. `GET /leagues/me`: manager-only user, player-only user, coach selected vs. not selected (not listed), deactivated head coach (not listed), pagination correctness, `INACTIVE` excluded, `teams` absent.
-2. `GET /leagues/:id/my-teams`: manager sees all org teams; player sees only own team; mixed roles union; `404` for `INACTIVE`.
-3. Register team → head coach auto-added; team without head coach → empty roster; re-register after unregister → head coach re-added, others not.
-4. Promote new head coach at team level during `REGISTRATION` → added to league roster; during `ACTIVE`/`FINISHED` → not added.
-5. Manager removes head coach row → head coach gets `403` on candidates/add/remove and the league disappears from their profile; manager can re-add.
-6. Head coach: can toggle coach and player rows; `403` when targeting head-coach row or own row; `403` after deadline or outside `REGISTRATION`; cannot unregister the team.
-7. Coach/player: `403` on candidates/add/remove; `/members` works.
-8. Candidates: ordering (selected → head coach → coaches → players), two-phase pagination boundaries, `leagueTeamMemberId` correctness, `canToggle` for ineligible/selected players.
-9. Admin endpoints unchanged (regression suite from Phase 0), plus `leagueTeamMemberId` present in admin candidates.
-
----
-
-## 12. Edge Cases and Notes
-
-1. **Head coach with no manager action:** a team whose head coach was never toggled by the manager works out of the box (D2). If the team has no head coach, only the manager can edit.
-2. **Season mismatch:** access is resolved with the league's season (`cutoff.seasonId`), so a head coach of a non-active season is still recognised.
-3. **Team-level removal:** `teams.service.removeRosterMember` already soft-deletes league roster rows (and is blocked with `409` when the league is `ACTIVE`/`FINISHED`). Because a head coach can remove players but removing themselves is governed by team rules, confirm that `cannotRemoveOwnHeadCoach` (only when the coach count is 1) is the behaviour you want.
-4. **Frontend contract:** buttons are driven by `can.registerTeam`, `can.manageRoster`, `can.unregister`, and per-row `canToggle` / `toggleLockReason`. The frontend never infers permissions from roles.
-5. **Notifications:** none exist; a user removed from a roster simply stops seeing the league on their profile.
-6. **No Prisma migration** is required for this plan.
-7. **Swagger/permissions:** no new admin permission strings are needed; admin behaviour only gains additive fields and the auto head-coach activation on registration.
+- No GET endpoint in the module performs a write.
+- No duplicated query/rule for: players in another team, ACTIVE requirements, access resolution, register/roster-edit rules.
+- No file over ~300 lines and no function over ~40 lines in the league module (excluding docs files).
+- `any` remains only where no existing type applies (Prisma error `catch` blocks).
+- All tests and `tsc --noEmit` pass; docs updated.

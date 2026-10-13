@@ -96,7 +96,7 @@ async function updateStatus(req: Request, res: Response, next: NextFunction) {
     const league = await leaguesAdminService.updateLeagueStatus(
       Number(req.params.leagueId),
       input.status,
-      req.adminLevel ?? null,
+      req.adminLevel === "SUPER_ADMIN",
     );
     return apiResponse.sendResponse(
       res,

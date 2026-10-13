@@ -1,8 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
 import { messages } from "../../../language/message.ts";
 import apiResponse from "../../../utils/apiResponse.ts";
-import leaguesService from "./leagues.service.ts";
+import leaguesService from "./leagues.public.service.ts";
 import leagueTeamsService from "./league-teams.service.ts";
+import leagueRosterService from "./league-roster.service.ts";
 
 async function listPublic(req: Request, res: Response, next: NextFunction) {
   try {
@@ -131,7 +132,7 @@ async function listMembers(req: Request, res: Response, next: NextFunction) {
       pageSize: number;
       role?: "COACH" | "PLAYER";
     };
-    const result = await leagueTeamsService.listMembers(
+    const result = await leagueRosterService.listMembers(
       Number(req.params.leagueId),
       Number(req.params.leagueTeamId),
       query,
@@ -218,7 +219,7 @@ async function listCandidates(req: Request, res: Response, next: NextFunction) {
       role?: "COACH" | "PLAYER";
       search?: string;
     };
-    const result = await leagueTeamsService.listCandidates(
+    const result = await leagueRosterService.listCandidates(
       Number(req.params.leagueId),
       Number(req.params.leagueTeamId),
       query,
@@ -241,7 +242,7 @@ async function addMembers(req: Request, res: Response, next: NextFunction) {
     const input = (req.validatedBody ?? req.body) as {
       teamSeasonMemberIds: number[];
     };
-    const result = await leagueTeamsService.addMembers(
+    const result = await leagueRosterService.addMembers(
       Number(req.params.leagueId),
       Number(req.params.leagueTeamId),
       input.teamSeasonMemberIds,
@@ -260,7 +261,7 @@ async function addMembers(req: Request, res: Response, next: NextFunction) {
 
 async function removeMember(req: Request, res: Response, next: NextFunction) {
   try {
-    await leagueTeamsService.removeMember(
+    await leagueRosterService.removeMember(
       Number(req.params.leagueId),
       Number(req.params.leagueTeamId),
       Number(req.params.memberId),

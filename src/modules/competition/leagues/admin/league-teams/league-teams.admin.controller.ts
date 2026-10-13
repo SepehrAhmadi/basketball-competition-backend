@@ -1,7 +1,13 @@
 import type { Request, Response, NextFunction } from "express";
 import { messages } from "../../../../../language/message.ts";
 import apiResponse from "../../../../../utils/apiResponse.ts";
-import leagueTeamsAdminService from "./league-teams.admin.service.ts";
+import { adminActor } from "../../../../../authz/actor.ts";
+import leagueTeamsService from "../../league-teams.service.ts";
+import leagueRosterService from "../../league-roster.service.ts";
+
+function asAdmin(req: Request) {
+  return adminActor(req.userId!);
+}
 
 async function list(req: Request, res: Response, next: NextFunction) {
   try {
@@ -10,10 +16,10 @@ async function list(req: Request, res: Response, next: NextFunction) {
       pageSize: number;
       search?: string;
     };
-    const result = await leagueTeamsAdminService.listLeagueTeams(
+    const result = await leagueTeamsService.listLeagueTeams(
       Number(req.params.leagueId),
       query,
-      req.userId!,
+      asAdmin(req),
     );
     return apiResponse.sendResponse(
       res,
@@ -34,10 +40,10 @@ async function listEligible(req: Request, res: Response, next: NextFunction) {
       search?: string;
       organizationId?: number;
     };
-    const result = await leagueTeamsAdminService.listEligibleTeams(
+    const result = await leagueTeamsService.listEligibleTeams(
       Number(req.params.leagueId),
       query,
-      req.userId!,
+      asAdmin(req),
     );
     return apiResponse.sendResponse(
       res,
@@ -53,10 +59,10 @@ async function listEligible(req: Request, res: Response, next: NextFunction) {
 async function register(req: Request, res: Response, next: NextFunction) {
   try {
     const input = (req.validatedBody ?? req.body) as { teamId: number };
-    const result = await leagueTeamsAdminService.registerTeam(
+    const result = await leagueTeamsService.registerTeam(
       Number(req.params.leagueId),
       input.teamId,
-      req.userId!,
+      asAdmin(req),
     );
     return apiResponse.sendResponse(
       res,
@@ -71,10 +77,10 @@ async function register(req: Request, res: Response, next: NextFunction) {
 
 async function unregister(req: Request, res: Response, next: NextFunction) {
   try {
-    await leagueTeamsAdminService.unregisterTeam(
+    await leagueTeamsService.unregisterTeam(
       Number(req.params.leagueId),
       Number(req.params.leagueTeamId),
-      req.userId!,
+      asAdmin(req),
     );
     return apiResponse.sendResponse(
       res,
@@ -94,11 +100,12 @@ async function listMembers(req: Request, res: Response, next: NextFunction) {
       pageSize: number;
       role?: "COACH" | "PLAYER";
     };
-    const result = await leagueTeamsAdminService.listMembers(
+    const result = await leagueRosterService.listMembers(
       Number(req.params.leagueId),
       Number(req.params.leagueTeamId),
       query,
-      req.userId!,
+      asAdmin(req),
+      { admin: true },
     );
     return apiResponse.sendResponse(
       res,
@@ -119,11 +126,12 @@ async function listCandidates(req: Request, res: Response, next: NextFunction) {
       role?: "COACH" | "PLAYER";
       search?: string;
     };
-    const result = await leagueTeamsAdminService.listCandidates(
+    const result = await leagueRosterService.listCandidates(
       Number(req.params.leagueId),
       Number(req.params.leagueTeamId),
       query,
-      req.userId!,
+      asAdmin(req),
+      { admin: true },
     );
     return apiResponse.sendResponse(
       res,
@@ -141,11 +149,12 @@ async function addMembers(req: Request, res: Response, next: NextFunction) {
     const input = (req.validatedBody ?? req.body) as {
       teamSeasonMemberIds: number[];
     };
-    const result = await leagueTeamsAdminService.addMembers(
+    const result = await leagueRosterService.addMembers(
       Number(req.params.leagueId),
       Number(req.params.leagueTeamId),
       input.teamSeasonMemberIds,
-      req.userId!,
+      asAdmin(req),
+      { admin: true },
     );
     return apiResponse.sendResponse(
       res,
@@ -160,11 +169,11 @@ async function addMembers(req: Request, res: Response, next: NextFunction) {
 
 async function removeMember(req: Request, res: Response, next: NextFunction) {
   try {
-    await leagueTeamsAdminService.removeMember(
+    await leagueRosterService.removeMember(
       Number(req.params.leagueId),
       Number(req.params.leagueTeamId),
       Number(req.params.memberId),
-      req.userId!,
+      asAdmin(req),
     );
     return apiResponse.sendResponse(
       res,
@@ -187,4 +196,3 @@ export default {
   addMembers,
   removeMember,
 };
-

@@ -1,5 +1,11 @@
 import { gregorianToJalali } from "../../../utils/date.util.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
+import type { LeagueStatus } from "../../../prisma/generated/prisma/enums.ts";
+import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
+import type {
+  LeagueTeamCan,
+  LockReason,
+} from "../leagues/leagues.policy.ts";
 
 export const leagueInclude = {
   ageCategoryCutoff: {
@@ -17,11 +23,59 @@ export const leagueInclude = {
   },
 } as const;
 
+export const leagueTeamInclude = {
+  team: {
+    select: {
+      id: true,
+      name: true,
+      logoUrl: true,
+      status: true,
+      organization: { select: { id: true, name: true } },
+    },
+  },
+} as const;
+
+export const leagueTeamListInclude = {
+  ...leagueTeamInclude,
+  _count: { select: { members: { where: { status: "ACTIVE" } } } },
+} as const;
+
+export const memberInclude = {
+  teamSeasonMember: {
+    select: {
+      id: true,
+      role: true,
+      jerseyNumber: true,
+      isHeadCoach: true,
+      user: {
+        select: {
+          id: true,
+          fullName: true,
+          avatarUrl: true,
+          phone: true,
+          birthDate: true,
+        },
+      },
+    },
+  },
+} as const;
+
+/** Shared filter for ACTIVE league teams of non-deleted teams. */
+export function activeLeagueTeamWhere(
+  leagueId?: number,
+): Prisma.LeagueTeamWhereInput {
+  return {
+    ...(leagueId !== undefined ? { leagueId } : {}),
+    status: "ACTIVE",
+    team: { status: { not: "DELETED" } },
+  };
+}
+
 type LeagueRow = {
   id: number;
   name: string;
   description: string | null;
-  status: string;
+  status: LeagueStatus;
   startDate: Date | null;
   endDate: Date | null;
   rosterDeadline: Date | null;
@@ -62,10 +116,10 @@ type LeagueTeamRow = {
   team: { id: number; name: string; logoUrl: string | null };
   organization: { id: number; name: string };
   membersCount?: number;
-  can?: unknown;
+  can?: LeagueTeamCan;
 };
 
-export function toLeagueTeamItem(row: LeagueTeamRow, can?: unknown) {
+export function toLeagueTeamItem(row: LeagueTeamRow, can?: LeagueTeamCan) {
   return {
     id: row.id,
     status: row.status,
@@ -81,6 +135,37 @@ export function toLeagueTeamItem(row: LeagueTeamRow, can?: unknown) {
     createdAt: row.createdAt,
     ...(can !== undefined ? { can } : {}),
   };
+}
+
+type LeagueTeamListRow = {
+  id: number;
+  status: string;
+  createdAt: Date;
+  team: {
+    id: number;
+    name: string;
+    logoUrl: string | null;
+    organization: { id: number; name: string };
+  };
+  _count: { members: number };
+};
+
+/** Maps a league-team list row (with member count) to the API shape. */
+export function toLeagueTeamListItem(
+  row: LeagueTeamListRow,
+  can?: LeagueTeamCan,
+) {
+  return toLeagueTeamItem(
+    {
+      id: row.id,
+      status: row.status,
+      createdAt: row.createdAt,
+      team: { id: row.team.id, name: row.team.name, logoUrl: row.team.logoUrl },
+      organization: row.team.organization,
+      membersCount: row._count.members,
+    },
+    can,
+  );
 }
 
 type MemberRow = {
@@ -151,25 +236,71 @@ export function toLeagueTeamMemberRow(row: LeagueTeamMemberRow) {
 
 // head coach first, COACH before PLAYER, then jersey number, then id.
 // (jerseyNumber NULLs follow the database default ordering.)
-export const memberOrderBy = [
+export const memberOrderBy: Prisma.LeagueTeamMemberOrderByWithRelationInput[] = [
   { teamSeasonMember: { isHeadCoach: "desc" } },
   { teamSeasonMember: { role: "asc" } },
   { teamSeasonMember: { jerseyNumber: "asc" } },
   { id: "asc" },
-] as const;
+];
 
-export const teamSeasonMemberOrderBy = [
+export const teamSeasonMemberOrderBy: Prisma.TeamSeasonMemberOrderByWithRelationInput[] = [
   { isHeadCoach: "desc" },
   { role: "asc" },
   { jerseyNumber: "asc" },
   { id: "asc" },
-] as const;
+];
 
-export default {
-  leagueInclude,
-  toLeagueResponse,
-  toLeagueTeamItem,
-  toPublicMemberItem,
-  toAdminMemberItem,
-  toLeagueTeamMemberRow,
+type CandidateRow = {
+  id: number;
+  userId: number;
+  role: string;
+  jerseyNumber: number | null;
+  isHeadCoach: boolean;
+  user: {
+    fullName: string;
+    avatarUrl: string | null;
+    phone: string;
+    birthDate: Date | null;
+  };
+  leagueMemberships: { id: number }[];
 };
+
+export interface CandidateExtras {
+  selected: boolean;
+  eligible: boolean;
+  ineligibleReason: string | null;
+  canToggle: boolean;
+  toggleLockReason: LockReason;
+}
+
+/** Maps a roster candidate row; admin shape adds phone and birthDate. */
+export function toCandidateItem(
+  row: CandidateRow,
+  extras: CandidateExtras,
+  options: { admin: boolean },
+) {
+  const base = {
+    leagueTeamMemberId: extras.selected ? row.leagueMemberships[0].id : null,
+    teamSeasonMemberId: row.id,
+    userId: row.userId,
+    fullName: row.user.fullName,
+    avatarUrl: getPublicFileUrl(row.user.avatarUrl, process.env.BASE_URL),
+    role: row.role,
+    jerseyNumber: row.jerseyNumber,
+    isHeadCoach: row.isHeadCoach,
+    selected: extras.selected,
+    eligible: extras.eligible,
+    ineligibleReason: extras.ineligibleReason,
+    canToggle: extras.canToggle,
+    toggleLockReason: extras.toggleLockReason,
+  };
+  return options.admin
+    ? {
+        ...base,
+        phone: row.user.phone,
+        birthDate: gregorianToJalali(row.user.birthDate),
+      }
+    : base;
+}
+
+

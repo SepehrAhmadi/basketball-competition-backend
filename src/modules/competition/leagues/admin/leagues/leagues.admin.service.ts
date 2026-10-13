@@ -1,17 +1,21 @@
 import prisma from "../../../../../config/db.config.ts";
 import AppError from "../../../../../utils/appError.ts";
 import { messages } from "../../../../../language/message.ts";
-import { jalaliToGregorian } from "../../../../../utils/date.util.ts";
+import type { Prisma } from "../../../../../prisma/generated/prisma/client.ts";
+import {
+  jalaliToGregorianOrNull,
+  sameDate,
+} from "../../../../../utils/date.util.ts";
 import {
   leagueInclude,
   toLeagueResponse,
 } from "../../../shared/league.mapper.ts";
 import {
-  autoAdvanceExpiredRegistrations,
+  advanceLeagueIfExpired,
   assertRegistrationAllowed,
+  checkActiveRequirements,
   initialStatusForDeadline,
-  maybeAdvanceSingleLeague,
-} from "../../../shared/league.auto.ts";
+} from "../../../shared/league.lifecycle.ts";
 
 interface AdminLeagueListQuery {
   page: number;
@@ -40,10 +44,6 @@ interface UpdateLeagueInput {
   description?: string | null;
 }
 
-// TODO(Game): block leaving ACTIVE backwards with 409 once games exist.
-async function assertNoGames(_leagueId: number) {
-}
-
 function assertDateOrder(startDate: Date | null, endDate: Date | null) {
   if (startDate && endDate && endDate.getTime() < startDate.getTime()) {
     throw new AppError(400, messages.error.league.endDateBeforeStartDate);
@@ -51,18 +51,14 @@ function assertDateOrder(startDate: Date | null, endDate: Date | null) {
 }
 
 async function listLeagues(query: AdminLeagueListQuery) {
-  // Lifecycle: REGISTRATION → ACTIVE once the deadline passes.
-  // Best-effort so reads never fail because of the background promotion.
-  try {
-    await autoAdvanceExpiredRegistrations();
-  } catch {}
-  const where: any = {};
+  // Reads use the stored status; promotion is owned by the background job.
+  const where: Prisma.LeagueWhereInput = {};
   if (query.status) where.status = query.status;
   if (query.seasonId || query.ageCategoryId) {
-    where.ageCategoryCutoff = {};
-    if (query.seasonId) where.ageCategoryCutoff.seasonId = query.seasonId;
-    if (query.ageCategoryId)
-      where.ageCategoryCutoff.ageCategoryId = query.ageCategoryId;
+    where.ageCategoryCutoff = {
+      ...(query.seasonId ? { seasonId: query.seasonId } : {}),
+      ...(query.ageCategoryId ? { ageCategoryId: query.ageCategoryId } : {}),
+    };
   }
   const search = query.search?.trim();
   if (search) where.name = { contains: search };
@@ -92,10 +88,7 @@ async function getLeagueById(leagueId: number) {
     include: leagueInclude,
   });
   if (!league) throw new AppError(404, messages.error.league.notFound);
-  const effectiveStatus = await maybeAdvanceSingleLeague(league).catch(
-    () => league.status,
-  );
-  return toLeagueResponse({ ...league, status: effectiveStatus } as any);
+  return toLeagueResponse(league);
 }
 
 async function createLeague(input: CreateLeagueInput) {
@@ -105,8 +98,8 @@ async function createLeague(input: CreateLeagueInput) {
   if (!cutoff)
     throw new AppError(404, messages.error.ageCategoryCutoff.notFound);
 
-  const startDate = input.startDate ? jalaliToGregorian(input.startDate) : null;
-  const endDate = input.endDate ? jalaliToGregorian(input.endDate) : null;
+  const startDate = jalaliToGregorianOrNull(input.startDate);
+  const endDate = jalaliToGregorianOrNull(input.endDate);
   assertDateOrder(startDate, endDate);
 
   const dup = await prisma.league.findFirst({
@@ -115,15 +108,14 @@ async function createLeague(input: CreateLeagueInput) {
   if (dup) throw new AppError(409, messages.error.league.nameExists);
 
   try {
-    const rosterDeadline = input.rosterDeadline
-      ? jalaliToGregorian(input.rosterDeadline)
-      : null;
+    const rosterDeadline = jalaliToGregorianOrNull(input.rosterDeadline);
     const created = await prisma.league.create({
       data: {
         name: input.name,
         ageCategoryCutoffId: input.ageCategoryCutoffId,
-        // No deadline → INACTIVE; today/future deadline → REGISTRATION;
-        // past deadline → INACTIVE (admin may still override manually).
+        // No deadline or past deadline → INACTIVE; today/future deadline →
+        // REGISTRATION. A fresh row can never be promotable, so no
+        // lifecycle call is needed here.
         status: initialStatusForDeadline(rosterDeadline),
         startDate,
         endDate,
@@ -132,16 +124,68 @@ async function createLeague(input: CreateLeagueInput) {
       },
       include: leagueInclude,
     });
-    // If created with an already-past deadline, apply the default lifecycle.
-    const effectiveStatus = await maybeAdvanceSingleLeague(created).catch(
-      () => created.status,
-    );
-    return toLeagueResponse({ ...created, status: effectiveStatus } as any);
+    return toLeagueResponse(created);
   } catch (err: any) {
     if (err?.code === "P2002")
       throw new AppError(409, messages.error.league.nameExists);
     throw err;
   }
+}
+
+/** Rejects cutoff changes once the league has ACTIVE teams. */
+async function assertCutoffChangeAllowed(
+  leagueId: number,
+  existing: { status: string },
+  nextCutoffId: number | undefined,
+  currentCutoffId: number,
+): Promise<number> {
+  const finalCutoffId = nextCutoffId ?? currentCutoffId;
+  if (nextCutoffId === undefined || nextCutoffId === currentCutoffId)
+    return finalCutoffId;
+  if (existing.status === "ACTIVE")
+    throw new AppError(409, messages.error.league.cutoffLocked);
+  const activeTeams = await prisma.leagueTeam.count({
+    where: { leagueId, status: "ACTIVE" },
+  });
+  if (activeTeams > 0)
+    throw new AppError(409, messages.error.league.cutoffLocked);
+  const cutoff = await prisma.ageCategoryCutoff.findUnique({
+    where: { id: nextCutoffId },
+  });
+  if (!cutoff)
+    throw new AppError(404, messages.error.ageCategoryCutoff.notFound);
+  return finalCutoffId;
+}
+
+/** Rejects duplicate league names within the same cutoff. */
+async function assertUniqueName(
+  leagueId: number,
+  finalCutoffId: number,
+  newName: string,
+): Promise<void> {
+  const dup = await prisma.league.findFirst({
+    where: {
+      ageCategoryCutoffId: finalCutoffId,
+      name: newName,
+      id: { not: leagueId },
+    },
+  });
+  if (dup) throw new AppError(409, messages.error.league.nameExists);
+}
+
+/** Next stored status when the deadline changes (clearing demotes to INACTIVE). */
+function resolveNextStatusOnDeadlineChange(
+  currentStatus: "INACTIVE" | "REGISTRATION" | "ACTIVE" | "FINISHED",
+  newDeadline: Date | null,
+): "INACTIVE" | "REGISTRATION" | "ACTIVE" | "FINISHED" {
+  if (!newDeadline && currentStatus === "REGISTRATION") return "INACTIVE";
+  if (
+    newDeadline &&
+    currentStatus === "INACTIVE" &&
+    initialStatusForDeadline(newDeadline) === "REGISTRATION"
+  )
+    return "REGISTRATION";
+  return currentStatus;
 }
 
 async function updateLeague(leagueId: number, input: UpdateLeagueInput) {
@@ -153,92 +197,48 @@ async function updateLeague(leagueId: number, input: UpdateLeagueInput) {
   if (existing.status === "FINISHED")
     throw new AppError(409, messages.error.league.finishedLocked);
 
-  const finalCutoffId =
-    input.ageCategoryCutoffId ?? existing.ageCategoryCutoffId;
-
-  if (
-    input.ageCategoryCutoffId !== undefined &&
-    input.ageCategoryCutoffId !== existing.ageCategoryCutoffId
-  ) {
-    if (existing.status === "ACTIVE")
-      throw new AppError(409, messages.error.league.cutoffLocked);
-    const activeTeams = await prisma.leagueTeam.count({
-      where: { leagueId, status: "ACTIVE" },
-    });
-    if (activeTeams > 0)
-      throw new AppError(409, messages.error.league.cutoffLocked);
-    const cutoff = await prisma.ageCategoryCutoff.findUnique({
-      where: { id: input.ageCategoryCutoffId },
-    });
-    if (!cutoff)
-      throw new AppError(404, messages.error.ageCategoryCutoff.notFound);
-  }
+  const finalCutoffId = await assertCutoffChangeAllowed(
+    leagueId,
+    existing,
+    input.ageCategoryCutoffId,
+    existing.ageCategoryCutoffId,
+  );
 
   const newStart =
     input.startDate !== undefined
-      ? input.startDate
-        ? jalaliToGregorian(input.startDate)
-        : null
+      ? jalaliToGregorianOrNull(input.startDate)
       : existing.startDate;
   const newEnd =
     input.endDate !== undefined
-      ? input.endDate
-        ? jalaliToGregorian(input.endDate)
-        : null
+      ? jalaliToGregorianOrNull(input.endDate)
       : existing.endDate;
   assertDateOrder(newStart, newEnd);
 
   const newName = input.name ?? existing.name;
   const newDeadline =
     input.rosterDeadline !== undefined
-      ? input.rosterDeadline
-        ? jalaliToGregorian(input.rosterDeadline)
-        : null
+      ? jalaliToGregorianOrNull(input.rosterDeadline)
       : existing.rosterDeadline;
   const newDescription =
     input.description !== undefined ? input.description : existing.description;
 
   const nameChanged =
     newName !== existing.name || finalCutoffId !== existing.ageCategoryCutoffId;
-  if (nameChanged) {
-    const dup = await prisma.league.findFirst({
-      where: {
-        ageCategoryCutoffId: finalCutoffId,
-        name: newName,
-        id: { not: leagueId },
-      },
-    });
-    if (dup) throw new AppError(409, messages.error.league.nameExists);
-  }
+  if (nameChanged) await assertUniqueName(leagueId, finalCutoffId, newName);
 
-  const startChanged =
-    (newStart?.getTime() ?? null) !== (existing.startDate?.getTime() ?? null);
-  const endChanged =
-    (newEnd?.getTime() ?? null) !== (existing.endDate?.getTime() ?? null);
-  const deadlineChanged =
-    (newDeadline?.getTime() ?? null) !==
-    (existing.rosterDeadline?.getTime() ?? null);
+  const startChanged = !sameDate(newStart, existing.startDate);
+  const endChanged = !sameDate(newEnd, existing.endDate);
+  const deadlineChanged = !sameDate(newDeadline, existing.rosterDeadline);
   const descChanged = newDescription !== existing.description;
 
   if (!nameChanged && !startChanged && !endChanged && !deadlineChanged && !descChanged)
     return toLeagueResponse(existing);
 
   try {
-    // Keep the stored status consistent with the deadline rule:
-    // clearing the deadline while REGISTRATION → INACTIVE; setting a
-    // today/future deadline while INACTIVE → REGISTRATION.
-    let nextStatus = existing.status;
-    if (deadlineChanged) {
-      if (!newDeadline && existing.status === "REGISTRATION") {
-        nextStatus = "INACTIVE";
-      } else if (
-        newDeadline &&
-        existing.status === "INACTIVE" &&
-        initialStatusForDeadline(newDeadline) === "REGISTRATION"
-      ) {
-        nextStatus = "REGISTRATION";
-      }
-    }
+    // Keep the stored status consistent with the deadline rule.
+    const nextStatus = deadlineChanged
+      ? resolveNextStatusOnDeadlineChange(existing.status, newDeadline)
+      : existing.status;
     const updated = await prisma.league.update({
       where: { id: leagueId },
       data: {
@@ -252,11 +252,13 @@ async function updateLeague(leagueId: number, input: UpdateLeagueInput) {
       },
       include: leagueInclude,
     });
-    // If the deadline was moved to the past, apply the default lifecycle.
-    const effectiveStatus = await maybeAdvanceSingleLeague(updated).catch(
-      () => updated.status,
-    );
-    return toLeagueResponse({ ...updated, status: effectiveStatus } as any);
+    // If the deadline moved to the past, promote once after the write.
+    await advanceLeagueIfExpired(updated.id).catch(() => undefined);
+    const fresh = await prisma.league.findUnique({
+      where: { id: leagueId },
+      include: leagueInclude,
+    });
+    return toLeagueResponse(fresh ?? updated);
   } catch (err: any) {
     if (err?.code === "P2002")
       throw new AppError(409, messages.error.league.nameExists);
@@ -300,7 +302,7 @@ async function deleteLeague(leagueId: number) {
 async function updateLeagueStatus(
   leagueId: number,
   status: "INACTIVE" | "REGISTRATION" | "ACTIVE" | "FINISHED",
-  adminLevel: string | null | undefined,
+  canReopenFinished: boolean,
 ) {
   const existing = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -309,47 +311,28 @@ async function updateLeagueStatus(
   if (!existing) throw new AppError(404, messages.error.league.notFound);
   if (existing.status === status) return toLeagueResponse(existing);
 
-  if (existing.status === "FINISHED" && adminLevel !== "SUPER_ADMIN")
+  if (existing.status === "FINISHED" && !canReopenFinished)
     throw new AppError(403, messages.error.league.statusChangeForbidden);
 
-  // REGISTRATION is only allowed with no deadline or a today-or-future one.
+  // REGISTRATION requires a today-or-future deadline.
   if (status === "REGISTRATION") {
     assertRegistrationAllowed(existing.rosterDeadline);
   }
 
   if (status === "ACTIVE") {
-    const teams = await prisma.leagueTeam.findMany({
-      where: {
-        leagueId,
-        status: "ACTIVE",
-        team: { status: { not: "DELETED" } },
-      },
-      include: {
-        _count: {
-          select: {
-            members: {
-              where: {
-                status: "ACTIVE",
-                teamSeasonMember: { role: "PLAYER" },
-              },
-            },
-          },
-        },
-      },
-    });
-    if (teams.length < 2)
-      throw new AppError(409, messages.error.league.minTeamsRequired);
-    const withoutPlayers = teams.some((t) => t._count.members === 0);
-    if (withoutPlayers)
-      throw new AppError(409, messages.error.league.teamWithoutPlayers);
+    const check = await checkActiveRequirements(leagueId);
+    if (!check.ok) {
+      throw new AppError(
+        409,
+        check.reason === "MIN_TEAMS"
+          ? messages.error.league.minTeamsRequired
+          : messages.error.league.teamWithoutPlayers,
+      );
+    }
   }
 
-  if (
-    existing.status === "ACTIVE" &&
-    (status === "REGISTRATION" || status === "INACTIVE")
-  ) {
-    await assertNoGames(leagueId);
-  }
+  // TODO(Game): block leaving ACTIVE backwards with 409 once games exist.
+  void leagueId;
 
   try {
     const updated = await prisma.league.update({

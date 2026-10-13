@@ -2,6 +2,7 @@ import prisma from "../../../config/db.config.ts";
 import AppError from "../../../utils/appError.ts";
 import { messages } from "../../../language/message.ts";
 import type { Actor } from "../../../authz/actor.ts";
+import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
 import { gregorianToJalali } from "../../../utils/date.util.ts";
 import {
@@ -18,10 +19,6 @@ import {
   type LeagueRole,
 } from "../shared/league.access.ts";
 import { leaguePolicy, leagueTeamPolicy } from "./leagues.policy.ts";
-import {
-  autoAdvanceExpiredRegistrations,
-  maybeAdvanceSingleLeague,
-} from "../shared/league.auto.ts";
 
 interface PublicLeagueListQuery {
   page: number;
@@ -33,18 +30,15 @@ interface PublicLeagueListQuery {
 }
 
 async function listPublicLeagues(query: PublicLeagueListQuery, actor: Actor) {
-  // Lifecycle: REGISTRATION → ACTIVE once the deadline passes.
-  try {
-    await autoAdvanceExpiredRegistrations();
-  } catch {}
-  const where: any = {
+  // Reads use the stored status; promotion is owned by the background job.
+  const where: Prisma.LeagueWhereInput = {
     status: query.status ?? { not: "INACTIVE" },
   };
   if (query.seasonId || query.ageCategoryId) {
-    where.ageCategoryCutoff = {};
-    if (query.seasonId) where.ageCategoryCutoff.seasonId = query.seasonId;
-    if (query.ageCategoryId)
-      where.ageCategoryCutoff.ageCategoryId = query.ageCategoryId;
+    where.ageCategoryCutoff = {
+      ...(query.seasonId ? { seasonId: query.seasonId } : {}),
+      ...(query.ageCategoryId ? { ageCategoryId: query.ageCategoryId } : {}),
+    };
   }
   const search = query.search?.trim();
   if (search) where.name = { contains: search };
@@ -80,15 +74,12 @@ async function getPublicLeague(leagueId: number, actor: Actor) {
     include: leagueInclude,
   });
   if (!league) throw new AppError(404, messages.error.league.notFound);
-  const effectiveStatus = await maybeAdvanceSingleLeague(league).catch(
-    () => league.status,
-  );
-  if (effectiveStatus === "INACTIVE")
+  if (league.status === "INACTIVE")
     throw new AppError(404, messages.error.league.notFound);
   return {
-    ...toLeagueResponse({ ...league, status: effectiveStatus } as any),
+    ...toLeagueResponse(league),
     can: leaguePolicy(actor, {
-      status: effectiveStatus as "REGISTRATION" | "ACTIVE" | "FINISHED",
+      status: league.status,
       rosterDeadline: league.rosterDeadline,
     }),
   };
@@ -101,8 +92,11 @@ interface MyLeaguesQuery {
 }
 
 /** Conditions under which a league team is "mine" (manager of its org, or selected in its roster). */
-function myLeagueTeamConditions(userId: number, actor: Actor) {
-  const branches: any[] = [];
+function myLeagueTeamConditions(
+  userId: number,
+  actor: Actor,
+): Prisma.LeagueTeamWhereInput {
+  const branches: Prisma.LeagueTeamWhereInput[] = [];
   if (actor.managedOrgIds.size > 0)
     branches.push({ team: { organizationId: { in: [...actor.managedOrgIds] } } });
   branches.push({
@@ -125,10 +119,8 @@ async function listMyLeagues(
   query: MyLeaguesQuery,
   actor: Actor,
 ) {
-  try {
-    await autoAdvanceExpiredRegistrations();
-  } catch {}
-  const where: any = {
+  // Reads use the stored status; promotion is owned by the background job.
+  const where: Prisma.LeagueWhereInput = {
     status: query.status ?? { not: "INACTIVE" },
     teams: { some: myLeagueTeamConditions(userId, actor) },
   };
@@ -210,7 +202,7 @@ async function listMyTeams(leagueId: number, actor: Actor) {
   const userId = actor.userId!;
 
   const leagueTeams = await prisma.leagueTeam.findMany({
-    where: { leagueId, ...myLeagueTeamConditions(userId, actor) } as any,
+    where: { leagueId, ...myLeagueTeamConditions(userId, actor) },
     orderBy: [{ id: "asc" }],
     include: {
       team: {
