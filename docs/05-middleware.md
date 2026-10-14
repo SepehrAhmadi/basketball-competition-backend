@@ -19,3 +19,4 @@ Notes:
 - `errorHandler` must be the last `app.use()` in `src/app.ts`; maps `AppError` → `{statusCode, message}`, multer `LIMIT_FILE_SIZE` → 400 `upload.largeFile`, unknown → 500.
 - Record-level ownership is enforced by domain policies (`*.policy.ts` + `assertAllowed`), not by middleware — there is no `verifyOrgAccess`/`verifyTeamAccess` middleware in this codebase.
 - No `requestLogger` exists in this codebase.
+- `optionalJWT` + `optionalActor` are used by public league routes (`GET /leagues*`); logged-in callers additionally get `can` flags.

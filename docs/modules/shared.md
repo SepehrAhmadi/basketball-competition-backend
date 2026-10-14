@@ -13,6 +13,7 @@ Serves static enum lookups for dropdowns and validation.
 - `roles` — public `GET /` listing `Role` values with labels.
 - `coach-degrees` — public `GET /` listing `CoachDegree` values with labels.
 - `referee-levels` — public `GET /` listing `RefreeLevel` values with labels.
+- `league-statuses` — public `GET /` listing `LeagueStatus` values with Persian labels.
 - `dropdowns` — authenticated (`verifyJWT`, no admin gate) reference data: static `organization-statuses`/`team-statuses`/`team-member-roles` (Persian labels) + paginated `organizations`/`teams`/`seasons`/`users`/`age-categories` lookups.
 
 ## Responsibilities

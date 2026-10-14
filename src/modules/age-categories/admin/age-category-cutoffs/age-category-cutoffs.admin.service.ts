@@ -32,12 +32,12 @@ const cutoffInclude = {
   season: { select: { id: true, name: true } },
 } as const;
 
-// TODO(League): implement the check once the League model exists.
-// Any league linked to this row fully blocks editing (date and season)
-// and deletion with 409.
-// const used = await prisma.league.count({ where: { ageCategoryCutoffId: _cutoffId } });
-// if (used > 0) throw new AppError(409, messages.error.ageCategoryCutoff.inUse);
-async function assertCutoffEditable(_cutoffId: number) {
+async function assertCutoffEditable(cutoffId: number) {
+  const used = await prisma.league.count({
+    where: { ageCategoryCutoffId: cutoffId },
+  });
+  if (used > 0)
+    throw new AppError(409, messages.error.ageCategoryCutoff.inUse);
 }
 
 interface ListCutoffsQuery {

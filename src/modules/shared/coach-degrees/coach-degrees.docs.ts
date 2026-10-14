@@ -1,9 +1,6 @@
 import { z } from "zod";
 import { registry } from "../../../swagger/registry.ts";
-import {
-  successResponseSchema,
-  errorResponseSchema,
-} from "../../../swagger/helpers.ts";
+import { successResponseSchema } from "../../../swagger/helpers.ts";
 import { messages } from "../../../language/message.ts";
 
 // ---- response models ----
@@ -30,7 +27,7 @@ registry.registerPath({
   summary: "Get all coach degrees with Persian labels",
   description:
     "Returns the list of coach degree values, each with its enum value and a Persian display label. Intended for dropdown / reference-data usage on the admin panel and PWA.",
-  security: [{ bearerAuth: [] }],
+  security: [],
   responses: {
     "200": {
       description: "List of coach degrees",
@@ -39,14 +36,6 @@ registry.registerPath({
           schema: successResponseSchema(coachDegreesDataSchema, {
             messageExample: messages.success.coachDegrees.fetched,
           }),
-        },
-      },
-    },
-    "401": {
-      description: "Missing or invalid access token",
-      content: {
-        "application/json": {
-          schema: errorResponseSchema(401, "Unauthorized"),
         },
       },
     },

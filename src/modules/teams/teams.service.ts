@@ -9,6 +9,7 @@ import { jalaliToGregorian, gregorianToJalali } from "../../utils/date.util.ts";
 import type { Actor } from "../../authz/actor.ts";
 import { assertAllowed } from "../../authz/assert.ts";
 import { organizationPolicy } from "../organizations/organizations.policy.ts";
+import { syncHeadCoachToRegistrationLeagues } from "../leagues/lib/league.head-coach-sync.ts";
 import {
   teamPolicy,
   rosterPolicy,
@@ -115,6 +116,21 @@ async function getActiveSeasonOrThrow(seasonId?: number) {
   const season = await prisma.season.findFirst({ where: { isActive: true } });
   if (!season) throw new AppError(404, messages.error.team.seasonNotFound);
   return season;
+}
+
+async function isLockedByLeague(memberId: number): Promise<boolean> {
+  const row = await prisma.leagueTeamMember.findFirst({
+    where: {
+      teamSeasonMemberId: memberId,
+      status: "ACTIVE",
+      leagueTeam: {
+        status: "ACTIVE",
+        league: { status: { in: ["ACTIVE", "FINISHED"] } },
+      },
+    },
+    select: { id: true },
+  });
+  return row !== null;
 }
 
 // ─── Authenticated list / detail ─────────────────────────────────────────
@@ -489,16 +505,25 @@ async function addRosterMember(
   });
 
   if (existingDeletedMember) {
-    const reactivated = await prisma.teamSeasonMember.update({
-      where: { id: existingDeletedMember.id },
-      data: {
-        status: "ACTIVE",
-        jerseyNumber,
-        isHeadCoach,
-        organizationId: team.organizationId,
-      },
+    return prisma.$transaction(async (tx) => {
+      const reactivated = await tx.teamSeasonMember.update({
+        where: { id: existingDeletedMember.id },
+        data: {
+          status: "ACTIVE",
+          jerseyNumber,
+          isHeadCoach,
+          organizationId: team.organizationId,
+        },
+      });
+      if (isHeadCoach) {
+        await syncHeadCoachToRegistrationLeagues(tx, {
+          teamId,
+          seasonId: data.seasonId,
+          teamSeasonMemberId: reactivated.id,
+        });
+      }
+      return reactivated;
     });
-    return reactivated;
   }
 
   // Create the roster member inside a transaction that handles head-coach demotion
@@ -517,7 +542,7 @@ async function addRosterMember(
         });
       }
 
-      return tx.teamSeasonMember.create({
+      const created = await tx.teamSeasonMember.create({
         data: {
           teamId,
           seasonId: data.seasonId,
@@ -529,6 +554,14 @@ async function addRosterMember(
           status: "ACTIVE",
         },
       });
+      if (isHeadCoach) {
+        await syncHeadCoachToRegistrationLeagues(tx, {
+          teamId,
+          seasonId: data.seasonId,
+          teamSeasonMemberId: created.id,
+        });
+      }
+      return created;
     });
     return member;
   } catch (err: any) {
@@ -614,6 +647,14 @@ async function updateRosterMember(
     effectiveJerseyNumber = data.role === "COACH" ? null : member.jerseyNumber;
   }
 
+  const roleChanged = data.role !== undefined && data.role !== member.role;
+  const jerseyChanged =
+    effectiveJerseyNumber !== undefined &&
+    effectiveJerseyNumber !== member.jerseyNumber;
+  if ((roleChanged || jerseyChanged) && (await isLockedByLeague(memberId))) {
+    throw new AppError(409, messages.error.team.memberInActiveLeague);
+  }
+
   try {
     const updated = await prisma.$transaction(async (tx) => {
       // If becoming head coach (was not before), demote any existing head coach
@@ -630,7 +671,15 @@ async function updateRosterMember(
         });
       }
 
-      return tx.teamSeasonMember.update({
+      // A role change invalidates the league selection — clear it.
+      if (roleChanged) {
+        await tx.leagueTeamMember.updateMany({
+          where: { teamSeasonMemberId: memberId, status: "ACTIVE" },
+          data: { status: "DELETED" },
+        });
+      }
+
+      const result = await tx.teamSeasonMember.update({
         where: { id: memberId },
         data: {
           ...(data.role !== undefined && { role: data.role }),
@@ -638,6 +687,16 @@ async function updateRosterMember(
           isHeadCoach: effectiveIsHeadCoach,
         },
       });
+
+      // New head coach joins the roster of registration-stage leagues.
+      if (effectiveIsHeadCoach && !member.isHeadCoach) {
+        await syncHeadCoachToRegistrationLeagues(tx, {
+          teamId,
+          seasonId: data.seasonId,
+          teamSeasonMemberId: memberId,
+        });
+      }
+      return result;
     });
     return updated;
   } catch (err: any) {
@@ -679,10 +738,20 @@ async function removeRosterMember(teamId: number, memberId: number, seasonId: nu
     }
   }
 
-  await prisma.teamSeasonMember.update({
-    where: { id: memberId },
-    data: { status: "DELETED", jerseyNumber: null, isHeadCoach: false },
-  });
+  if (await isLockedByLeague(memberId)) {
+    throw new AppError(409, messages.error.team.memberInActiveLeague);
+  }
+
+  await prisma.$transaction([
+    prisma.teamSeasonMember.update({
+      where: { id: memberId },
+      data: { status: "DELETED", jerseyNumber: null, isHeadCoach: false },
+    }),
+    prisma.leagueTeamMember.updateMany({
+      where: { teamSeasonMemberId: memberId, status: "ACTIVE" },
+      data: { status: "DELETED" },
+    }),
+  ]);
   return member;
 }
 

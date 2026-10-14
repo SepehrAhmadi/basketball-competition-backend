@@ -3,6 +3,11 @@
 ## Module files
 
 - Every module uses `*.routes.ts` (wiring) → `*.controller.ts` (req/res) → `*.service.ts` (logic + Prisma) → `*.validation.ts` (Zod input) → `*.docs.ts` (Swagger response + `registerPath`); policy-gated modules add `*.policy.ts` (pure `(actor, scope) => can`).
+- A module with 3+ services groups them in `services/`; modules with fewer keep a flat layout.
+- `lib/` holds module-private domain logic (rules, loaders, mappers, lifecycle). Code other modules import lives in `lib/` (or the main service) and is named in that module's doc.
+- Cross-module imports: a module may import from another module's service, policy, or `lib` file — never from its routes, controller, or docs. Dependencies are one-directional (no cycles).
+- Admin pattern: if an admin operation has no extra logic, the admin controller calls the main service with `adminActor(req.userId)`. An admin service exists only for admin-specific logic (different filters, validation, restore, status workflows).
+- `*.admin.validation.ts` exists only when it contains admin-specific schemas; otherwise admin routes/docs import from the main `*.validation.ts` directly.
 - Validation files import `swagger/zod-extend.ts` at top for `.openapi()` support.
 - Routes reuse shared `idParamSchema` (or domain `*IdParamSchema`, e.g. `teamIdParamSchema`) from `shared/schemas.validation.ts`.
 - All messages come from `src/language/message.ts`; no inline strings.
@@ -20,6 +25,6 @@
 ## Backend specifics
 
 - ESM `.ts` files with explicit `.ts` import suffixes; `__dirname` re-derived via `fileURLToPath`.
-- Soft-delete via `status = DELETED` for orgs/teams/users + roster rows (with `POST .../restore` on admin org/team routes and roster reactivation); hard `delete` for seasons, age-categories, and cutoffs (`P2003` → 409 when referenced).
+- Soft-delete via `status = DELETED` for orgs/teams/users + roster rows + league teams/members (with `POST .../restore` on admin org/team routes and roster reactivation); hard `delete` for seasons, age-categories, cutoffs, and leagues (guarded: leagues only in `INACTIVE`/`REGISTRATION` with no ACTIVE teams; `P2003` → 409 when referenced).
 - Uploaded file URLs generated server-side (`/uploads/<dest>/...`), never trusted from client; deletes guarded by `basename` + prefix check; orphan uploads removed when the DB write fails.
 - Jalali dates accepted as `YYYY/MM/DD`, stored as UTC-noon Gregorian `Date`.
