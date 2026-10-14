@@ -12,9 +12,10 @@ const router = Router();
 router.use(verifyJWT);
 router.use(verifyAdminLevel("ADMIN", "SUPER_ADMIN"));
 
+// Also readable by league managers: the league form needs the cutoff list.
 router.get(
   "/",
-  verifyPermission("age-categories.view"),
+  verifyPermission("age-categories.view", "leagues.create", "leagues.update"),
   validate(cutoffsAdminValidation.cutoffListQuerySchema, "query"),
   cutoffsAdminController.list,
 );

@@ -6,6 +6,7 @@ import AppError from "../../../utils/appError.ts";
 import userService from "../user/user.service.ts";
 import type { AdminLevel, Role } from "../../../prisma/generated/prisma/enums.ts";
 import { jalaliToGregorian } from "../../../utils/date.util.ts";
+import { expandPermissions } from "../../../shared/permissions.ts";
 
 // SUPER_ADMIN bypasses permission checks entirely at check-time (see
 // verifyPermission), so there's no need to enumerate "all permissions" here.
@@ -15,7 +16,7 @@ async function getPermissionsForUser(
 ): Promise<string[]> {
   if (!userAdminId || adminLevel === "SUPER_ADMIN") return [];
   const rows = await prisma.adminPermission.findMany({ where: { userAdminId } });
-  return rows.map((r) => r.permission);
+  return expandPermissions(rows.map((r) => r.permission));
 }
 
 function signAccessToken(

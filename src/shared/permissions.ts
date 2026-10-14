@@ -102,3 +102,41 @@ export const PERMISSION_CODES: readonly [Permission, ...Permission[]] =
     // tuple of code literals — `unknown` bridge needed because TS can't prove
     // an array→tuple conversion structurally.
   ) as unknown as readonly [Permission, ...Permission[]];
+
+
+// Permissions that a page/endpoint needs in addition to its own action
+// permission. The admin panel loads lists (view) before it can offer any
+// write action, so holding e.g. "league-teams.create" without
+// "league-teams.view" could never work end-to-end. Granting an action
+// therefore implicitly grants the read permissions it depends on — never
+// anything that mutates data.
+const CROSS_RESOURCE_DEPENDENCIES: Readonly<Record<string, readonly Permission[]>> = {
+  "roster.view": ["teams.view"],
+  "league-teams.view": ["leagues.view"],
+  "league-roster.view": ["league-teams.view"],
+};
+
+const PERMISSION_SET: ReadonlySet<string> = new Set(PERMISSION_CODES);
+
+/**
+ * Expands a raw permission list with the read permissions it implies:
+ *  - any `<resource>.<action>` implies `<resource>.view`
+ *  - plus the cross-resource links in CROSS_RESOURCE_DEPENDENCIES
+ * (transitively). Single source of truth for both token issuance (what the
+ * admin panel shows) and request-time enforcement (what the API allows).
+ */
+export function expandPermissions(granted: readonly string[]): Permission[] {
+  const result = new Set<string>();
+  const queue = [...granted];
+  while (queue.length > 0) {
+    const code = queue.pop()!;
+    if (result.has(code) || !PERMISSION_SET.has(code)) continue;
+    result.add(code);
+
+    const dot = code.lastIndexOf(".");
+    const resource = code.slice(0, dot);
+    if (code.slice(dot + 1) !== "view") queue.push(`${resource}.view`);
+    queue.push(...(CROSS_RESOURCE_DEPENDENCIES[code] ?? []));
+  }
+  return [...result] as Permission[];
+}
