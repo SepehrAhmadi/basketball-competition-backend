@@ -1,9 +1,9 @@
 import { Router } from "express";
-import validate from "../../../middleware/validate.ts";
-import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
-import verifyAdminLevel from "../../../middleware/auth/verifyAdminLevel.middleware.ts";
-import verifyPermission from "../../../middleware/auth/verifyPermission.middleware.ts";
-import leagueTeamsAdminValidation from "../leagues.validation.ts";
+import validate from "../../../../middleware/validate.ts";
+import verifyJWT from "../../../../middleware/auth/verifyJWT.middleware.ts";
+import verifyAdminLevel from "../../../../middleware/auth/verifyAdminLevel.middleware.ts";
+import verifyPermission from "../../../../middleware/auth/verifyPermission.middleware.ts";
+import leagueTeamsAdminValidation from "../../leagues.validation.ts";
 import leagueTeamsAdminController from "./league-teams.admin.controller.ts";
 
 const router = Router({ mergeParams: true });

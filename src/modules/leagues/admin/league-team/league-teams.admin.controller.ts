@@ -1,9 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
-import { messages } from "../../../language/message.ts";
-import apiResponse from "../../../utils/apiResponse.ts";
-import { adminActor } from "../../../authz/actor.ts";
-import leagueTeamsService from "../services/league-teams.service.ts";
-import leagueRosterService from "../services/league-roster.service.ts";
+import { messages } from "../../../../language/message.ts";
+import apiResponse from "../../../../utils/apiResponse.ts";
+import { adminActor } from "../../../../authz/actor.ts";
+import leagueTeamsService from "../../services/league-teams.service.ts";
+import leagueRosterService from "../../services/league-roster.service.ts";
 
 function asAdmin(req: Request) {
   return adminActor(req.userId!);

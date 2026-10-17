@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { messages } from "../../../language/message.ts";
-import { registry } from "../../../swagger/registry.ts";
+import { messages } from "../../../../language/message.ts";
+import { registry } from "../../../../swagger/registry.ts";
 import {
   errorResponseSchema,
   successResponseSchema,
-} from "../../../swagger/helpers.ts";
+} from "../../../../swagger/helpers.ts";
 import {
   leagueIdParamSchema,
   leagueTeamParamSchema,
@@ -15,13 +15,13 @@ import {
   membersQuerySchema,
   candidatesQuerySchema,
   eligibleTeamsQuerySchema,
-} from "../leagues.validation.ts";
+} from "../../leagues.validation.ts";
 import {
   eligibleTeamSchema as baseEligibleTeamSchema,
   leagueCandidateSchema as baseLeagueCandidateSchema,
   leagueMemberSchema as baseLeagueMemberSchema,
   leagueTeamItemSchema,
-} from "../leagues.docs.ts";
+} from "../../leagues.docs.ts";
 
 const leagueTeamSchema = leagueTeamItemSchema
   .omit({ can: true })
