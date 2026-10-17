@@ -1,21 +1,21 @@
-import prisma from "../../../config/db.config.ts";
-import AppError from "../../../utils/appError.ts";
-import { messages } from "../../../language/message.ts";
-import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
+import prisma from "../../../../config/db.config.ts";
+import AppError from "../../../../utils/appError.ts";
+import { messages } from "../../../../language/message.ts";
+import type { Prisma } from "../../../../prisma/generated/prisma/client.ts";
 import {
   jalaliToGregorianOrNull,
   sameDate,
-} from "../../../utils/date.util.ts";
+} from "../../../../utils/date.util.ts";
 import {
   leagueInclude,
   toLeagueResponse,
-} from "../lib/league.mapper.ts";
+} from "../../lib/league.mapper.ts";
 import {
   advanceLeagueIfExpired,
   assertRegistrationAllowed,
   checkActiveRequirements,
   initialStatusForDeadline,
-} from "../lib/league.lifecycle.ts";
+} from "../../lib/league.lifecycle.ts";
 
 interface AdminLeagueListQuery {
   page: number;
