@@ -1,6 +1,10 @@
 import { gregorianToJalali } from "../../../utils/date.util.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
-import type { LeagueStatus } from "../../../prisma/generated/prisma/enums.ts";
+import type {
+  GroupRoundType,
+  LeagueFormat,
+  LeagueStatus,
+} from "../../../prisma/generated/prisma/enums.ts";
 import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
 import type {
   LeagueTeamCan,
@@ -80,6 +84,11 @@ type LeagueRow = {
   endDate: Date | null;
   rosterDeadline: Date | null;
   ageCategoryCutoffId: number;
+  format: LeagueFormat | null;
+  winPoints: number;
+  lossPoints: number;
+  groupRoundType: GroupRoundType | null;
+  defaultQualifiersPerGroup: number | null;
   createdAt: Date;
   updatedAt: Date;
   ageCategoryCutoff: {
@@ -100,6 +109,11 @@ export function toLeagueResponse(row: LeagueRow) {
     endDate: gregorianToJalali(row.endDate),
     rosterDeadline: gregorianToJalali(row.rosterDeadline),
     ageCategoryCutoffId: row.ageCategoryCutoffId,
+    format: row.format,
+    winPoints: row.winPoints,
+    lossPoints: row.lossPoints,
+    groupRoundType: row.groupRoundType,
+    defaultQualifiersPerGroup: row.defaultQualifiersPerGroup,
     ageCategory: row.ageCategoryCutoff.ageCategory,
     season: row.ageCategoryCutoff.season,
     minBirthDate: gregorianToJalali(row.ageCategoryCutoff.minBirthDate),

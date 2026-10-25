@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { registry } from "../../../swagger/registry.ts";
-import { successResponseSchema } from "../../../swagger/helpers.ts";
-import { messages } from "../../../language/message.ts";
+import { registry } from "../../../../../swagger/registry.ts";
+import { successResponseSchema } from "../../../../../swagger/helpers.ts";
+import { messages } from "../../../../../language/message.ts";
 
 // ---- response models ----
 const coachDegreeEnum = z
@@ -22,8 +22,8 @@ const coachDegreesDataSchema = z.object({
 // ---- path registration ----
 registry.registerPath({
   method: "get",
-  path: "/coach-degrees",
-  tags: ["Coach Degrees"],
+  path: "/dropdown/coach-degrees",
+  tags: ["Dropdowns"],
   summary: "Get all coach degrees with Persian labels",
   description:
     "Returns the list of coach degree values, each with its enum value and a Persian display label. Intended for dropdown / reference-data usage on the admin panel and PWA.",

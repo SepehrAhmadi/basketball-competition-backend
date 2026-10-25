@@ -75,6 +75,12 @@ export const messages = {
       cannotUnregisterInActive: "حذف تیم از لیگ فعال امکان‌پذیر نیست",
       endDateBeforeStartDate: "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.",
     },
+    leagueFormat: {
+      winPointsMustExceedLoss: "امتیاز برد باید بیشتر از امتیاز باخت باشد",
+      groupRoundTypeRequired: "نوع دور مسابقات گروهی الزامی است",
+      qualifiersRequired: "تعداد صعود‌کننده‌ی هر گروه الزامی است",
+      locked: "پس از شروع اولین بازی، ساختار لیگ قابل تغییر نیست",
+    },
     leagueTeam: {
       notFound: "تیم در این لیگ یافت نشد",
       alreadyRegistered: "این تیم قبلاً در این لیگ ثبت‌نام شده است",
@@ -198,6 +204,16 @@ export const messages = {
     },
     leagueStatuses: {
       fetched: "وضعیت‌های لیگ با موفقیت دریافت شد",
+    },
+    leagueFormat: {
+      found: "ساختار لیگ با موفقیت دریافت شد",
+      updated: "ساختار لیگ با موفقیت به‌روزرسانی شد",
+    },
+    leagueFormats: {
+      fetched: "ساختارهای لیگ با موفقیت دریافت شد",
+    },
+    groupRoundTypes: {
+      fetched: "انواع دور مسابقات گروهی با موفقیت دریافت شد",
     },
     leagueTeam: {
       list: "لیست تیم‌های لیگ با موفقیت دریافت شد",

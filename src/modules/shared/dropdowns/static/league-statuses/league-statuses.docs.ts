@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { registry } from "../../../swagger/registry.ts";
-import { successResponseSchema } from "../../../swagger/helpers.ts";
-import { messages } from "../../../language/message.ts";
+import { registry } from "../../../../../swagger/registry.ts";
+import { successResponseSchema } from "../../../../../swagger/helpers.ts";
+import { messages } from "../../../../../language/message.ts";
 
 const leagueStatusEnum = z
   .enum(["INACTIVE", "REGISTRATION", "ACTIVE", "FINISHED"])
@@ -20,8 +20,8 @@ const leagueStatusesDataSchema = z.object({
 
 registry.registerPath({
   method: "get",
-  path: "/league-statuses",
-  tags: ["League Statuses"],
+  path: "/dropdown/league-statuses",
+  tags: ["Dropdowns"],
   summary: "Get all league statuses with Persian labels",
   description:
     "Returns the list of league status values, each with its enum value and a Persian display label. Intended for dropdown / reference-data usage on the admin panel and PWA.",

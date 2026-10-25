@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import refereeLevelsService from "./referee-levels.service.ts";
-import { messages } from "../../../language/message.ts";
-import apiResponse from "../../../utils/apiResponse.ts";
+import { messages } from "../../../../../language/message.ts";
+import apiResponse from "../../../../../utils/apiResponse.ts";
 
 function getAllLevels(req: Request, res: Response, next: NextFunction) {
   try {

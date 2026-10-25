@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import coachDegreesService from "./coach-degrees.service.ts";
-import { messages } from "../../../language/message.ts";
-import apiResponse from "../../../utils/apiResponse.ts";
+import { messages } from "../../../../../language/message.ts";
+import apiResponse from "../../../../../utils/apiResponse.ts";
 
 function getAllDegrees(req: Request, res: Response, next: NextFunction) {
   try {

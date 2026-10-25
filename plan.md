@@ -1,297 +1,364 @@
-# Leagues Module Refactor Plan
+# Plan — Stage 1: League Competition Format
 
-## 0. Goals and decisions (already agreed)
+Source of truth for decisions: `League competition structure decisions.md`.
+This plan covers **only Stage 1** (format settings). Groups, games, standings, brackets and player stats are later stages and are only referenced where Stage 1 must leave a hook for them.
+
+---
+
+## 1. Goal and scope
+
+An admin chooses, per league, the competition structure and scoring rules. The data lives on the existing `League` row; the behavior (endpoints, validation, locks) lives in a new `competition/format` sub-module.
+
+**In scope**
+- New enums and new columns on `leagues` + migration.
+- `GET` / `PUT` `/admin/leagues/:leagueId/format` (admin panel only).
+- Pure rules in `competition/format/lib/format.rules.ts`.
+- Two public reference-data endpoints in `shared/` (dropdown labels).
+- Messages, Swagger, docs updates, and a fix of the stale docs about admin folders.
+
+**Out of scope (later stages)**
+- Groups / group teams (Stage 2), games (Stage 3), standings (Stage 4), brackets / series (Stage 5), player stats (Stage 6).
+- Any public (non-admin) format endpoint.
+- Frontend work. The admin-panel form is built after Swagger is published, together with Stage 2.
+- Automated tests for the format rules (explicitly not wanted).
+
+---
+
+## 2. Decisions locked in
 
 | # | Decision |
 |---|---|
-| D1 | Remove the `competition/` wrapper. The module becomes `src/modules/leagues/` (YAGNI: only one sub-module exists today; games/groups/series can regroup later, it is only an import-path change). |
-| D2 | `competition/shared/` becomes `leagues/lib/` (module-private domain logic, not the global `modules/shared`). |
-| D3 | The three user-facing services move into `leagues/services/`. Project rule: a module with 3+ services uses a `services/` folder; modules with fewer keep a flat layout. |
-| D4 | Rename `leagues.public.service.ts` to `services/leagues.service.ts` (it also holds authenticated reads such as `listMyLeagues`). |
-| D5 | Delete `league-teams.admin.validation.ts` (pure re-export, nothing admin-specific). |
-| D6 | Add `evaluateUnregister` to `leagues.policy.ts` so unregister logic lives in the policy like the other rules. |
-| D7 | `addMembers` not-found error must name the offending ids. |
-| D8 | Admin pattern becomes uniform across ALL modules: if an admin operation has no extra logic, the admin controller calls the main service with `adminActor(req.userId)`. An admin service exists only for admin-specific logic. |
-| D9 | `removeMember` / `loadAddableRows` error message is chosen from `lockReason`; the silent `.catch(() => undefined)` in `updateLeague` must log. |
-| D10 | Cross-module imports are allowed under written rules (section 7). `league.head-coach-sync.ts` stays in `leagues/lib/` and `teams.service` keeps importing it. |
-| D11 | Docs updated (section 8). |
-
-Non-goals: no behavior change except the explicit message/log fixes in D6, D7, D9. No schema or migration changes. No route path changes (`/api/v1/...` stays identical).
-
----
-
-## 1. Target structure
-
-```
-src/modules/leagues/
-├── leagues.routes.ts
-├── leagues.controller.ts
-├── leagues.validation.ts
-├── leagues.docs.ts
-├── leagues.policy.ts
-├── services/
-│   ├── leagues.service.ts          (was leagues.public.service.ts)
-│   ├── league-teams.service.ts
-│   └── league-roster.service.ts
-├── lib/
-│   ├── league.rules.ts
-│   ├── league.rules.test.ts
-│   ├── league.lifecycle.ts
-│   ├── league.types.ts
-│   ├── league.access.ts
-│   ├── league.mapper.ts
-│   ├── league.candidates.ts
-│   ├── league.roster-writes.ts
-│   ├── league.players.ts
-│   └── league.head-coach-sync.ts   (imported by teams.service, see section 7)
-└── admin/
-    ├── leagues.admin.routes.ts
-    ├── leagues.admin.controller.ts
-    ├── leagues.admin.service.ts
-    ├── leagues.admin.validation.ts
-    ├── leagues.admin.docs.ts
-    ├── league-teams.admin.routes.ts     (exports default router + eligibleTeamsRouter)
-    ├── league-teams.admin.controller.ts
-    └── league-teams.admin.docs.ts
-```
-
-Notes:
-- `admin/leagues/` and `admin/league-teams/` sub-folders are flattened to remove the confusing `leagues/admin/leagues/` nesting. File prefixes (`leagues.admin.*`, `league-teams.admin.*`) keep them distinguishable.
-- `league-teams.admin.validation.ts` is deleted. Its routes/docs import from `../leagues.validation.ts` directly.
+| 1 | `leagues/` is untouched structurally. A new parent folder `modules/competition/` is added next to it, with one sub-module per concept. |
+| 2 | Dependency direction is one-way: `competition → leagues`. `leagues` never imports from `competition`. |
+| 3 | `format` is a **setting on `League`**, not an entity. No new table. Columns live on `leagues`. |
+| 4 | File names inside `competition/format/` do **not** carry a `competition` prefix: `format.admin.service.ts`, not `competition-format.admin.service.ts`. |
+| 5 | No test files for the format rules. |
+| 6 | Admin-only: all files live under `competition/format/admin/`. No public format endpoint now. |
+| 7 | Two endpoints on one single resource: `GET` and `PUT` `/admin/leagues/:leagueId/format`. |
+| 8 | `PUT` replaces the whole format object. For `KNOCKOUT_ONLY`, `groupRoundType` and `defaultQualifiersPerGroup` are **ignored if sent** and stored as `null`. |
+| 9 | `winPoints` / `lossPoints` are always stored (defaults 2 / 1), even for `KNOCKOUT_ONLY`, so the data shape is constant. |
+| 10 | No new permission. `leagues.view` for `GET`, `leagues.update` for `PUT`. |
+| 11 | Number of groups and per-group qualifier override are **not** part of format (they belong to Stage 2 on `Group`). |
+| 12 | Standings, seeds and brackets are never stored (decision doc, sections 4 and 6). Not relevant to Stage 1 but the format columns must not duplicate any computed value. |
 
 ---
 
-## 2. File move map
+## 3. Target folder structure
 
-Use `git mv` so history is preserved.
+```
+src/modules/
+  leagues/                                  # unchanged except the small additive edits in section 9
+  competition/
+    format/
+      admin/
+        format.admin.routes.ts
+        format.admin.controller.ts
+        format.admin.service.ts
+        format.admin.validation.ts
+        format.admin.docs.ts
+      lib/
+        format.rules.ts                     # pure: constants, value lists, normalization
+  shared/
+    league-formats/
+      league-formats.routes.ts
+      league-formats.controller.ts
+      league-formats.service.ts
+      league-formats.docs.ts
+    group-round-types/
+      group-round-types.routes.ts
+      group-round-types.controller.ts
+      group-round-types.service.ts
+      group-round-types.docs.ts
+```
 
-| Old path (under `src/modules/competition/`) | New path (under `src/modules/leagues/`) |
+Notes
+- `format/admin/` follows the `leagues/admin/<sub>/` and `age-categories/admin/<sub>/` pattern already used in the repo.
+- `format/lib/` holds module-private pure logic (same role as `leagues/lib/`). It has no Prisma import.
+- The two `shared/` folders copy the `league-statuses` and `coach-degrees` pattern (public `GET /`, static enum + Persian label).
+- No `format.policy.ts`: the lock is a single status check plus (later) a game-existence check. It is computed in the service and returned as `can` + `lockReason`. If more rules appear, extract a policy then.
+
+---
+
+## 4. Data model changes
+
+### 4.1 `schema.prisma`
+
+New enums:
+
+```prisma
+enum LeagueFormat {
+  GROUPS_KNOCKOUT
+  SINGLE_GROUP_KNOCKOUT
+  KNOCKOUT_ONLY
+}
+
+enum GroupRoundType {
+  ONE_ROUND
+  DOUBLE_ROUND
+}
+```
+
+New fields on `model League`:
+
+```prisma
+format                    LeagueFormat?   @map("format")
+winPoints                 Int             @default(2) @map("win_points")
+lossPoints                Int             @default(1) @map("loss_points")
+groupRoundType            GroupRoundType? @map("group_round_type")
+defaultQualifiersPerGroup Int?            @map("default_qualifiers_per_group")
+```
+
+Rules for the columns
+- `format = null` means "structure not configured yet" (the format is set in a separate action after the league is created, because the number of teams is unknown at creation).
+- `groupRoundType` and `defaultQualifiersPerGroup` are non-null **only** when `format` is `GROUPS_KNOCKOUT` or `SINGLE_GROUP_KNOCKOUT`.
+- `winPoints` / `lossPoints` always have a value.
+- For `SINGLE_GROUP_KNOCKOUT`, `defaultQualifiersPerGroup` means the total number of qualifiers (there is one group).
+
+### 4.2 Migration
+
+- Name: `add_league_format_settings`.
+- Generated with `npx prisma migrate dev --name add_league_format_settings`, then `npx prisma generate`.
+- Expected SQL (MySQL): `ALTER TABLE leagues ADD COLUMN format ENUM(...) NULL, ADD COLUMN win_points INTEGER NOT NULL DEFAULT 2, ADD COLUMN loss_points INTEGER NOT NULL DEFAULT 1, ADD COLUMN group_round_type ENUM('ONE_ROUND','DOUBLE_ROUND') NULL, ADD COLUMN default_qualifiers_per_group INTEGER NULL;`
+- Existing leagues get `format = NULL`, `2 / 1` points. No backfill needed.
+- Check the generated SQL before applying (only additive columns, nothing dropped).
+
+---
+
+## 5. Pure rules — `format/lib/format.rules.ts`
+
+Mirrors `leagues/lib/league.rules.ts` (const value lists + pure functions, no Prisma, no `AppError`).
+
+Contents
+- `LEAGUE_FORMAT_VALUES = ["GROUPS_KNOCKOUT", "SINGLE_GROUP_KNOCKOUT", "KNOCKOUT_ONLY"] as const` and the matching type.
+- `GROUP_ROUND_TYPE_VALUES = ["ONE_ROUND", "DOUBLE_ROUND"] as const` and type.
+- `DEFAULT_WIN_POINTS = 2`, `DEFAULT_LOSS_POINTS = 1`.
+- `isGroupStageFormat(format)`: true for `GROUPS_KNOCKOUT` and `SINGLE_GROUP_KNOCKOUT`.
+- `normalizeFormatInput(input)`: takes the validated input and returns exactly the object to persist:
+  - applies point defaults when omitted;
+  - for `KNOCKOUT_ONLY` forces `groupRoundType = null` and `defaultQualifiersPerGroup = null`, ignoring whatever was sent;
+  - for group formats keeps both values.
+- `FormatLockReason = "FINISHED" | "HAS_GAMES" | null` (type only; `HAS_GAMES` is wired in Stage 3).
+
+The module that later needs scoring (`standings`) imports `DEFAULT_*` or reads the league columns directly; it never re-implements the rules.
+
+---
+
+## 6. Validation — `format.admin.validation.ts`
+
+Imports `swagger/zod-extend.ts` first, uses `z`, `messages`, and the shared `idField` style used in `leagues.validation.ts`.
+
+- `leagueIdParamSchema` is **reused** from `leagues/leagues.validation.ts` (as `league-teams.admin.routes.ts` does). No duplicate.
+- `updateFormatSchema` (`z.object({...}).strict()`):
+
+| Field | Rule |
 |---|---|
-| `leagues/leagues.routes.ts` | `leagues.routes.ts` |
-| `leagues/leagues.controller.ts` | `leagues.controller.ts` |
-| `leagues/leagues.validation.ts` | `leagues.validation.ts` |
-| `leagues/leagues.docs.ts` | `leagues.docs.ts` |
-| `leagues/leagues.policy.ts` | `leagues.policy.ts` |
-| `leagues/leagues.public.service.ts` | `services/leagues.service.ts` |
-| `leagues/league-teams.service.ts` | `services/league-teams.service.ts` |
-| `leagues/league-roster.service.ts` | `services/league-roster.service.ts` |
-| `shared/league.rules.ts` | `lib/league.rules.ts` |
-| `shared/league.rules.test.ts` | `lib/league.rules.test.ts` |
-| `shared/league.lifecycle.ts` | `lib/league.lifecycle.ts` |
-| `shared/league.types.ts` | `lib/league.types.ts` |
-| `shared/league.access.ts` | `lib/league.access.ts` |
-| `shared/league.mapper.ts` | `lib/league.mapper.ts` |
-| `shared/league.candidates.ts` | `lib/league.candidates.ts` |
-| `shared/league.roster-writes.ts` | `lib/league.roster-writes.ts` |
-| `shared/league.players.ts` | `lib/league.players.ts` |
-| `shared/league.head-coach-sync.ts` | `lib/league.head-coach-sync.ts` |
-| `leagues/admin/leagues/leagues.admin.routes.ts` | `admin/leagues.admin.routes.ts` |
-| `leagues/admin/leagues/leagues.admin.controller.ts` | `admin/leagues.admin.controller.ts` |
-| `leagues/admin/leagues/leagues.admin.service.ts` | `admin/leagues.admin.service.ts` |
-| `leagues/admin/leagues/leagues.admin.validation.ts` | `admin/leagues.admin.validation.ts` |
-| `leagues/admin/leagues/leagues.admin.docs.ts` | `admin/leagues.admin.docs.ts` |
-| `leagues/admin/league-teams/league-teams.admin.routes.ts` | `admin/league-teams.admin.routes.ts` |
-| `leagues/admin/league-teams/league-teams.admin.controller.ts` | `admin/league-teams.admin.controller.ts` |
-| `leagues/admin/league-teams/league-teams.admin.docs.ts` | `admin/league-teams.admin.docs.ts` |
-| `leagues/admin/league-teams/league-teams.admin.validation.ts` | **deleted** |
+| `format` | required, `z.enum(LEAGUE_FORMAT_VALUES)` |
+| `winPoints` | optional int, `min(0)`, `max(10)`, default `2` |
+| `lossPoints` | optional int, `min(0)`, `max(10)`, default `1` |
+| `groupRoundType` | optional `z.enum(GROUP_ROUND_TYPE_VALUES)` |
+| `defaultQualifiersPerGroup` | optional int, `positive()`, `max(64)` |
+
+- Cross-field checks via `.superRefine` (shape-only, no DB):
+  - `winPoints > lossPoints` → error on `winPoints` (`messages.error.leagueFormat.winPointsMustExceedLoss`).
+  - if `format` is a group format: `groupRoundType` required (`groupRoundTypeRequired`) and `defaultQualifiersPerGroup` required (`qualifiersRequired`).
+  - if `format` is `KNOCKOUT_ONLY`: **no error** for the two group fields; they are just ignored later by `normalizeFormatInput`.
+- `.strict()` still rejects unknown keys; only the two group fields are tolerated for knockout-only because they are legitimate keys.
+- Default export object with `leagueIdParamSchema` and `updateFormatSchema`, same as other validation files.
+- Whether `defaultQualifiersPerGroup` is compatible with the real number of teams is a Stage 2 concern (needs groups); it is **not** checked here.
 
 ---
 
-## 3. Import updates (outside the module)
+## 7. Service — `format.admin.service.ts`
+
+Uses `prisma` directly, `AppError`, `messages`, and `normalizeFormatInput`. It does not call `leagues.admin.service` (that service owns name/cutoff/deadline logic and must not be touched by format changes).
+
+Shared selection: a `formatSelect` const with `id, status, format, winPoints, lossPoints, groupRoundType, defaultQualifiersPerGroup`.
+
+Response mapper `toFormatResponse(row)`:
+
+```
+{
+  leagueId,
+  format,                       // LeagueFormat | null
+  winPoints,
+  lossPoints,
+  groupRoundType,               // null for KNOCKOUT_ONLY / unset
+  defaultQualifiersPerGroup,    // null for KNOCKOUT_ONLY / unset
+  can: { edit: boolean },
+  lockReason: "FINISHED" | "HAS_GAMES" | null
+}
+```
+
+`can` + `lockReason` follow the project's `can`-flag convention (decision doc section 10, `canEditFormat`) so the UI shows the reason, not only an error.
+
+Functions
+1. `getFormat(leagueId)`
+   - `prisma.league.findUnique({ where: { id: leagueId }, select: formatSelect })`.
+   - Missing → `AppError(404, messages.error.league.notFound)`.
+   - Returns `toFormatResponse`.
+2. `updateFormat(leagueId, input)`
+   - Load league (404 first, same order as the rest of the project: 404 before 403/409).
+   - Lock check: `status === "FINISHED"` → `AppError(409, messages.error.league.finishedLocked)` (reuses the existing key; consistent with `updateLeague`).
+   - `// TODO(Game):` in this same spot, block with `prisma.game.count({ where: { leagueId } }) > 0` → 409 `messages.error.leagueFormat.locked`. Written with a direct Prisma query so `competition/format` does not import from `games`.
+   - `// TODO(Group):` when switching to `KNOCKOUT_ONLY` while groups exist, block (Stage 2).
+   - `const data = normalizeFormatInput(input)`; `prisma.league.update({ where: { id: leagueId }, data, select: formatSelect })`.
+   - `P2025` → 404 `league.notFound`.
+   - Returns `toFormatResponse`.
+
+Why not `loadLeagueContext`: it returns only the context fields (no format columns) and would need a second query. A single `findUnique` with `select` is simpler and the admin always has visibility of every status.
+
+Status rules: format may be edited in `INACTIVE`, `REGISTRATION` and `ACTIVE` as long as no game exists; `FINISHED` is always locked here (reopening a finished league stays a `SUPER_ADMIN` status action).
+
+---
+
+## 8. Routes, controller, docs
+
+### 8.1 `format.admin.routes.ts`
+
+```ts
+const router = Router({ mergeParams: true });
+router.use(verifyJWT);
+router.use(verifyAdminLevel("ADMIN", "SUPER_ADMIN"));
+
+router.get("/",
+  verifyPermission("leagues.view"),
+  validate(formatAdminValidation.leagueIdParamSchema, "params"),
+  formatAdminController.get);
+
+router.put("/",
+  verifyPermission("leagues.update"),
+  validate(formatAdminValidation.leagueIdParamSchema, "params"),
+  validate(formatAdminValidation.updateFormatSchema),
+  formatAdminController.update);
+```
+
+Same middleware order as `league-teams.admin.routes.ts` (JWT → admin level → permission → validate → controller).
+
+### 8.2 `format.admin.controller.ts`
+
+Standard shape used everywhere: `try { ...; return apiResponse.sendResponse(res, 200, messages..., data) } catch (err) { next(err) }`. Reads `Number(req.params.leagueId)` and `(req.validatedBody ?? req.body)`. Exports `{ get, update }`.
+
+### 8.3 `format.admin.docs.ts`
+
+- Tag: `"Admin - League Format"`.
+- `leagueFormatSchema` registered with `.openapi("LeagueFormat")` (fields above, including `can` and `lockReason`).
+- Two `registerPath` blocks:
+  - `GET /admin/leagues/{leagueId}/format` → 200, 401, 403, 404.
+  - `PUT /admin/leagues/{leagueId}/format` → 200, 400, 401, 403, 404, 409 (finished / locked).
+- Description of `PUT` states: whole-object replace; group fields ignored for `KNOCKOUT_ONLY`; points default to 2 / 1.
+
+### 8.4 Mounting — `routes/index.ts`
+
+Add the import and mount **before** `/admin/leagues` (same reason the league-teams routers are mounted before it, so the more specific path wins):
+
+```ts
+router.use("/admin/leagues/:leagueId/format", formatAdminRoutes);
+```
+
+Add `import "../modules/competition/format/admin/format.admin.docs.ts";` to `swagger/swagger.ts`.
+
+---
+
+## 9. Small additive edits in existing code
+
+1. **League response** (`leagues/lib/league.mapper.ts`, `LeagueRow` + `toLeagueResponse`): add `format`, `winPoints`, `lossPoints`, `groupRoundType`, `defaultQualifiersPerGroup` so the admin/app league screens can see the structure without a second call. Purely additive; `leagues/` reads its own columns, no import from `competition`.
+2. **Swagger for the league schema** (`leagues.docs.ts` `leagueSchema`): add the five optional/nullable fields.
+3. **`messages` in `language/message.ts`** (all strings Persian, no inline strings in code):
+   - `error.leagueFormat.winPointsMustExceedLoss`: «امتیاز برد باید بیشتر از امتیاز باخت باشد»
+   - `error.leagueFormat.groupRoundTypeRequired`: «نوع دور مسابقات گروهی الزامی است»
+   - `error.leagueFormat.qualifiersRequired`: «تعداد صعودکننده‌ی هر گروه الزامی است»
+   - `error.leagueFormat.locked`: «پس از شروع اولین بازی، ساختار لیگ قابل تغییر نیست» (used from Stage 3)
+   - `success.leagueFormat.found`: «ساختار لیگ با موفقیت دریافت شد»
+   - `success.leagueFormat.updated`: «ساختار لیگ با موفقیت به‌روزرسانی شد»
+   - `success.leagueFormats.fetched`: «ساختارهای لیگ با موفقیت دریافت شد»
+   - `success.groupRoundTypes.fetched`: «انواع دور مسابقات گروهی با موفقیت دریافت شد»
+4. **Dropdown validation / TODO note**: in `leagues.admin.service.ts` the existing `TODO(Game)` stays untouched in Stage 1 (activated in Stage 3).
+
+---
+
+## 10. Shared reference-data endpoints
+
+Copy of the `league-statuses` pattern, public, no auth.
+
+| Endpoint | Response `data` | Labels (Persian) |
+|---|---|---|
+| `GET /league-formats` | `{ formats: [{ value, label }] }` | `GROUPS_KNOCKOUT` گروهی + حذفی · `SINGLE_GROUP_KNOCKOUT` تک‌گروه + حذفی · `KNOCKOUT_ONLY` فقط حذفی |
+| `GET /group-round-types` | `{ roundTypes: [{ value, label }] }` | `ONE_ROUND` یک‌دوره (همه با همه) · `DOUBLE_ROUND` رفت و برگشت |
+
+Implementation per folder: service builds the list from the generated Prisma enum with a `Record<Enum, string>` label map (same as `league-statuses.service.ts`); controller wraps with `apiResponse.sendResponse`; docs register the path with `security: []`; routes expose `GET /`. Mount in `routes/index.ts` and import docs in `swagger/swagger.ts`.
+
+---
+
+## 11. Documentation updates
 
 | File | Change |
 |---|---|
-| `src/routes/index.ts` | Update the 4 league imports to `../modules/leagues/leagues.routes.ts`, `../modules/leagues/admin/leagues.admin.routes.ts`, and `../modules/leagues/admin/league-teams.admin.routes.ts` (default + `eligibleTeamsRouter`). Mount paths do not change. |
-| `src/swagger/swagger.ts` | Update the 3 docs imports: `leagues.docs.ts`, `admin/leagues.admin.docs.ts`, `admin/league-teams.admin.docs.ts`. |
-| `src/server.ts` | `startLeagueLifecycleJob` from `./modules/leagues/lib/league.lifecycle.ts`. |
-| `src/modules/teams/teams.service.ts` | `syncHeadCoachToRegistrationLeagues` from `../leagues/lib/league.head-coach-sync.ts`. |
-
-Inside the module, all relative paths need re-basing (the depth changes). Key edges:
-
-- `services/*` import `../lib/*`, `../leagues.policy.ts`, and the global `../../../...` utilities (one level deeper than before, depth stays the same as old `leagues/` files plus one for `services/`; verify with the compiler).
-- `leagues.policy.ts` imports `./lib/league.rules.ts` and `./lib/league.types.ts`.
-- `lib/league.candidates.ts` and `lib/league.roster-writes.ts` import `../leagues.policy.ts`. This is an import in both directions between `lib` and the module root (policy to rules, candidates to policy). It is not a file-level cycle (rules never import policy), but keep it that way: **`lib/league.rules.ts` and `lib/league.types.ts` must never import `leagues.policy.ts`.**
-- Admin files import `../services/*`, `../leagues.validation.ts`, `../leagues.docs.ts`, `../lib/*`.
-
-Validation after moving (section 9) will catch any missed path.
+| `docs/03-project-structure.md` | Add `competition/format/{admin,lib}` and the two new `shared/` folders. **Fix the stale line** that says leagues admin files are flattened (`leagues.admin.*`); they actually live in `admin/league/` and `admin/league-team/`. |
+| `docs/04-data-model.md` | Add the `League` format columns and the two enums; note `format = null` means unconfigured. |
+| `docs/modules/leagues.md` | Fix the same flattened-folder statement; mention new read-only fields in the league response. |
+| `docs/modules/competition.md` (new) | Purpose, sub-modules (only `format` for now, others "planned"), dependency rule (`competition → leagues`, one-way), responsibilities and the format lock rules. |
+| `docs/modules/shared.md` | Add `league-formats` and `group-round-types`. |
+| `docs/status/current-state.md` | Add `competition/format` row (Done after implementation) and the two shared rows. |
+| `docs/status/roadmap.md` | Mark format done; keep groups → games → standings → brackets → player stats order. |
+| `docs/` (copy) | Store the decisions file as `docs/modules/competition-structure.md` so it is available in every future session. |
 
 ---
 
-## 4. Policy change: `evaluateUnregister`
+## 12. Implementation order (checklist)
 
-File: `leagues.policy.ts`.
+1. Fix stale docs statements (03 and `modules/leagues.md`) — zero-risk first commit.
+2. `schema.prisma`: enums + `League` columns → migration → `prisma generate`; review SQL.
+3. `message.ts`: add all keys from section 9.
+4. `format.rules.ts`.
+5. `format.admin.validation.ts`.
+6. `format.admin.service.ts` (+ `toFormatResponse`).
+7. `format.admin.controller.ts`, `format.admin.routes.ts`.
+8. `format.admin.docs.ts`.
+9. Mount in `routes/index.ts`; import docs in `swagger/swagger.ts`.
+10. Shared `league-formats` and `group-round-types` (4 files each) + mount + docs import.
+11. League response additions (mapper + `leagueSchema`).
+12. Remaining docs from section 11 (`competition.md`, `shared.md`, `04`, `current-state`, `roadmap`, decisions copy).
+13. Manual verification (section 13), then commit.
 
-1. Extend `Denial` with `"UNREGISTER_IN_ACTIVE"`.
-2. Add:
-
-```ts
-/**
- * Single source for "may this actor unregister a team?".
- * Order: identity (403) → ACTIVE league (409) → shared status/window rule.
- * Head coaches are rejected at the identity step.
- */
-export function evaluateUnregister(
-  actor: Actor,
-  league: LeagueState,
-  organizationId: number,
-  now?: Date,
-): Evaluation {
-  if (!actor.isAdmin && !actor.managedOrgIds.has(organizationId))
-    return { allowed: false, reason: "NOT_AUTHORIZED" };
-  if (league.status === "ACTIVE")
-    return { allowed: false, reason: "UNREGISTER_IN_ACTIVE" };
-  return evaluateRegister(actor, league, organizationId, now);
-}
-```
-
-3. `throwDenial`: add `case "UNREGISTER_IN_ACTIVE": throw new AppError(409, messages.error.league.cannotUnregisterInActive);`
-4. `leagueTeamPolicy`: for `ADMIN`, keep `unregister: allowed && league.status !== "ACTIVE"` (unchanged output; comment that it mirrors `evaluateUnregister`).
-5. `services/league-teams.service.ts` `unregisterTeam`: replace the two manual checks and the `assertCanRegister` call with:
-
-```ts
-const result = evaluateUnregister(actor, league, leagueTeam.team.organizationId);
-if (!result.allowed) throwDenial(result.reason);
-```
-
-Behavior preserved: head coach and other non-managers get 403, ACTIVE league gives 409 `cannotUnregisterInActive` (admin included), otherwise the usual status/window 409s.
-
-Tests to add (new file `leagues.policy.test.ts`): matrix for `evaluateUnregister` (admin / manager / head coach / guest x INACTIVE / REGISTRATION / ACTIVE / FINISHED x window open/closed).
+Each step keeps the app compiling; steps 2–3 can ship alone.
 
 ---
 
-## 5. Message and logging fixes
+## 13. Manual verification (no automated tests)
 
-### 5.1 `addMembers`: name the missing ids (D7)
+Run through Swagger at `/docs` as `SUPER_ADMIN` and as an `ADMIN` with and without permissions.
 
-File: `lib/league.roster-writes.ts`, `loadAddableRows`.
-
-```ts
-if (rows.length !== ids.length) {
-  const found = new Set(rows.map((r) => r.id));
-  const missing = ids.filter((id) => !found.has(id));
-  throw new AppError(
-    404,
-    `${messages.error.leagueRoster.teamMemberNotFound}: ${missing.join(", ")}`,
-  );
-}
-```
-
-`messages` stays a constant-string object; only the ids are appended (same pattern as the `validate` middleware's `path: message`). Update the Swagger 404 description to say the ids are listed.
-
-### 5.2 Lock-reason-aware 403 message (D9)
-
-Problem: both `removeMember` and `loadAddableRows` always use `headCoachRowManagerOnly`, which is misleading for `OWN_ROW`.
-
-1. Add to `src/language/message.ts` under `error.leagueRoster`:
-   `ownRowLocked: "سرمربی نمی‌تواند ردیف خودش را در راستر لیگ تغییر دهد"`
-2. Add a small helper next to the policy (pure):
-
-```ts
-export function lockReasonMessage(reason: LockReason): string {
-  return reason === "OWN_ROW"
-    ? messages.error.leagueRoster.ownRowLocked
-    : messages.error.leagueRoster.headCoachRowManagerOnly;
-}
-```
-
-3. In `removeMember` and `loadAddableRows`, replace the hardcoded message with `lockReasonMessage(decision.lockReason)`.
-
-### 5.3 Do not swallow lifecycle errors (D9)
-
-File: `admin/leagues.admin.service.ts`, `updateLeague`.
-
-```ts
-await advanceLeagueIfExpired(updated.id).catch((err) =>
-  console.error("[league-lifecycle] advanceLeagueIfExpired failed", err),
-);
-```
-
-The project has no logger (`LOG_LEVEL` exists in `.env.example` but is unused), so `console.error` matches `league.lifecycle.ts`.
+- `GET` on a fresh league → `format: null`, `winPoints: 2`, `lossPoints: 1`, group fields `null`, `can.edit: true`, `lockReason: null`.
+- `PUT GROUPS_KNOCKOUT` with `groupRoundType` + `defaultQualifiersPerGroup` → 200, values stored.
+- `PUT GROUPS_KNOCKOUT` missing either group field → 400 `path: message`.
+- `PUT SINGLE_GROUP_KNOCKOUT` valid → 200.
+- `PUT KNOCKOUT_ONLY` with group fields present → 200, both returned as `null`.
+- `PUT` with `winPoints <= lossPoints` → 400.
+- `PUT` with unknown key → 400 (strict).
+- `PUT` after switching from group format to `KNOCKOUT_ONLY` then back → group fields were reset to `null`, must be re-sent.
+- League in `FINISHED` → `PUT` returns 409; `GET` shows `can.edit: false`, `lockReason: "FINISHED"`.
+- Non-existent league → 404 on both.
+- No token → 401; admin without `leagues.update` → 403 on `PUT`, `leagues.view` only → 200 on `GET`.
+- `GET /league-formats` and `GET /group-round-types` return Persian labels without a token.
+- `GET /admin/leagues/:id` (existing endpoint) now includes the new fields and nothing else changed.
 
 ---
 
-## 6. Admin pattern unification (D8)
+## 14. Hooks left for later stages
 
-**Rule:** if an admin endpoint adds no logic beyond what the main service already does, the admin controller calls the main service with `adminActor(req.userId!)`. An admin service is created only for admin-specific logic (different filters, different validation, restore, status workflows, etc.).
-
-Audit of every module:
-
-| Module | Finding | Action |
-|---|---|---|
-| leagues (`league-teams.admin`) | Already direct, no service. | None. |
-| leagues (`leagues.admin.service`) | Real admin logic (CRUD, status machine). | Keep. |
-| teams | `teams.admin.service` has 3 pure wrappers: `adminAddRosterMember`, `adminUpdateRosterMember`, `adminRemoveRosterMember`. | **Remove wrappers**; controller calls `teamsService.*` with `adminActor(req.userId!)`. Remove the `teamsService` and `adminActor` imports from `teams.admin.service.ts`. Keep list/get/create/update/delete/restore/`adminGetRoster` (real admin logic). |
-| organizations | `organizations.admin.service` has independent logic (managerId, status, restore). | None. |
-| people / users | `users.admin.service.updateUserByAdmin` is a pure wrapper over `applyProfileUpdate`; `getUserById` is a duplicate of `user.service.getUserById`. Other methods (create, delete, reset password, admin status, permissions, list with hidden admins) are real logic. | **Remove** `updateUserByAdmin` and `getUserById` from `users.admin.service.ts`. `users.admin.controller` calls `applyProfileUpdate` (named export) and `userService.getUserById` directly. `assertTargetAccessible` stays in the admin service and is still called first. |
-| age-categories | Admin-only module, no user-facing counterpart. | None. |
-| seasons | No admin folder; mutations gated by permissions in the same router. | None. |
-
-Controller change for teams (`teams.admin.controller.ts`):
-
-```ts
-import teamsService from "../teams.service.ts";
-import { adminActor } from "../../../authz/actor.ts";
-// ...
-const member = await teamsService.addRosterMember(
-  Number(req.params.teamId), input, adminActor(req.userId as number));
-```
-
-(same for update/remove). Behavior is identical; only the call chain is shorter.
-
----
-
-## 7. Cross-module import rules (D10)
-
-Existing cross-module imports in the codebase: `teams.service` imports `organizations.policy` and the league head-coach sync; `auth.service` imports `user.service`; `users.admin.service` imports `user.service`; `teams.admin.service` imports `teams.service`. The convention below makes these legitimate and uniform:
-
-1. A module may import from another module's **service, policy, or lib** file. Never from its routes, controller, or docs.
-2. Dependencies are **one-directional**. No cycles (leagues never imports `teams.service`; teams imports leagues' `lib`).
-3. Cross-module imports are listed in the "Relationships" section of that module's doc.
-4. Code that other modules import should live in `lib/` (or the main service) and be named in the docs. Today the only such file is `leagues/lib/league.head-coach-sync.ts`.
-
-Why `head-coach-sync` stays: it runs inside the team's Prisma transaction (`tx`), so moving it behind an event/hook would break atomicity. Moving it into `teams` only inverts the dependency while the code still queries `league*` tables.
-
----
-
-## 8. Documentation updates (D11)
-
-| Doc | Change |
+| Stage | What it adds to format |
 |---|---|
-| `docs/03-project-structure.md` | Replace `competition/...` line with `leagues/` (`services/`, `lib/`, `admin/`); add a short note on the 3+ services rule. |
-| `docs/08-conventions.md` | Add: (a) `services/` folder when a module has 3+ services; (b) `lib/` for module-private logic, with the cross-module import rules from section 7; (c) admin pattern rule from section 6; (d) `*.admin.validation.ts` exists only when it contains admin-specific schemas. |
-| `docs/modules/competition.md` | Rename to `docs/modules/leagues.md`; update sub-module section and file names (`services/leagues.service.ts`, `lib/*`, flattened `admin/`); mention `evaluateUnregister`; relationships: add "teams imports `lib/league.head-coach-sync.ts`". |
-| `docs/09-authorization.md` | Update the league paragraph (`leagueTeamPolicy`, `rosterRowPolicy`, `evaluateUnregister`) and paths. |
-| `docs/02-architecture.md` | Add one line on the admin pattern and cross-module import rules. |
-| `docs/modules/teams.md` | Admin roster mutations now call `teams.service` directly with `adminActor`; update the head-coach-sync import path. |
-| `docs/modules/people.md` | `users.admin.service` no longer has `updateUserByAdmin` / `getUserById`; admin controller delegates to `user.service`. |
-| `docs/modules/shared.md`, `docs/status/*`, `docs/04-data-model.md` | Update any `competition` path references (search for `competition`). |
+| 2 – groups | `TODO(Group)` guard: block switching to `KNOCKOUT_ONLY` when groups exist; validate `defaultQualifiersPerGroup` against group sizes where relevant. |
+| 3 – games | Activate `HAS_GAMES` lock via `prisma.game.count` (direct Prisma, no import from `games`); `can.edit = false` + `lockReason = "HAS_GAMES"`; activate `TODO(Game)` in `updateLeagueStatus` and `unregisterTeam`. |
+| 4 – standings | Reads `winPoints` / `lossPoints` from the league row. |
+| 5 – brackets | Reads `format` to know whether a group stage precedes the bracket. |
+
+Dependency chain stays one-way: `format ← groups ← games ← standings ← brackets`, all depending on `leagues/lib`, with the `games ↔ brackets` cycle resolved in Stage 5 by putting series advancement in `brackets/lib`.
 
 ---
 
-## 9. Execution order
+## 15. Open points (decide before coding, none block steps 1–3)
 
-1. **Branch**, make sure the working tree is clean, run `npx tsc --noEmit` and `npm test` to record a green baseline.
-2. **Move files** (section 2) with `git mv`; create `services/`, `lib/`, `admin/`; delete `league-teams.admin.validation.ts`.
-3. **Fix imports** inside the module, then outside (section 3). Run `npx tsc --noEmit` until clean. (`tsx` does not type-check, so the compiler run is mandatory.)
-4. **Rename** `leagues.public.service` to `services/leagues.service.ts` and update the controller import. (Rename the object/import alias consistently.)
-5. **Policy**: add `evaluateUnregister`, `UNREGISTER_IN_ACTIVE`, `lockReasonMessage` (section 4, 5.2); update `unregisterTeam`.
-6. **Messages and logging**: sections 5.1, 5.2 (new message key), 5.3.
-7. **Admin unification**: teams (wrappers removed, controller updated), users (wrapper and duplicate removed). Section 6.
-8. **Tests**: keep `league.rules.test.ts`; add `leagues.policy.test.ts` (unregister + roster-row matrix) and a test for `evaluateActiveRequirements` / `initialStatusForDeadline`.
-9. **Docs** (section 8).
-10. **Verify**:
-    - `npx tsc --noEmit` and `npm test` are green.
-    - Server boots; `/docs` (Swagger) renders all league, admin-league and admin-league-team paths (a wrong docs import silently drops paths).
-    - Smoke test: public `GET /leagues`; admin create league, register team, add members; manager unregister in REGISTRATION (OK) and ACTIVE (409); head coach removing own row (403 with the new message); `addMembers` with a bad id (404 listing the id); teams admin roster add/update/remove; admin users update and get-by-id.
-    - Search the repo for leftover `competition` references: `grep -rn "competition" src docs`.
-11. Commit in small steps (moves alone first, then behavior changes) so the move diff stays reviewable.
-
----
-
-## 10. Risks and notes
-
-- **Import depth errors** are the main risk of the move; the compiler catches them.
-- **Swagger registration** relies on side-effect imports in `swagger.ts`; verify paths load (section 9, step 10).
-- **No behavior change** except: clearer 403 message for own-row lock, ids in the 404 message, logged lifecycle errors. Frontend should be told about the 404 message format change (ids appended after a colon).
-- `lib/` to `leagues.policy.ts` import direction is intentional (see section 3); do not let `league.rules.ts` or `league.types.ts` import the policy.
-- Known follow-ups, not in this plan: shared constant/filter for "team eligible for registration" (`listEligibleTeams` vs `registerTeam`), merging `LeagueTeamStatus` and `LeagueTeamMemberStatus` enums, splitting `league.mapper.ts` into includes and mappers if it grows, a multi-instance-safe scheduler if the API is ever run with more than one process.
+1. `max` bounds for `winPoints` / `lossPoints` (plan uses 10) and `defaultQualifiersPerGroup` (plan uses 64).
+2. Whether to expose the five new fields in the public league response too (plan: yes, additive, read-only).
+3. Whether the admin panel needs a separate permission (`competition-format.update`) later; current plan reuses `leagues.update`.

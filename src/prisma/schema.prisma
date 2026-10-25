@@ -82,6 +82,17 @@ enum LeagueTeamMemberStatus {
   DELETED
 }
 
+enum LeagueFormat {
+  GROUPS_KNOCKOUT
+  SINGLE_GROUP_KNOCKOUT
+  KNOCKOUT_ONLY
+}
+
+enum GroupRoundType {
+  ONE_ROUND
+  DOUBLE_ROUND
+}
+
 model User {
   id           Int        @id @default(autoincrement())
   fullName     String     @map("full_name")
@@ -299,6 +310,11 @@ model League {
   endDate             DateTime?    @map("end_date") @db.Date
   rosterDeadline      DateTime?    @map("roster_deadline") @db.Date
   description         String?      @db.Text
+  format              LeagueFormat?
+  winPoints           Int          @default(2) @map("win_points")
+  lossPoints          Int          @default(1) @map("loss_points")
+  groupRoundType      GroupRoundType? @map("group_round_type")
+  defaultQualifiersPerGroup Int?  @map("default_qualifiers_per_group")
   createdAt           DateTime     @default(now()) @map("created_at")
   updatedAt           DateTime     @updatedAt @map("updated_at")
 

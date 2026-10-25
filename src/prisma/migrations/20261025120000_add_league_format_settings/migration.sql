@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE `leagues`
+    ADD COLUMN `format` ENUM('GROUPS_KNOCKOUT', 'SINGLE_GROUP_KNOCKOUT', 'KNOCKOUT_ONLY') NULL,
+    ADD COLUMN `win_points` INTEGER NOT NULL DEFAULT 2,
+    ADD COLUMN `loss_points` INTEGER NOT NULL DEFAULT 1,
+    ADD COLUMN `group_round_type` ENUM('ONE_ROUND', 'DOUBLE_ROUND') NULL,
+    ADD COLUMN `default_qualifiers_per_group` INTEGER NULL;

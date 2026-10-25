@@ -1,4 +1,4 @@
-import { Role } from "../../../prisma/generated/prisma/enums.ts";
+import { Role } from "../../../../../prisma/generated/prisma/enums.ts";
 
 // Role now holds only domain values — all of them are assignable through
 // a general-purpose dropdown. Admin standing lives in the separate

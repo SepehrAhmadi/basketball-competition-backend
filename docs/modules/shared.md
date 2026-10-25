@@ -6,15 +6,17 @@ Serves static enum lookups for dropdowns and validation.
 
 ## Entities
 
-- None via Prisma client; imports `Role`, `CoachDegree`, `RefreeLevel` from generated Prisma enums.
+- None via Prisma client; imports `Role`, `CoachDegree`, `RefreeLevel`, `LeagueStatus`, `LeagueFormat`, `GroupRoundType` from generated Prisma enums.
 
 ## Sub-modules
 
-- `roles` — public `GET /` listing `Role` values with labels.
-- `coach-degrees` — public `GET /` listing `CoachDegree` values with labels.
-- `referee-levels` — public `GET /` listing `RefreeLevel` values with labels.
-- `league-statuses` — public `GET /` listing `LeagueStatus` values with Persian labels.
-- `dropdowns` — authenticated (`verifyJWT`, no admin gate) reference data: static `organization-statuses`/`team-statuses`/`team-member-roles` (Persian labels) + paginated `organizations`/`teams`/`seasons`/`users`/`age-categories` lookups.
+- `dropdowns` — authenticated (`verifyJWT`, no admin gate) reference data: static `organization-statuses`/`team-statuses`/`team-member-roles` (Persian labels) + paginated `organizations`/`teams`/`seasons`/`users`/`age-categories` lookups under `/dropdowns`.
+- `dropdowns/static/roles` — public `GET /dropdown/roles` listing `Role` values with labels.
+- `dropdowns/static/coach-degrees` — public `GET /dropdown/coach-degrees` listing `CoachDegree` values with labels.
+- `dropdowns/static/referee-levels` — public `GET /dropdown/referee-levels` listing `RefreeLevel` values with labels.
+- `dropdowns/static/league-statuses` — public `GET /dropdown/league-statuses` listing `LeagueStatus` values with Persian labels.
+- `dropdowns/static/league-formats` — public `GET /dropdown/league-formats` listing `LeagueFormat` values with Persian labels.
+- `dropdowns/static/group-round-types` — public `GET /dropdown/group-round-types` listing `GroupRoundType` values with Persian labels.
 
 ## Responsibilities
 
