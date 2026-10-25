@@ -16,14 +16,16 @@ src/
 ├── prisma/schema.prisma    # 17 models, enums (see 04-data-model.md)
 └── modules/
     ├── age-categories/admin/age-categories|age-category-cutoffs/  # admin-only category + cutoff CRUD
+    ├── competition/         # competition structure (see modules/competition.md)
+    │   └── format/          # league format settings on League (admin/ + lib/)
     ├── leagues/              # league CRUD, registration, roster (see modules/leagues.md)
     │   ├── services/         # 3+ services live here (leagues, league-teams, league-roster)
     │   ├── lib/              # module-private logic (rules, access, mapper, lifecycle)
-    │   └── admin/            # flattened admin files (leagues.admin.*, league-teams.admin.*)
+    │   └── admin/            # nested admin folders: league/ and league-team/
     ├── organizations/      # org CRUD + logos + managers + admin/ (restore, status filter)
     ├── people/auth|user (with user/admin)|players|coaches|referees/
     ├── seasons/            # season lifecycle
-    ├── shared/roles|coach-degrees|referee-levels|league-statuses|dropdowns/  # dropdowns requires JWT, rest public
+    ├── shared/dropdowns/    # dynamic lookups (JWT) + static/ public enum lookups under /dropdown/[name]
     └── teams/              # team CRUD + roster + admin/ (restore, roster manage)
 ```
 

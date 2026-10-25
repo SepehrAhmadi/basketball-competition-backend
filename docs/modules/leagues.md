@@ -19,8 +19,9 @@ League management: leagues linked to an age-category cutoff (season + category d
   - `leagues.policy.ts` — single source of truth for register/unregister/roster-edit rules (`evaluateRegister`/`evaluateUnregister`/`evaluateRosterEdit` return a reason; services map it to errors via `throwDenial`).
 - `lib/league.access.ts` — DB loaders that resolve the caller's roster role (`ADMIN`/`MANAGER`/`HEAD_COACH`/null) for a league team; `lib/league.head-coach-sync.ts` — auto-adds the head coach to league rosters (batched). Imported by `teams.service` (see Relationships).
 - `lib/league.types.ts` — shared types (`LeagueContext`, `LeagueTeamAccess`, `MyRosterRow`, roles); `lib/league.players.ts` — one-team-per-league player lookup; `lib/league.candidates.ts` — candidate filters, two-phase paging, candidate mapping; `lib/league.roster-writes.ts` — roster write helpers (load/validate/persist).
-- `admin/leagues.admin.*` — admin CRUD + status (`/admin/leagues`).
-- `admin/league-teams.admin.*` — admin registration + roster (`/admin/leagues/:leagueId/teams`, `/admin/leagues/:leagueId/eligible-teams` via a second router in the same file). The admin controller calls the registration/roster services directly with `adminActor`.
+- `admin/league/leagues.admin.*` — admin CRUD + status (`/admin/leagues`).
+- `admin/league-team/league-teams.admin.*` — admin registration + roster (`/admin/leagues/:leagueId/teams`, `/admin/leagues/:leagueId/eligible-teams` via a second router in the same file). The admin controller calls the registration/roster services directly with `adminActor`.
+- League responses now include read-only format fields (`format`, `winPoints`, `lossPoints`, `groupRoundType`, `defaultQualifiersPerGroup`); format editing lives in `competition/format`.
 - `lib/` — pure rules (`isRosterWindowOpen`, `canEditByStatus`, age eligibility) + response mappers + lifecycle job.
 
 ## Responsibilities

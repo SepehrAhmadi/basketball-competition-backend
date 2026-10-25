@@ -43,6 +43,20 @@ export const leagueSchema = z
     endDate: z.string().nullable().openapi({ example: "1404/09/01" }),
     rosterDeadline: z.string().nullable().openapi({ example: "1404/05/20" }),
     ageCategoryCutoffId: z.number().openapi({ example: 1 }),
+    format: z
+      .enum(["GROUPS_KNOCKOUT", "SINGLE_GROUP_KNOCKOUT", "KNOCKOUT_ONLY"])
+      .nullable()
+      .openapi({ example: "GROUPS_KNOCKOUT" }),
+    winPoints: z.number().openapi({ example: 2 }),
+    lossPoints: z.number().openapi({ example: 1 }),
+    groupRoundType: z
+      .enum(["ONE_ROUND", "DOUBLE_ROUND"])
+      .nullable()
+      .openapi({ example: "ONE_ROUND" }),
+    defaultQualifiersPerGroup: z
+      .number()
+      .nullable()
+      .openapi({ example: 2 }),
     ageCategory: z.object({
       id: z.number().openapi({ example: 1 }),
       name: z.string().openapi({ example: "نوجوانان" }),
