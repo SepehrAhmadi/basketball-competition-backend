@@ -29,7 +29,10 @@ export const updateFormatSchema = z
       .max(10)
       .default(DEFAULT_LOSS_POINTS)
       .openapi({ example: DEFAULT_LOSS_POINTS }),
-    groupRoundType: z.enum(GROUP_ROUND_TYPE_VALUES).optional(),
+    groupRoundType: z
+      .enum(GROUP_ROUND_TYPE_VALUES)
+      .optional()
+      .openapi({ example: "ONE_ROUND" }),
     defaultQualifiersPerGroup: z
       .number()
       .int()
