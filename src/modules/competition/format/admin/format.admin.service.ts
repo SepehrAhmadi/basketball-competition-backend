@@ -91,5 +91,4 @@ async function updateFormat(leagueId: number, input: FormatInput) {
 export default {
   getFormat,
   updateFormat,
-  toFormatResponse,
 };

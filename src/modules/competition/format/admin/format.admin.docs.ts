@@ -57,6 +57,11 @@ registry.registerPath({
   path: "/admin/leagues/{leagueId}/format",
   tags: ["Admin - League Format"],
   summary: "Get the competition format of a league (admin)",
+  description:
+    "`format: null` means the structure has not been configured yet. In that " +
+    "case `groupRoundType` and `defaultQualifiersPerGroup` are also null, " +
+    "points are the defaults (2/1), and `can.edit` is true unless the league " +
+    "is FINISHED.",
   request: { params: leagueIdParamSchema },
   responses: {
     "200": {
@@ -97,7 +102,9 @@ registry.registerPath({
     "Replaces the whole format object. `groupRoundType` and " +
     "`defaultQualifiersPerGroup` are required for group formats and ignored " +
     "(stored as null) for `KNOCKOUT_ONLY`. `winPoints`/`lossPoints` default " +
-    "to 2/1. Locked when the league is FINISHED or has games.",
+    "to 2/1. Locked when the league is FINISHED or has games. Whole-object " +
+    "replace. Omitted `winPoints`/`lossPoints` reset to 2/1, so clients should " +
+    "always send all fields.",
   request: {
     params: leagueIdParamSchema,
     body: {

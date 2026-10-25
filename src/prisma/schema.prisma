@@ -302,21 +302,21 @@ model TeamSeasonMember {
 }
 
 model League {
-  id                  Int          @id @default(autoincrement())
-  name                String
-  ageCategoryCutoffId Int          @map("age_category_cutoff_id")
-  status              LeagueStatus @default(INACTIVE)
-  startDate           DateTime?    @map("start_date") @db.Date
-  endDate             DateTime?    @map("end_date") @db.Date
-  rosterDeadline      DateTime?    @map("roster_deadline") @db.Date
-  description         String?      @db.Text
-  format              LeagueFormat?
-  winPoints           Int          @default(2) @map("win_points")
-  lossPoints          Int          @default(1) @map("loss_points")
-  groupRoundType      GroupRoundType? @map("group_round_type")
-  defaultQualifiersPerGroup Int?  @map("default_qualifiers_per_group")
-  createdAt           DateTime     @default(now()) @map("created_at")
-  updatedAt           DateTime     @updatedAt @map("updated_at")
+  id                        Int             @id @default(autoincrement())
+  name                      String
+  ageCategoryCutoffId       Int             @map("age_category_cutoff_id")
+  status                    LeagueStatus    @default(INACTIVE)
+  startDate                 DateTime?       @map("start_date") @db.Date
+  endDate                   DateTime?       @map("end_date") @db.Date
+  rosterDeadline            DateTime?       @map("roster_deadline") @db.Date
+  description               String?         @db.Text
+  format                    LeagueFormat?
+  winPoints                 Int             @default(2) @map("win_points")
+  lossPoints                Int             @default(1) @map("loss_points")
+  groupRoundType            GroupRoundType? @map("group_round_type")
+  defaultQualifiersPerGroup Int?            @map("default_qualifiers_per_group")
+  createdAt                 DateTime        @default(now()) @map("created_at")
+  updatedAt                 DateTime        @updatedAt @map("updated_at")
 
   ageCategoryCutoff AgeCategoryCutoff @relation(fields: [ageCategoryCutoffId], references: [id])
   teams             LeagueTeam[]
