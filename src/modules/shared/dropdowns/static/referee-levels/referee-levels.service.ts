@@ -1,4 +1,4 @@
-import { RefreeLevel } from "../../../prisma/generated/prisma/enums.ts";
+import { RefreeLevel } from "../../../../../prisma/generated/prisma/enums.ts";
 
 const LEVEL_LABELS_FA: Record<RefreeLevel, string> = {
   LEVEL_1: "درجه ۱",

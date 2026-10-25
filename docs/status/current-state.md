@@ -19,6 +19,9 @@
 | dropdowns | ✅ Done (JWT-required reference lookups) | Out of scope |
 | leagues | ✅ Done (leagues + league-teams + league-roster; app side rebuilt: head-coach roster access, `my-teams`, team detail) | Out of scope |
 | league-statuses | ✅ Done | Out of scope |
+| league-formats | ✅ Done | Out of scope |
+| group-round-types | ✅ Done | Out of scope |
+| competition/format | ✅ Done (Stage 1: plan format + scoring settings; admin GET/PUT) | Out of scope |
 | games / series | ❌ Not Started | Out of scope |
 | stats | ❌ Not Started | Out of scope |
 | media / uploads | ⏳ In Progress (infra only, no module) | Out of scope |

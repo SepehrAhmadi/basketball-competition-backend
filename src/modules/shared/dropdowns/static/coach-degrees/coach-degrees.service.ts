@@ -1,4 +1,4 @@
-import { CoachDegree } from "../../../prisma/generated/prisma/enums.ts";
+import { CoachDegree } from "../../../../../prisma/generated/prisma/enums.ts";
 
 const DEGREE_LABELS_FA: Record<CoachDegree, string> = {
   LEVEL_1: "درجه ۱",

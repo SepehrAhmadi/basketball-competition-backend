@@ -9,19 +9,17 @@ import organizationsRoutes from "../modules/organizations/organizations.routes.t
 import organizationsAdminRoutes from "../modules/organizations/admin/organizations.admin.routes.ts";
 import teamsRoutes from "../modules/teams/teams.routes.ts";
 import teamsAdminRoutes from "../modules/teams/admin/teams.admin.routes.ts";
-import rolesRoutes from "../modules/shared/roles/roles.routes.ts";
 import dropdownsRoutes from "../modules/shared/dropdowns/dropdowns.routes.ts";
-import coachDegreesRoutes from "../modules/shared/coach-degrees/coach-degrees.routes.ts";
-import refereeLevelsRoutes from "../modules/shared/referee-levels/referee-levels.routes.ts";
+import staticDropdownsRoutes from "../modules/shared/dropdowns/static/index.ts";
 import seasonsRoutes from "../modules/seasons/seasons.routes.ts";
 import ageCategoriesAdminRoutes from "../modules/age-categories/admin/age-categories/age-categories.admin.routes.ts";
 import ageCategoryCutoffsAdminRoutes from "../modules/age-categories/admin/age-category-cutoffs/age-category-cutoffs.admin.routes.ts";
-import leagueStatusesRoutes from "../modules/shared/league-statuses/league-statuses.routes.ts";
 import leaguesRoutes from "../modules/leagues/leagues.routes.ts";
 import leaguesAdminRoutes from "../modules/leagues/admin/league/leagues.admin.routes.ts";
 import leagueTeamsAdminRoutes, {
   eligibleTeamsRouter,
 } from "../modules/leagues/admin/league-team/league-teams.admin.routes.ts";
+import formatAdminRoutes from "../modules/competition/format/admin/format.admin.routes.ts";
 
 const router = Router();
 
@@ -35,17 +33,15 @@ router.use("/admin/teams", teamsAdminRoutes);
 router.use("/players", playersRoutes);
 router.use("/coaches", coachesRoutes);
 router.use("/referees", refereesRoutes);
-router.use("/roles", rolesRoutes);
 router.use("/dropdowns", dropdownsRoutes);
-router.use("/coach-degrees", coachDegreesRoutes);
-router.use("/referee-levels", refereeLevelsRoutes);
+router.use("/dropdown", staticDropdownsRoutes);
 router.use("/seasons", seasonsRoutes);
 router.use("/admin/age-categories", ageCategoriesAdminRoutes);
 router.use("/admin/age-category-cutoffs", ageCategoryCutoffsAdminRoutes);
-router.use("/league-statuses", leagueStatusesRoutes);
 router.use("/leagues", leaguesRoutes);
 router.use("/admin/leagues/:leagueId/teams", leagueTeamsAdminRoutes);
 router.use("/admin/leagues/:leagueId/eligible-teams", eligibleTeamsRouter);
+router.use("/admin/leagues/:leagueId/format", formatAdminRoutes);
 router.use("/admin/leagues", leaguesAdminRoutes);
 
 export default router;

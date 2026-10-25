@@ -1,4 +1,4 @@
-import { LeagueStatus } from "../../../prisma/generated/prisma/enums.ts";
+import { LeagueStatus } from "../../../../../prisma/generated/prisma/enums.ts";
 
 const STATUS_LABELS_FA: Record<LeagueStatus, string> = {
   INACTIVE: "غیرفعال",
