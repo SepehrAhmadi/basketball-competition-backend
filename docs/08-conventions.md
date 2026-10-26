@@ -16,6 +16,31 @@
 
 - Two files per module: `*.validation.ts` for input schemas, `*.docs.ts` for response schemas + `registerPath()` on the shared `registry` with `bearerAuth`.
 - `*.docs.ts` modules are aggregated in `src/swagger/swagger.ts` (`OpenAPI 3.0.0`, `servers: [/api/v1]`).
+- `Advisory` is registered once in `src/swagger/advisory.docs.ts`; import `advisorySchema` from there instead of re-declaring it. For a nullable advisory field use `z.union([advisorySchema, z.null()])` — `.nullable()` on a `$ref` drops the nullability.
+
+## Advisories
+
+`can` flags answer "may I?"; advisories answer "why not / what is wrong?".
+
+```ts
+type AdvisorySeverity = "INFO" | "WARNING" | "BLOCKER";
+interface Advisory<C extends string = string> {
+  code: C; severity: AdvisorySeverity; message: string; params: Record<string, string | number | boolean | null>;
+}
+```
+
+| Severity | Meaning |
+|---|---|
+| `INFO` | Informational, nothing is wrong |
+| `WARNING` | Allowed and saved, but incomplete or suspicious |
+| `BLOCKER` | Prevents the action the user is looking at |
+
+- A list of general warnings is always named `issues: Advisory[]`; empty is `[]`, never `null` and never omitted.
+- A single reason attached to one concern is a nullable `Advisory` named after the concern (`lock`, `toggleLock`, `ineligibility`); `null` means "no reason" and is a legitimate answer.
+- Rules and policies stay pure and return internal codes; the module mapper builds the advisory at the response boundary (`lib/*.advisories.ts`).
+- Enforcement stays in services via `AppError` (403/409). The same code feeds both the error and the advisory.
+- Advisory text lives in `messages.advisory.*` (short chip labels). Error envelopes keep the longer `messages.error.*` sentences.
+- Each module owns its code union; `src/shared/advisory.ts` stays generic.
 
 ## Check placement
 

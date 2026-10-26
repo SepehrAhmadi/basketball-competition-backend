@@ -264,4 +264,20 @@ export const messages = {
       accountDeleted: "حساب کاربری با موفقیت حذف شد",
     },
   },
+  // Short labels rendered next to disabled actions (chips, tooltips). They are
+  // deliberately shorter than the matching `error.*` sentences, which stay the
+  // text of thrown 403/409 responses.
+  advisory: {
+    format: {
+      finished: "لیگ تمام‌شده قابل ویرایش نیست",
+      hasGames: "پس از شروع اولین بازی، ساختار لیگ قابل تغییر نیست",
+    },
+    leagueRoster: {
+      ownRow: "ردیف خودتان قابل تغییر نیست",
+      managerOnly: "فقط مدیر یا ادمین",
+      birthDateMissing: "تاریخ تولد ثبت نشده",
+      tooOld: "خارج از رده سنی",
+      inOtherTeam: "در تیم دیگری عضو است",
+    },
+  },
 } as const;

@@ -36,8 +36,11 @@ player stats under the same parent folder.
 - Format editing is allowed in `INACTIVE`, `REGISTRATION` and `ACTIVE` while no
   game exists. `FINISHED` is always locked (reopening stays a `SUPER_ADMIN`
   status action).
-- Admin responses expose `lockReason` (`FINISHED`, later `HAS_GAMES`) so the UI
-  can show why editing is blocked; the admin format response has no `can` flag.
+- Admin responses expose `lock` (an `Advisory` with `code`, `severity`,
+  `message`, `params`; `null` when editable) so the UI can show why editing is
+  blocked; the admin format response has no `can` flag. Codes: `FINISHED`
+  (`BLOCKER`), and `HAS_GAMES` (`BLOCKER`, reserved for Stage 3 and not emitted
+  yet). Render `lock.message`; use `lock.code` for icon/color.
   App-facing league responses keep their `can` flags.
 - Permissions reuse `leagues.view` for `GET` and `leagues.update` for `PUT`; no
   new permission in Stage 1.

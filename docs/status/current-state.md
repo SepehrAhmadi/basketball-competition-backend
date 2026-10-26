@@ -36,3 +36,4 @@ Based on mounted routes in `src/routes/index.ts` and existing service files.
 - `TeamSeasonMember.status` added (`ACTIVE` default).
 - Admin level separated from `Role` into `UserAdmin` + `AdminPermission` (migration `20260926072520`).
 - `ORG_MANAGER` role removed; management is relation-only via `OrganizationManager` (migration `20261005000000_remove_org_manager_role`).
+- Raw reason codes replaced by the shared `Advisory` contract (breaking): `lockReason` → `lock`, `toggleLockReason` → `toggleLock`, `ineligibleReason` → `ineligibility`. Admin panel and PWA consume `message` directly.

@@ -9,7 +9,7 @@ src/
 ├── middleware/             # see 05-middleware.md (auth/*, validate, errorHandler, upload/*)
 ├── authz/                  # Actor loader types + assertAllowed (see 09-authorization.md)
 ├── utils/                  # see 06-utilities.md
-├── shared/                 # PERMISSION_CATALOG + id/pagination schemas
+├── shared/                 # PERMISSION_CATALOG + id/pagination schemas + Advisory
 ├── types/express/          # Request augmentation (userId, roles, adminLevel, permissions, actor, validated*)
 ├── language/message.ts     # central Persian messages
 ├── swagger/                # registry, helpers, zod-extend, doc aggregation
@@ -32,7 +32,7 @@ src/
 - `src/` — all runtime code; `rootDir: ./src`, ESM with `.ts` import suffixes.
 - `src/config/` — DB adapter, CORS, upload limits.
 - `src/middleware/` — cross-cutting request handlers; details in `05-middleware.md`.
-- `src/utils/` + `src/shared/` — plain helpers; details in `06-utilities.md`.
+- `src/utils/` + `src/shared/` — plain helpers; details in `06-utilities.md` (`shared/advisory.ts` holds the `Advisory` contract).
 - `src/modules/` — domain folders; details in `modules/*.md`.
 - `src/swagger/` — OpenAPI registry + per-module `*.docs.ts` aggregation.
 - `src/prisma/` — schema, migrations, seed (super-admins only).

@@ -13,6 +13,7 @@ import {
   leagueIdParamSchema,
   updateFormatSchema,
 } from "./format.admin.validation.ts";
+import { advisorySchema } from "../../../../swagger/advisory.docs.ts";
 
 const leagueFormatValueSchema = z
   .enum(LEAGUE_FORMAT_VALUES)
@@ -37,10 +38,16 @@ const leagueFormatSchema = z
       .number()
       .nullable()
       .openapi({ example: 2 }),
-    lockReason: z
-      .enum(["FINISHED", "HAS_GAMES"])
-      .nullable()
-      .openapi({ example: null }),
+    lock: z
+      .union([advisorySchema, z.null()])
+      .openapi({
+        example: null,
+        description:
+          "Null when the format is editable. Codes: `FINISHED` (league is " +
+          "finished) and `HAS_GAMES` (reserved for Stage 3; not emitted yet). " +
+          "`HAS_GAMES` is documented so clients can ship against the final " +
+          "contract.",
+      }),
   })
   .openapi("LeagueFormat");
 
@@ -57,8 +64,8 @@ registry.registerPath({
   description:
     "`format: null` means the structure has not been configured yet. In that " +
     "case `groupRoundType` and `defaultQualifiersPerGroup` are also null and " +
-    "points are the defaults (2/1). `lockReason` is non-null when the format " +
-    "cannot be edited (FINISHED or HAS_GAMES).",
+    "points are the defaults (2/1). `lock` is non-null when the format cannot " +
+    "be edited; render `lock.message` and use `lock.code` for icon/color.",
   request: { params: leagueIdParamSchema },
   responses: {
     "200": {

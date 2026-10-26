@@ -1,8 +1,10 @@
 import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
 import { isPlayerAgeEligible } from "./league.rules.ts";
+import type { IneligibilityReason } from "./league.rules.ts";
 import { toCandidateItem } from "./league.mapper.ts";
 import type { LeagueContext, LeagueTeamAccess } from "./league.types.ts";
 import { rosterRowPolicy } from "../leagues.policy.ts";
+import { buildIneligibility, buildToggleLock } from "./league.advisories.ts";
 
 export interface CandidatesQuery {
   page: number;
@@ -103,15 +105,15 @@ export function mapCandidate(
   options: { admin: boolean },
 ) {
   let eligible = true;
-  let ineligibleReason: string | null = null;
+  let ineligibilityReason: IneligibilityReason | null = null;
   if (m.role === "PLAYER") {
     const age = isPlayerAgeEligible(m.user.birthDate, league.minBirthDate);
     if (!age.ok) {
       eligible = false;
-      ineligibleReason = age.reason;
+      ineligibilityReason = age.reason;
     } else if (otherUserIds.has(m.userId)) {
       eligible = false;
-      ineligibleReason = "IN_OTHER_TEAM";
+      ineligibilityReason = "IN_OTHER_TEAM";
     }
   }
   const selected = m.leagueMemberships.length > 0;
@@ -124,9 +126,9 @@ export function mapCandidate(
     {
       selected,
       eligible,
-      ineligibleReason,
+      ineligibility: buildIneligibility(ineligibilityReason),
       canToggle: decision.canToggle && (selected || eligible),
-      toggleLockReason: decision.lockReason,
+      toggleLock: buildToggleLock(decision.lockReason),
     },
     options,
   );

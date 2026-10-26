@@ -19,9 +19,10 @@ endpoints. Groups (Stage 2), games (Stage 3), standings (Stage 4), brackets
   `age-categories`; file names do not carry a `competition` prefix.
 - `format/lib/format.rules.ts` is pure (no Prisma, no `AppError`).
 - No `format.policy.ts`; the lock is a status check plus a future game-existence
-  check computed in the service. Admin responses expose the reason as
-  `lockReason`; they do not carry a `can` flag. App-facing endpoints keep the
-  project's `can`-flag convention.
+  check computed in the service. Admin responses expose the reason as a
+  `lock` advisory (`lib/format.advisories.ts` builds it from the internal
+  `FormatLockReason` code); they do not carry a `can` flag. App-facing
+  endpoints keep the project's `can`-flag convention.
 
 ## Data model
 
@@ -78,8 +79,9 @@ are never stored.
 - Once games exist, `HAS_GAMES` locks edits (Stage 3; direct Prisma count, no
   import from `games`).
 - Switching to `KNOCKOUT_ONLY` while groups exist will be blocked in Stage 2.
-- Admin `GET` reports the lock through `lockReason` (`"FINISHED"`, later
-  `"HAS_GAMES"`, or `null`), so the UI shows the reason instead of only an
+- Admin `GET` reports the lock through the `lock` advisory (`{"code",
+  "severity", "message", "params"}`; `FINISHED` today, `HAS_GAMES` once Stage 3
+  lands, `null` when editable), so the UI shows the reason instead of only an
   error. The admin format response has no `can` flag.
 - App-facing league responses keep using `can` flags (`leagues.policy.ts`) and
   are unchanged by the format contract.
