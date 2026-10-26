@@ -1,364 +1,232 @@
-# Plan — Stage 1: League Competition Format
+# Plan: Advisory System (Backend) and Migration of Existing Reason Codes
 
-Source of truth for decisions: `League competition structure decisions.md`.
-This plan covers **only Stage 1** (format settings). Groups, games, standings, brackets and player stats are later stages and are only referenced where Stage 1 must leave a hook for them.
+## 1. Goal
 
----
+Introduce one shared, structured shape for "reasons and warnings" returned by the API, and migrate every place that currently returns a raw reason code to it.
 
-## 1. Goal and scope
+Today the frontend hardcodes Persian text for raw codes (`OWN_ROW`, `TOO_OLD`, `FINISHED`, ...). After this plan the backend sends the code, a severity, a ready-to-display Persian message, and params.
 
-An admin chooses, per league, the competition structure and scoring rules. The data lives on the existing `League` row; the behavior (endpoints, validation, locks) lives in a new `competition/format` sub-module.
+**Out of scope:** groups (Stage 2). It resumes after this plan is done and will use the advisory system from day one.
 
-**In scope**
-- New enums and new columns on `leagues` + migration.
-- `GET` / `PUT` `/admin/leagues/:leagueId/format` (admin panel only).
-- Pure rules in `competition/format/lib/format.rules.ts`.
-- Two public reference-data endpoints in `shared/` (dropdown labels).
-- Messages, Swagger, docs updates, and a fix of the stale docs about admin folders.
-
-**Out of scope (later stages)**
-- Groups / group teams (Stage 2), games (Stage 3), standings (Stage 4), brackets / series (Stage 5), player stats (Stage 6).
-- Any public (non-admin) format endpoint.
-- Frontend work. The admin-panel form is built after Swagger is published, together with Stage 2.
-- Automated tests for the format rules (explicitly not wanted).
+**Compatibility decision:** the raw fields are **replaced**, not kept alongside. This is a breaking change; backend and frontend (admin panel + PWA) ship together.
 
 ---
 
-## 2. Decisions locked in
-
-| # | Decision |
-|---|---|
-| 1 | `leagues/` is untouched structurally. A new parent folder `modules/competition/` is added next to it, with one sub-module per concept. |
-| 2 | Dependency direction is one-way: `competition → leagues`. `leagues` never imports from `competition`. |
-| 3 | `format` is a **setting on `League`**, not an entity. No new table. Columns live on `leagues`. |
-| 4 | File names inside `competition/format/` do **not** carry a `competition` prefix: `format.admin.service.ts`, not `competition-format.admin.service.ts`. |
-| 5 | No test files for the format rules. |
-| 6 | Admin-only: all files live under `competition/format/admin/`. No public format endpoint now. |
-| 7 | Two endpoints on one single resource: `GET` and `PUT` `/admin/leagues/:leagueId/format`. |
-| 8 | `PUT` replaces the whole format object. For `KNOCKOUT_ONLY`, `groupRoundType` and `defaultQualifiersPerGroup` are **ignored if sent** and stored as `null`. |
-| 9 | `winPoints` / `lossPoints` are always stored (defaults 2 / 1), even for `KNOCKOUT_ONLY`, so the data shape is constant. |
-| 10 | No new permission. `leagues.view` for `GET`, `leagues.update` for `PUT`. |
-| 11 | Number of groups and per-group qualifier override are **not** part of format (they belong to Stage 2 on `Group`). |
-| 12 | Standings, seeds and brackets are never stored (decision doc, sections 4 and 6). Not relevant to Stage 1 but the format columns must not duplicate any computed value. |
-
----
-
-## 3. Target folder structure
-
-```
-src/modules/
-  leagues/                                  # unchanged except the small additive edits in section 9
-  competition/
-    format/
-      admin/
-        format.admin.routes.ts
-        format.admin.controller.ts
-        format.admin.service.ts
-        format.admin.validation.ts
-        format.admin.docs.ts
-      lib/
-        format.rules.ts                     # pure: constants, value lists, normalization
-  shared/
-    league-formats/
-      league-formats.routes.ts
-      league-formats.controller.ts
-      league-formats.service.ts
-      league-formats.docs.ts
-    group-round-types/
-      group-round-types.routes.ts
-      group-round-types.controller.ts
-      group-round-types.service.ts
-      group-round-types.docs.ts
-```
-
-Notes
-- `format/admin/` follows the `leagues/admin/<sub>/` and `age-categories/admin/<sub>/` pattern already used in the repo.
-- `format/lib/` holds module-private pure logic (same role as `leagues/lib/`). It has no Prisma import.
-- The two `shared/` folders copy the `league-statuses` and `coach-degrees` pattern (public `GET /`, static enum + Persian label).
-- No `format.policy.ts`: the lock is a single status check plus (later) a game-existence check. It is computed in the service and returned as `can` + `lockReason`. If more rules appear, extract a policy then.
-
----
-
-## 4. Data model changes
-
-### 4.1 `schema.prisma`
-
-New enums:
-
-```prisma
-enum LeagueFormat {
-  GROUPS_KNOCKOUT
-  SINGLE_GROUP_KNOCKOUT
-  KNOCKOUT_ONLY
-}
-
-enum GroupRoundType {
-  ONE_ROUND
-  DOUBLE_ROUND
-}
-```
-
-New fields on `model League`:
-
-```prisma
-format                    LeagueFormat?   @map("format")
-winPoints                 Int             @default(2) @map("win_points")
-lossPoints                Int             @default(1) @map("loss_points")
-groupRoundType            GroupRoundType? @map("group_round_type")
-defaultQualifiersPerGroup Int?            @map("default_qualifiers_per_group")
-```
-
-Rules for the columns
-- `format = null` means "structure not configured yet" (the format is set in a separate action after the league is created, because the number of teams is unknown at creation).
-- `groupRoundType` and `defaultQualifiersPerGroup` are non-null **only** when `format` is `GROUPS_KNOCKOUT` or `SINGLE_GROUP_KNOCKOUT`.
-- `winPoints` / `lossPoints` always have a value.
-- For `SINGLE_GROUP_KNOCKOUT`, `defaultQualifiersPerGroup` means the total number of qualifiers (there is one group).
-
-### 4.2 Migration
-
-- Name: `add_league_format_settings`.
-- Generated with `npx prisma migrate dev --name add_league_format_settings`, then `npx prisma generate`.
-- Expected SQL (MySQL): `ALTER TABLE leagues ADD COLUMN format ENUM(...) NULL, ADD COLUMN win_points INTEGER NOT NULL DEFAULT 2, ADD COLUMN loss_points INTEGER NOT NULL DEFAULT 1, ADD COLUMN group_round_type ENUM('ONE_ROUND','DOUBLE_ROUND') NULL, ADD COLUMN default_qualifiers_per_group INTEGER NULL;`
-- Existing leagues get `format = NULL`, `2 / 1` points. No backfill needed.
-- Check the generated SQL before applying (only additive columns, nothing dropped).
-
----
-
-## 5. Pure rules — `format/lib/format.rules.ts`
-
-Mirrors `leagues/lib/league.rules.ts` (const value lists + pure functions, no Prisma, no `AppError`).
-
-Contents
-- `LEAGUE_FORMAT_VALUES = ["GROUPS_KNOCKOUT", "SINGLE_GROUP_KNOCKOUT", "KNOCKOUT_ONLY"] as const` and the matching type.
-- `GROUP_ROUND_TYPE_VALUES = ["ONE_ROUND", "DOUBLE_ROUND"] as const` and type.
-- `DEFAULT_WIN_POINTS = 2`, `DEFAULT_LOSS_POINTS = 1`.
-- `isGroupStageFormat(format)`: true for `GROUPS_KNOCKOUT` and `SINGLE_GROUP_KNOCKOUT`.
-- `normalizeFormatInput(input)`: takes the validated input and returns exactly the object to persist:
-  - applies point defaults when omitted;
-  - for `KNOCKOUT_ONLY` forces `groupRoundType = null` and `defaultQualifiersPerGroup = null`, ignoring whatever was sent;
-  - for group formats keeps both values.
-- `FormatLockReason = "FINISHED" | "HAS_GAMES" | null` (type only; `HAS_GAMES` is wired in Stage 3).
-
-The module that later needs scoring (`standings`) imports `DEFAULT_*` or reads the league columns directly; it never re-implements the rules.
-
----
-
-## 6. Validation — `format.admin.validation.ts`
-
-Imports `swagger/zod-extend.ts` first, uses `z`, `messages`, and the shared `idField` style used in `leagues.validation.ts`.
-
-- `leagueIdParamSchema` is **reused** from `leagues/leagues.validation.ts` (as `league-teams.admin.routes.ts` does). No duplicate.
-- `updateFormatSchema` (`z.object({...}).strict()`):
-
-| Field | Rule |
-|---|---|
-| `format` | required, `z.enum(LEAGUE_FORMAT_VALUES)` |
-| `winPoints` | optional int, `min(0)`, `max(10)`, default `2` |
-| `lossPoints` | optional int, `min(0)`, `max(10)`, default `1` |
-| `groupRoundType` | optional `z.enum(GROUP_ROUND_TYPE_VALUES)` |
-| `defaultQualifiersPerGroup` | optional int, `positive()`, `max(64)` |
-
-- Cross-field checks via `.superRefine` (shape-only, no DB):
-  - `winPoints > lossPoints` → error on `winPoints` (`messages.error.leagueFormat.winPointsMustExceedLoss`).
-  - if `format` is a group format: `groupRoundType` required (`groupRoundTypeRequired`) and `defaultQualifiersPerGroup` required (`qualifiersRequired`).
-  - if `format` is `KNOCKOUT_ONLY`: **no error** for the two group fields; they are just ignored later by `normalizeFormatInput`.
-- `.strict()` still rejects unknown keys; only the two group fields are tolerated for knockout-only because they are legitimate keys.
-- Default export object with `leagueIdParamSchema` and `updateFormatSchema`, same as other validation files.
-- Whether `defaultQualifiersPerGroup` is compatible with the real number of teams is a Stage 2 concern (needs groups); it is **not** checked here.
-
----
-
-## 7. Service — `format.admin.service.ts`
-
-Uses `prisma` directly, `AppError`, `messages`, and `normalizeFormatInput`. It does not call `leagues.admin.service` (that service owns name/cutoff/deadline logic and must not be touched by format changes).
-
-Shared selection: a `formatSelect` const with `id, status, format, winPoints, lossPoints, groupRoundType, defaultQualifiersPerGroup`.
-
-Response mapper `toFormatResponse(row)`:
-
-```
-{
-  leagueId,
-  format,                       // LeagueFormat | null
-  winPoints,
-  lossPoints,
-  groupRoundType,               // null for KNOCKOUT_ONLY / unset
-  defaultQualifiersPerGroup,    // null for KNOCKOUT_ONLY / unset
-  can: { edit: boolean },
-  lockReason: "FINISHED" | "HAS_GAMES" | null
-}
-```
-
-`can` + `lockReason` follow the project's `can`-flag convention (decision doc section 10, `canEditFormat`) so the UI shows the reason, not only an error.
-
-Functions
-1. `getFormat(leagueId)`
-   - `prisma.league.findUnique({ where: { id: leagueId }, select: formatSelect })`.
-   - Missing → `AppError(404, messages.error.league.notFound)`.
-   - Returns `toFormatResponse`.
-2. `updateFormat(leagueId, input)`
-   - Load league (404 first, same order as the rest of the project: 404 before 403/409).
-   - Lock check: `status === "FINISHED"` → `AppError(409, messages.error.league.finishedLocked)` (reuses the existing key; consistent with `updateLeague`).
-   - `// TODO(Game):` in this same spot, block with `prisma.game.count({ where: { leagueId } }) > 0` → 409 `messages.error.leagueFormat.locked`. Written with a direct Prisma query so `competition/format` does not import from `games`.
-   - `// TODO(Group):` when switching to `KNOCKOUT_ONLY` while groups exist, block (Stage 2).
-   - `const data = normalizeFormatInput(input)`; `prisma.league.update({ where: { id: leagueId }, data, select: formatSelect })`.
-   - `P2025` → 404 `league.notFound`.
-   - Returns `toFormatResponse`.
-
-Why not `loadLeagueContext`: it returns only the context fields (no format columns) and would need a second query. A single `findUnique` with `select` is simpler and the admin always has visibility of every status.
-
-Status rules: format may be edited in `INACTIVE`, `REGISTRATION` and `ACTIVE` as long as no game exists; `FINISHED` is always locked here (reopening a finished league stays a `SUPER_ADMIN` status action).
-
----
-
-## 8. Routes, controller, docs
-
-### 8.1 `format.admin.routes.ts`
+## 2. Contract
 
 ```ts
-const router = Router({ mergeParams: true });
-router.use(verifyJWT);
-router.use(verifyAdminLevel("ADMIN", "SUPER_ADMIN"));
+type AdvisorySeverity = "INFO" | "WARNING" | "BLOCKER";
 
-router.get("/",
-  verifyPermission("leagues.view"),
-  validate(formatAdminValidation.leagueIdParamSchema, "params"),
-  formatAdminController.get);
-
-router.put("/",
-  verifyPermission("leagues.update"),
-  validate(formatAdminValidation.leagueIdParamSchema, "params"),
-  validate(formatAdminValidation.updateFormatSchema),
-  formatAdminController.update);
+interface Advisory<C extends string = string> {
+  code: C;                       // stable, for frontend logic (icon, color, filtering)
+  severity: AdvisorySeverity;
+  message: string;               // Persian, from message.ts, ready to display
+  params: Record<string, string | number | boolean | null>;
+}
 ```
 
-Same middleware order as `league-teams.admin.routes.ts` (JWT → admin level → permission → validate → controller).
+Severity meaning:
 
-### 8.2 `format.admin.controller.ts`
+| Severity | Meaning |
+|---|---|
+| `INFO` | Informational, nothing is wrong |
+| `WARNING` | Allowed and saved, but incomplete or suspicious |
+| `BLOCKER` | Prevents an action the user is looking at (edit, toggle, add) |
 
-Standard shape used everywhere: `try { ...; return apiResponse.sendResponse(res, 200, messages..., data) } catch (err) { next(err) }`. Reads `Number(req.params.leagueId)` and `(req.validatedBody ?? req.body)`. Exports `{ get, update }`.
+Field naming rules (applies to every endpoint from now on):
 
-### 8.3 `format.admin.docs.ts`
+- A list of general warnings is always named **`issues: Advisory[]`**; when empty it is `[]`, never `null` and never omitted.
+- A single reason attached to one concern is a **nullable `Advisory`** named after the concern (`lock`, `toggleLock`, `ineligibility`); `null` means "no reason".
+- `can` flags stay as they are. They answer "may I?"; advisories answer "why not / what is wrong?".
 
-- Tag: `"Admin - League Format"`.
-- `leagueFormatSchema` registered with `.openapi("LeagueFormat")` (fields above, including `can` and `lockReason`).
-- Two `registerPath` blocks:
-  - `GET /admin/leagues/{leagueId}/format` → 200, 401, 403, 404.
-  - `PUT /admin/leagues/{leagueId}/format` → 200, 400, 401, 403, 404, 409 (finished / locked).
-- Description of `PUT` states: whole-object replace; group fields ignored for `KNOCKOUT_ONLY`; points default to 2 / 1.
+Principles:
 
-### 8.4 Mounting — `routes/index.ts`
+1. An advisory is **output data**, not middleware, an event, or a stored record. No tables.
+2. Real enforcement stays in services via `AppError` (403/409). Rules stay pure and return **internal codes**; the advisory is built at the response boundary (mapper). The same pure rule can later both warn and block (the same code feeds `AppError` and `Advisory`).
+3. Each module owns its code union; the shared file stays generic.
+4. All message text lives in `src/language/message.ts` (project convention). Where an advisory has the same meaning as an existing error message, **reuse the same Persian text** instead of writing a second one.
 
-Add the import and mount **before** `/admin/leagues` (same reason the league-teams routers are mounted before it, so the more specific path wins):
+---
+
+## 3. Stage A: Foundation
+
+### A1. `src/shared/advisory.ts` (new)
+
+- Types `AdvisorySeverity`, `Advisory<C>`.
+- Helper `makeAdvisory(code, severity, message, params = {})` returning an `Advisory`.
+- Helper `noIssues: Advisory[]` is **not** shared (avoid shared mutable arrays); callers return a fresh `[]`.
+- No Prisma, no `AppError`, no Express imports (pure, unit-testable).
+
+### A2. `src/language/message.ts`
+
+Add a new top-level section `advisory` (the rest of the file is untouched). It may contain functions because the file is `as const`:
 
 ```ts
-router.use("/admin/leagues/:leagueId/format", formatAdminRoutes);
+advisory: {
+  format: {
+    finished: messages-equivalent text,
+    hasGames: ...,
+  },
+  leagueRoster: {
+    ownRow: ...,
+    managerOnly: ...,
+    birthDateMissing: ...,
+    tooOld: ...,
+    inOtherTeam: ...,
+  },
+}
 ```
 
-Add `import "../modules/competition/format/admin/format.admin.docs.ts";` to `swagger/swagger.ts`.
+Rules:
+
+- Static strings reuse the exact Persian text of the matching error where one exists (`league.finishedLocked`, `leagueFormat.locked`, `leagueRoster.ownRowLocked`, `leagueRoster.headCoachRowManagerOnly`, `leagueRoster.birthDateRequired`, `leagueRoster.ageIneligible`, `leagueRoster.playerInOtherTeam`). To avoid duplicated strings, the advisory entry should reference the error entry (`advisory.x: error.y`) or the error should be the single definition.
+- Parameterized texts use function templates, e.g. `(name: string, min: number) => ...`. None are needed for the migration below; the mechanism exists for Stage 2.
+
+### A3. Swagger
+
+In `src/swagger/helpers.ts` (or a new `src/swagger/advisory.docs.ts`):
+
+- `advisorySchema` registered as `"Advisory"` with `code`, `severity` (enum), `message`, `params`.
+- Helper `advisoryCodeSchema(codes)` or per-module enums so each endpoint documents its possible codes.
+- Short note in `*.docs.ts` descriptions: "`issues` is always present; empty array means no issues."
+
+### A4. Tests (`tsx --test`)
+
+- `src/shared/advisory.test.ts`: `makeAdvisory` shape, default `params`.
+- Per-module builder tests (see stages B and C): every code maps to the expected severity and message, and unknown inputs are not possible by type.
 
 ---
 
-## 9. Small additive edits in existing code
+## 4. Stage B: Migrate league format lock
 
-1. **League response** (`leagues/lib/league.mapper.ts`, `LeagueRow` + `toLeagueResponse`): add `format`, `winPoints`, `lossPoints`, `groupRoundType`, `defaultQualifiersPerGroup` so the admin/app league screens can see the structure without a second call. Purely additive; `leagues/` reads its own columns, no import from `competition`.
-2. **Swagger for the league schema** (`leagues.docs.ts` `leagueSchema`): add the five optional/nullable fields.
-3. **`messages` in `language/message.ts`** (all strings Persian, no inline strings in code):
-   - `error.leagueFormat.winPointsMustExceedLoss`: «امتیاز برد باید بیشتر از امتیاز باخت باشد»
-   - `error.leagueFormat.groupRoundTypeRequired`: «نوع دور مسابقات گروهی الزامی است»
-   - `error.leagueFormat.qualifiersRequired`: «تعداد صعودکننده‌ی هر گروه الزامی است»
-   - `error.leagueFormat.locked`: «پس از شروع اولین بازی، ساختار لیگ قابل تغییر نیست» (used from Stage 3)
-   - `success.leagueFormat.found`: «ساختار لیگ با موفقیت دریافت شد»
-   - `success.leagueFormat.updated`: «ساختار لیگ با موفقیت به‌روزرسانی شد»
-   - `success.leagueFormats.fetched`: «ساختارهای لیگ با موفقیت دریافت شد»
-   - `success.groupRoundTypes.fetched`: «انواع دور مسابقات گروهی با موفقیت دریافت شد»
-4. **Dropdown validation / TODO note**: in `leagues.admin.service.ts` the existing `TODO(Game)` stays untouched in Stage 1 (activated in Stage 3).
-
----
-
-## 10. Shared reference-data endpoints
-
-Copy of the `league-statuses` pattern, public, no auth.
-
-| Endpoint | Response `data` | Labels (Persian) |
-|---|---|---|
-| `GET /league-formats` | `{ formats: [{ value, label }] }` | `GROUPS_KNOCKOUT` گروهی + حذفی · `SINGLE_GROUP_KNOCKOUT` تک‌گروه + حذفی · `KNOCKOUT_ONLY` فقط حذفی |
-| `GET /group-round-types` | `{ roundTypes: [{ value, label }] }` | `ONE_ROUND` یک‌دوره (همه با همه) · `DOUBLE_ROUND` رفت و برگشت |
-
-Implementation per folder: service builds the list from the generated Prisma enum with a `Record<Enum, string>` label map (same as `league-statuses.service.ts`); controller wraps with `apiResponse.sendResponse`; docs register the path with `security: []`; routes expose `GET /`. Mount in `routes/index.ts` and import docs in `swagger/swagger.ts`.
-
----
-
-## 11. Documentation updates
+**Current:** `GET/PUT /admin/leagues/:leagueId/format` returns `lockReason: "FINISHED" | "HAS_GAMES" | null`.
 
 | File | Change |
 |---|---|
-| `docs/03-project-structure.md` | Add `competition/format/{admin,lib}` and the two new `shared/` folders. **Fix the stale line** that says leagues admin files are flattened (`leagues.admin.*`); they actually live in `admin/league/` and `admin/league-team/`. |
-| `docs/04-data-model.md` | Add the `League` format columns and the two enums; note `format = null` means unconfigured. |
-| `docs/modules/leagues.md` | Fix the same flattened-folder statement; mention new read-only fields in the league response. |
-| `docs/modules/competition.md` (new) | Purpose, sub-modules (only `format` for now, others "planned"), dependency rule (`competition → leagues`, one-way), responsibilities and the format lock rules. |
-| `docs/modules/shared.md` | Add `league-formats` and `group-round-types`. |
-| `docs/status/current-state.md` | Add `competition/format` row (Done after implementation) and the two shared rows. |
-| `docs/status/roadmap.md` | Mark format done; keep groups → games → standings → brackets → player stats order. |
-| `docs/` (copy) | Store the decisions file as `docs/modules/competition-structure.md` so it is available in every future session. |
+| `competition/format/lib/format.rules.ts` | Keep `FormatLockReason` as the **internal** code type |
+| `competition/format/lib/format.advisories.ts` (new) | `buildFormatLock(reason): Advisory<FormatLockReason> \| null` (`FINISHED` and `HAS_GAMES` are both `BLOCKER`) |
+| `competition/format/admin/format.admin.service.ts` | `getLockReason` unchanged; `toFormatResponse` returns `lock: buildFormatLock(...)` instead of `lockReason` |
+| `competition/format/admin/format.admin.docs.ts` | Replace `lockReason` schema with `lock: advisorySchema.nullable()`; document codes |
+| `docs/modules/competition.md`, `docs/modules/competition-structure.md` | Replace `lockReason` wording with `lock` advisory |
+
+Response field change:
+
+```diff
+- "lockReason": "FINISHED"
++ "lock": { "code": "FINISHED", "severity": "BLOCKER", "message": "...", "params": {} }
+```
+
+The 409 error on `PUT` (`league.finishedLocked`) is unchanged.
 
 ---
 
-## 12. Implementation order (checklist)
+## 5. Stage C: Migrate league roster reasons
 
-1. Fix stale docs statements (03 and `modules/leagues.md`) — zero-risk first commit.
-2. `schema.prisma`: enums + `League` columns → migration → `prisma generate`; review SQL.
-3. `message.ts`: add all keys from section 9.
-4. `format.rules.ts`.
-5. `format.admin.validation.ts`.
-6. `format.admin.service.ts` (+ `toFormatResponse`).
-7. `format.admin.controller.ts`, `format.admin.routes.ts`.
-8. `format.admin.docs.ts`.
-9. Mount in `routes/index.ts`; import docs in `swagger/swagger.ts`.
-10. Shared `league-formats` and `group-round-types` (4 files each) + mount + docs import.
-11. League response additions (mapper + `leagueSchema`).
-12. Remaining docs from section 11 (`competition.md`, `shared.md`, `04`, `current-state`, `roadmap`, decisions copy).
-13. Manual verification (section 13), then commit.
+Two raw reason fields live on roster candidates (`GET .../members/candidates`, public app and admin variants):
 
-Each step keeps the app compiling; steps 2–3 can ship alone.
+- `toggleLockReason: "OWN_ROW" | "MANAGER_ONLY" | null`
+- `ineligibleReason: "BIRTH_DATE_MISSING" | "TOO_OLD" | "IN_OTHER_TEAM" | null`
 
----
+### C1. Code and severity mapping
 
-## 13. Manual verification (no automated tests)
+| Old field | Code | Severity | Message source |
+|---|---|---|---|
+| `toggleLockReason` | `OWN_ROW` | `BLOCKER` | `leagueRoster.ownRowLocked` |
+| `toggleLockReason` | `MANAGER_ONLY` | `BLOCKER` | `leagueRoster.headCoachRowManagerOnly` |
+| `ineligibleReason` | `BIRTH_DATE_MISSING` | `BLOCKER` | `leagueRoster.birthDateRequired` |
+| `ineligibleReason` | `TOO_OLD` | `BLOCKER` | `leagueRoster.ageIneligible` |
+| `ineligibleReason` | `IN_OTHER_TEAM` | `BLOCKER` | `leagueRoster.playerInOtherTeam` |
 
-Run through Swagger at `/docs` as `SUPER_ADMIN` and as an `ADMIN` with and without permissions.
+### C2. New response fields (replacing the old ones)
 
-- `GET` on a fresh league → `format: null`, `winPoints: 2`, `lossPoints: 1`, group fields `null`, `can.edit: true`, `lockReason: null`.
-- `PUT GROUPS_KNOCKOUT` with `groupRoundType` + `defaultQualifiersPerGroup` → 200, values stored.
-- `PUT GROUPS_KNOCKOUT` missing either group field → 400 `path: message`.
-- `PUT SINGLE_GROUP_KNOCKOUT` valid → 200.
-- `PUT KNOCKOUT_ONLY` with group fields present → 200, both returned as `null`.
-- `PUT` with `winPoints <= lossPoints` → 400.
-- `PUT` with unknown key → 400 (strict).
-- `PUT` after switching from group format to `KNOCKOUT_ONLY` then back → group fields were reset to `null`, must be re-sent.
-- League in `FINISHED` → `PUT` returns 409; `GET` shows `can.edit: false`, `lockReason: "FINISHED"`.
-- Non-existent league → 404 on both.
-- No token → 401; admin without `leagues.update` → 403 on `PUT`, `leagues.view` only → 200 on `GET`.
-- `GET /league-formats` and `GET /group-round-types` return Persian labels without a token.
-- `GET /admin/leagues/:id` (existing endpoint) now includes the new fields and nothing else changed.
-
----
-
-## 14. Hooks left for later stages
-
-| Stage | What it adds to format |
+| Old | New |
 |---|---|
-| 2 – groups | `TODO(Group)` guard: block switching to `KNOCKOUT_ONLY` when groups exist; validate `defaultQualifiersPerGroup` against group sizes where relevant. |
-| 3 – games | Activate `HAS_GAMES` lock via `prisma.game.count` (direct Prisma, no import from `games`); `can.edit = false` + `lockReason = "HAS_GAMES"`; activate `TODO(Game)` in `updateLeagueStatus` and `unregisterTeam`. |
-| 4 – standings | Reads `winPoints` / `lossPoints` from the league row. |
-| 5 – brackets | Reads `format` to know whether a group stage precedes the bracket. |
+| `toggleLockReason` | `toggleLock: Advisory \| null` |
+| `ineligibleReason` | `ineligibility: Advisory \| null` |
 
-Dependency chain stays one-way: `format ← groups ← games ← standings ← brackets`, all depending on `leagues/lib`, with the `games ↔ brackets` cycle resolved in Stage 5 by putting series advancement in `brackets/lib`.
+`canToggle`, `eligible`, `selected` stay unchanged (the frontend keeps using booleans for logic and shows the advisory text as the reason).
+
+### C3. File changes
+
+| File | Change |
+|---|---|
+| `leagues/lib/league.advisories.ts` (new) | `buildToggleLock(reason: LockReason)` and `buildIneligibility(reason)`; both return `Advisory \| null` |
+| `leagues/leagues.policy.ts` | **No change** to `RosterRowDecision` / `LockReason` (pure policy keeps returning codes). `lockReasonMessage` stays for 403 errors |
+| `leagues/lib/league.rules.ts` | **No change** (`isPlayerAgeEligible` keeps returning codes) |
+| `leagues/lib/league.candidates.ts` | `mapCandidate` passes codes to builders; the string `"IN_OTHER_TEAM"` becomes a typed code; `CandidateExtras` carries advisories |
+| `leagues/lib/league.mapper.ts` | `CandidateExtras` and `toCandidateItem` output `toggleLock` and `ineligibility`; drop `toggleLockReason` / `ineligibleReason` |
+| `leagues/leagues.docs.ts` | `leagueCandidateSchema`: replace the two fields with advisory schemas and list the codes |
+| `leagues/admin/league-team/league-teams.admin.docs.ts` | Inherits via `.extend`; verify the generated `AdminLeagueCandidate` schema |
+| `docs/modules/leagues.md` | Update the candidates bullet (`toggleLockReason` → `toggleLock`, etc.) |
+| `docs/09-authorization.md` | Note that `can` flags are paired with advisory reasons |
+
+Error paths that must not change: `loadAddableRows` (403 via `lockReasonMessage`), `assertPlayersEligible` (400/409), `throwDenial`. Advisory text and error text must stay identical by sharing the message source (see A2).
 
 ---
 
-## 15. Open points (decide before coding, none block steps 1–3)
+## 6. Stage D: Audit for any other raw reason codes
 
-1. `max` bounds for `winPoints` / `lossPoints` (plan uses 10) and `defaultQualifiersPerGroup` (plan uses 64).
-2. Whether to expose the five new fields in the public league response too (plan: yes, additive, read-only).
-3. Whether the admin panel needs a separate permission (`competition-format.update`) later; current plan reuses `leagues.update`.
+Before closing the work, grep for other raw reason-style fields and classify each:
+
+- `grep -rn "Reason" src/modules` (e.g. `lockReason`, `ineligibleReason`, `toggleLockReason`, `LockReason`, `Denial`).
+- `Denial` in `leagues.policy.ts` is an **internal** code mapped to `AppError`; it is not exposed in a response and stays as is.
+- Anything exposed in a JSON response as a bare code string joins this migration; anything internal stays.
+
+Expected result: only the three fields above are exposed raw codes, so no further migration is needed.
+
+---
+
+## 7. Stage E: Conventions and documentation
+
+- `docs/08-conventions.md`: add an "Advisories" section: contract, severity meaning, `issues` naming, "rules return codes, mappers build advisories", "reuse error message text".
+- `docs/06-utilities.md`: add rows for `Advisory` / `makeAdvisory` (`src/shared/advisory.ts`).
+- `docs/03-project-structure.md`: mention `shared/advisory.ts`.
+- `docs/status/current-state.md`: add a "Known Issues Fixed" line for the advisory migration.
+- Update Swagger descriptions on every migrated endpoint.
+
+---
+
+## 8. Breaking-change rollout
+
+All changes are in one backend release, coordinated with admin panel and PWA releases.
+
+| Endpoint(s) | Frontend change |
+|---|---|
+| `GET/PUT /admin/leagues/:leagueId/format` | Read `lock.message` / `lock.code` instead of mapping `lockReason` |
+| `GET /leagues/:leagueId/teams/:leagueTeamId/members/candidates` | `toggleLockReason` → `toggleLock`; `ineligibleReason` → `ineligibility`; display `.message` directly |
+| `GET /admin/leagues/:leagueId/teams/:leagueTeamId/members/candidates` | Same as above |
+
+Frontend work: build one shared component that renders an `Advisory` (color/icon by `severity`, text from `message`), and remove all hardcoded reason-text maps.
+
+---
+
+## 9. Implementation order
+
+1. A1 → A2 → A3 → A4 (foundation, no behavior change).
+2. Stage B (format) with tests.
+3. Stage C (roster candidates) with tests.
+4. Stage D audit.
+5. Stage E docs.
+6. Smoke test through Swagger: format `GET/PUT` for a `FINISHED` league; candidates for manager, head coach, regular coach, and player roles (each lock and ineligibility code).
+
+Each step is independently mergeable except the frontend-visible breaking changes in B and C, which should be released together.
+
+---
+
+## 10. Acceptance checklist
+
+- [ ] `src/shared/advisory.ts` exists with types, `makeAdvisory`, and tests.
+- [ ] `message.ts` has an `advisory` section; no advisory text is written inline in code; no duplicate Persian strings.
+- [ ] No response exposes `lockReason`, `toggleLockReason`, or `ineligibleReason`.
+- [ ] Every migrated field is `Advisory | null`; every list-level warning field would be named `issues` and never `null`.
+- [ ] 403/409/400 errors behave exactly as before (same messages and status codes).
+- [ ] Swagger documents `Advisory` and all codes per endpoint.
+- [ ] Docs updated; groups work (Stage 2) is unblocked and uses `issues: Advisory[]`.
+
+---
+
+## 11. Open points to confirm before coding
+
+1. **Field names:** `lock`, `toggleLock`, `ineligibility` (proposed above). Change now if you prefer other names, since they are breaking.
+2. **Severity of row locks:** all roster reasons are `BLOCKER` in this plan; `INFO` is kept for non-blocking notices introduced later.
+3. **Where builders live:** per-module `lib/*.advisories.ts` (proposed) versus one central file. Per-module keeps codes owned by their module and respects the one-directional dependency rule.

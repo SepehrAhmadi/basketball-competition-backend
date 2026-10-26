@@ -82,6 +82,7 @@ is always checked before the policy denial (403).
 - Present on detail and mutation responses; list responses include it per item only when cheap (no per-row lookups otherwise).
 - Guests and callers with no access receive all-false flags; authenticated reads without visibility fail with 403.
 - Row-level lists expose per-item `can` (e.g. `{ edit, delete }`) plus a top-level `can` for the collection scope.
+- Boolean flags that can be `false` for a specific reason are paired with an advisory field: `canToggle` + `toggleLock`, and `eligible` + `ineligibility`. Render `advisory.message` instead of mapping codes in the frontend. A `false` flag with a `null` advisory means the restriction is the actor's role, not a per-row rule (see `08-conventions.md` → Advisories).
 - Swagger documents each `can` shape (e.g. `...Can` schemas in `*.docs.ts`) so the frontend can code against it.
 
 ## Adding a new domain

@@ -28,15 +28,20 @@ player stats under the same parent folder.
 
 - `PUT` replaces the whole format object. `groupRoundType` and
   `defaultQualifiersPerGroup` are required for group formats and ignored
-  (stored as `null`) for `KNOCKOUT_ONLY`. Points default to 2 / 1 and are
-  always stored.
+  (stored as `null`) for `KNOCKOUT_ONLY`. `winPoints` and `lossPoints` are
+  required (`winPoints` must exceed `lossPoints`) and are always stored. The
+  DB defaults (2 / 1) only apply to new or not-yet-configured leagues.
 - `format = null` means "not configured yet"; a league is created without a
   format because its team count is unknown at creation time.
 - Format editing is allowed in `INACTIVE`, `REGISTRATION` and `ACTIVE` while no
   game exists. `FINISHED` is always locked (reopening stays a `SUPER_ADMIN`
   status action).
-- Responses expose `can.edit` + `lockReason` (`FINISHED`, later `HAS_GAMES`) so
-  the UI can show why editing is blocked.
+- Admin responses expose `lock` (an `Advisory` with `code`, `severity`,
+  `message`, `params`; `null` when editable) so the UI can show why editing is
+  blocked; the admin format response has no `can` flag. Codes: `FINISHED`
+  (`BLOCKER`), and `HAS_GAMES` (`BLOCKER`, reserved for Stage 3 and not emitted
+  yet). Render `lock.message`; use `lock.code` for icon/color.
+  App-facing league responses keep their `can` flags.
 - Permissions reuse `leagues.view` for `GET` and `leagues.update` for `PUT`; no
   new permission in Stage 1.
 

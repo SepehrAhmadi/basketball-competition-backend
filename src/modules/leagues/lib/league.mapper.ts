@@ -6,10 +6,10 @@ import type {
   LeagueStatus,
 } from "../../../prisma/generated/prisma/enums.ts";
 import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
-import type {
-  LeagueTeamCan,
-  LockReason,
-} from "../leagues.policy.ts";
+import type { LeagueTeamCan } from "../leagues.policy.ts";
+import type { Advisory } from "../../../shared/advisory.ts";
+import type { ToggleLockCode } from "./league.advisories.ts";
+import type { IneligibilityReason } from "./league.rules.ts";
 
 export const leagueInclude = {
   ageCategoryCutoff: {
@@ -282,9 +282,9 @@ type CandidateRow = {
 export interface CandidateExtras {
   selected: boolean;
   eligible: boolean;
-  ineligibleReason: string | null;
+  ineligibility: Advisory<IneligibilityReason> | null;
   canToggle: boolean;
-  toggleLockReason: LockReason;
+  toggleLock: Advisory<ToggleLockCode> | null;
 }
 
 /** Maps a roster candidate row; admin shape adds phone and birthDate. */
@@ -304,9 +304,9 @@ export function toCandidateItem(
     isHeadCoach: row.isHeadCoach,
     selected: extras.selected,
     eligible: extras.eligible,
-    ineligibleReason: extras.ineligibleReason,
+    ineligibility: extras.ineligibility,
     canToggle: extras.canToggle,
-    toggleLockReason: extras.toggleLockReason,
+    toggleLock: extras.toggleLock,
   };
   return options.admin
     ? {

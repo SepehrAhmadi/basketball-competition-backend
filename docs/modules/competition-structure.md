@@ -19,7 +19,10 @@ endpoints. Groups (Stage 2), games (Stage 3), standings (Stage 4), brackets
   `age-categories`; file names do not carry a `competition` prefix.
 - `format/lib/format.rules.ts` is pure (no Prisma, no `AppError`).
 - No `format.policy.ts`; the lock is a status check plus a future game-existence
-  check computed in the service and returned as `can` + `lockReason`.
+  check computed in the service. Admin responses expose the reason as a
+  `lock` advisory (`lib/format.advisories.ts` builds it from the internal
+  `FormatLockReason` code); they do not carry a `can` flag. App-facing
+  endpoints keep the project's `can`-flag convention.
 
 ## Data model
 
@@ -60,8 +63,10 @@ are never stored.
 ## Format rules and validation
 
 - `format` is required.
-- `winPoints` / `lossPoints` are optional integers in `[0, 10]`, defaulting to
-  2 / 1; `winPoints` must exceed `lossPoints`.
+- `winPoints` / `lossPoints` are required integers in `[0, 10]`;
+  `winPoints` must exceed `lossPoints`. `PUT` always receives both values.
+- The database defaults (2 / 1) only fill new leagues and leagues whose format
+  has not been configured yet; they are never applied to a `PUT` body.
 - Group formats require `groupRoundType` and `defaultQualifiersPerGroup`
   (positive integer, max 64).
 - `KNOCKOUT_ONLY` tolerates the two group fields in the body but they are
@@ -74,8 +79,12 @@ are never stored.
 - Once games exist, `HAS_GAMES` locks edits (Stage 3; direct Prisma count, no
   import from `games`).
 - Switching to `KNOCKOUT_ONLY` while groups exist will be blocked in Stage 2.
-- `GET` reports `can.edit` and `lockReason` so the UI shows the reason instead of
-  only an error.
+- Admin `GET` reports the lock through the `lock` advisory (`{"code",
+  "severity", "message", "params"}`; `FINISHED` today, `HAS_GAMES` once Stage 3
+  lands, `null` when editable), so the UI shows the reason instead of only an
+  error. The admin format response has no `can` flag.
+- App-facing league responses keep using `can` flags (`leagues.policy.ts`) and
+  are unchanged by the format contract.
 
 ## Later-stage hooks
 
@@ -86,3 +95,14 @@ are never stored.
 | 4 – standings | Read `winPoints` / `lossPoints` from the league row |
 | 5 – brackets | Read `format` to know whether a group stage precedes the bracket |
 | 6 – player stats | Add per-player-per-game stats referencing league records |
+
+## Open decisions
+
+### Group count (decided before Stage 2)
+
+The format action does not store the number of groups; Stage 1 has no such
+column. **Decision: derive the count from `Group` rows for the league in
+Stage 2.** No `groupCount` column is added to `leagues`. The format endpoint
+only supplies `defaultQualifiersPerGroup`; per-group overrides and the actual
+group count belong to `Group` records.
+

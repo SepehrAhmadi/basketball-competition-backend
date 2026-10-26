@@ -29,10 +29,15 @@ export function canEditByStatus(
   return status === "REGISTRATION";
 }
 
+export type AgeIneligibilityReason = "BIRTH_DATE_MISSING" | "TOO_OLD";
+
+/** Every reason a candidate can be ineligible, including the league-wide rule. */
+export type IneligibilityReason = AgeIneligibilityReason | "IN_OTHER_TEAM";
+
 export function isPlayerAgeEligible(
   birthDate: Date | null,
   minBirthDate: Date,
-): { ok: true } | { ok: false; reason: "BIRTH_DATE_MISSING" | "TOO_OLD" } {
+): { ok: true } | { ok: false; reason: AgeIneligibilityReason } {
   if (!birthDate) return { ok: false, reason: "BIRTH_DATE_MISSING" };
   if (birthDate.getTime() < minBirthDate.getTime())
     return { ok: false, reason: "TOO_OLD" };

@@ -8,6 +8,7 @@
 | `jalaliToGregorian` / `gregorianToJalali` | Converts Jalali `YYYY/MM/DD` input to stored `Date` and back | `src/utils/date.util.ts` |
 | `getPublicFileUrl` | Prefixes stored file paths with `BASE_URL` | `src/utils/getFileUrl.ts` |
 | `PERMISSION_CATALOG` / `Permission` | Single source of truth for admin permission codes | `src/shared/permissions.ts` |
+| `Advisory` / `makeAdvisory` | Structured reason shape (`code`, `severity`, `message`, `params`) returned next to `can` flags | `src/shared/advisory.ts` |
 | `idParamSchema` | Shared Zod schema for `:id` params | `src/shared/schemas.validation.ts` |
 | `paginationQuerySchema` | Shared `page`/`pageSize` query defaults (1 / 20, max 100) | `src/shared/schemas.validation.ts` |
 | `paginatedResponseSchema` | Generic `{items, total, page, pageSize}` envelope builder | `src/shared/schemas.validation.ts` |

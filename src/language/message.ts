@@ -76,6 +76,8 @@ export const messages = {
       endDateBeforeStartDate: "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.",
     },
     leagueFormat: {
+      winPointsRequired: "امتیاز برد الزامی است",
+      lossPointsRequired: "امتیاز باخت الزامی است",
       winPointsMustExceedLoss: "امتیاز برد باید بیشتر از امتیاز باخت باشد",
       groupRoundTypeRequired: "نوع دور مسابقات گروهی الزامی است",
       qualifiersRequired: "تعداد صعود‌کننده‌ی هر گروه الزامی است",
@@ -260,6 +262,22 @@ export const messages = {
       avatarRemoved: "آواتار با موفقیت حذف شد",
       passwordChanged: "رمز عبور با موفقیت تغییر کرد",
       accountDeleted: "حساب کاربری با موفقیت حذف شد",
+    },
+  },
+  // Short labels rendered next to disabled actions (chips, tooltips). They are
+  // deliberately shorter than the matching `error.*` sentences, which stay the
+  // text of thrown 403/409 responses.
+  advisory: {
+    format: {
+      finished: "لیگ تمام‌شده قابل ویرایش نیست",
+      hasGames: "پس از شروع اولین بازی، ساختار لیگ قابل تغییر نیست",
+    },
+    leagueRoster: {
+      ownRow: "ردیف خودتان قابل تغییر نیست",
+      managerOnly: "فقط مدیر یا ادمین",
+      birthDateMissing: "تاریخ تولد ثبت نشده",
+      tooOld: "خارج از رده سنی",
+      inOtherTeam: "در تیم دیگری عضو است",
     },
   },
 } as const;

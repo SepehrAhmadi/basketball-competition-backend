@@ -5,6 +5,7 @@ import {
   errorResponseSchema,
   successResponseSchema,
 } from "../../swagger/helpers.ts";
+import { advisorySchema } from "../../swagger/advisory.docs.ts";
 import {
   leagueIdParamSchema,
   leagueTeamParamSchema,
@@ -139,16 +140,25 @@ export const leagueCandidateSchema = leagueMemberSchema
           "Null when `selected` is false. Use as `memberId` for DELETE.",
       }),
     canToggle: z.boolean().openapi({ example: true }),
-    toggleLockReason: z
-      .enum(["OWN_ROW", "MANAGER_ONLY"])
-      .nullable()
-      .openapi({ example: null }),
+    toggleLock: z
+      .union([advisorySchema, z.null()])
+      .openapi({
+        example: null,
+        description:
+          "Why this row cannot be toggled. Codes: `OWN_ROW`, `MANAGER_ONLY`. " +
+          "Null also means \"no specific row rule\" — view-only roles get " +
+          "`canToggle: false` with a null lock.",
+      }),
     selected: z.boolean().openapi({ example: false }),
     eligible: z.boolean().openapi({ example: true }),
-    ineligibleReason: z
-      .string()
-      .nullable()
-      .openapi({ example: null }),
+    ineligibility: z
+      .union([advisorySchema, z.null()])
+      .openapi({
+        example: null,
+        description:
+          "Why this player cannot be added. Codes: `BIRTH_DATE_MISSING`, " +
+          "`TOO_OLD`, `IN_OTHER_TEAM`.",
+      }),
   })
   .openapi("LeagueCandidate");
 
@@ -593,7 +603,8 @@ registry.registerPath({
   summary: "List roster candidates (league team members)",
   description:
     "Ordered selected first, then head coach, coaches, players. " +
-    "Any ACTIVE member of this league team (manager, league head coach, coach, player) may view; outsiders get 403. Editing is still gated per-row via canToggle.",
+    "Any ACTIVE member of this league team (manager, league head coach, coach, player) may view; outsiders get 403. Editing is still gated per-row via canToggle. " +
+    "`toggleLock` and `ineligibility` explain a false flag; both are null when there is no specific reason.",
   request: { params: leagueTeamParamSchema, query: candidatesQuerySchema },
   responses: {
     "200": {

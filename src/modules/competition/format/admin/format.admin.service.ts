@@ -11,6 +11,7 @@ import {
   type FormatInput,
   type FormatLockReason,
 } from "../lib/format.rules.ts";
+import { buildFormatLock } from "../lib/format.advisories.ts";
 
 const formatSelect = {
   id: true,
@@ -37,7 +38,7 @@ function getLockReason(status: LeagueStatus): FormatLockReason {
 }
 
 function toFormatResponse(row: FormatRow) {
-  const lockReason = getLockReason(row.status);
+  const lock = buildFormatLock(getLockReason(row.status));
   return {
     leagueId: row.id,
     format: row.format,
@@ -45,8 +46,7 @@ function toFormatResponse(row: FormatRow) {
     lossPoints: row.lossPoints,
     groupRoundType: row.groupRoundType,
     defaultQualifiersPerGroup: row.defaultQualifiersPerGroup,
-    can: { edit: lockReason === null },
-    lockReason,
+    lock,
   };
 }
 

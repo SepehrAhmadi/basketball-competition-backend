@@ -13,6 +13,7 @@ import {
   leagueIdParamSchema,
   updateFormatSchema,
 } from "./format.admin.validation.ts";
+import { advisorySchema } from "../../../../swagger/advisory.docs.ts";
 
 const leagueFormatValueSchema = z
   .enum(LEAGUE_FORMAT_VALUES)
@@ -37,13 +38,16 @@ const leagueFormatSchema = z
       .number()
       .nullable()
       .openapi({ example: 2 }),
-    can: z.object({
-      edit: z.boolean().openapi({ example: true }),
-    }),
-    lockReason: z
-      .enum(["FINISHED", "HAS_GAMES"])
-      .nullable()
-      .openapi({ example: null }),
+    lock: z
+      .union([advisorySchema, z.null()])
+      .openapi({
+        example: null,
+        description:
+          "Null when the format is editable. Codes: `FINISHED` (league is " +
+          "finished) and `HAS_GAMES` (reserved for Stage 3; not emitted yet). " +
+          "`HAS_GAMES` is documented so clients can ship against the final " +
+          "contract.",
+      }),
   })
   .openapi("LeagueFormat");
 
@@ -59,9 +63,9 @@ registry.registerPath({
   summary: "Get the competition format of a league (admin)",
   description:
     "`format: null` means the structure has not been configured yet. In that " +
-    "case `groupRoundType` and `defaultQualifiersPerGroup` are also null, " +
-    "points are the defaults (2/1), and `can.edit` is true unless the league " +
-    "is FINISHED.",
+    "case `groupRoundType` and `defaultQualifiersPerGroup` are also null and " +
+    "points are the defaults (2/1). `lock` is non-null when the format cannot " +
+    "be edited; render `lock.message` and use `lock.code` for icon/color.",
   request: { params: leagueIdParamSchema },
   responses: {
     "200": {
@@ -101,10 +105,9 @@ registry.registerPath({
   description:
     "Replaces the whole format object. `groupRoundType` and " +
     "`defaultQualifiersPerGroup` are required for group formats and ignored " +
-    "(stored as null) for `KNOCKOUT_ONLY`. `winPoints`/`lossPoints` default " +
-    "to 2/1. Locked when the league is FINISHED or has games. Whole-object " +
-    "replace. Omitted `winPoints`/`lossPoints` reset to 2/1, so clients should " +
-    "always send all fields.",
+    "(stored as null) for `KNOCKOUT_ONLY`. `winPoints` and `lossPoints` are " +
+    "required. `winPoints` must be greater than `lossPoints`. Locked when the " +
+    "league is FINISHED or has games. Whole-object replace.",
   request: {
     params: leagueIdParamSchema,
     body: {
