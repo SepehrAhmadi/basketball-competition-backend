@@ -45,7 +45,6 @@ function toFormatResponse(row: FormatRow) {
     lossPoints: row.lossPoints,
     groupRoundType: row.groupRoundType,
     defaultQualifiersPerGroup: row.defaultQualifiersPerGroup,
-    can: { edit: lockReason === null },
     lockReason,
   };
 }

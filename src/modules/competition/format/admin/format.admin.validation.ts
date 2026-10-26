@@ -3,8 +3,6 @@ import { z } from "zod";
 import { messages } from "../../../../language/message.ts";
 import { leagueIdParamSchema } from "../../../leagues/leagues.validation.ts";
 import {
-  DEFAULT_LOSS_POINTS,
-  DEFAULT_WIN_POINTS,
   GROUP_ROUND_TYPE_VALUES,
   LEAGUE_FORMAT_VALUES,
   isGroupStageFormat,
@@ -16,19 +14,17 @@ export const updateFormatSchema = z
   .object({
     format: z.enum(LEAGUE_FORMAT_VALUES),
     winPoints: z
-      .number()
+      .number({ required_error: messages.error.leagueFormat.winPointsRequired })
       .int()
       .min(0)
       .max(10)
-      .default(DEFAULT_WIN_POINTS)
-      .openapi({ example: DEFAULT_WIN_POINTS }),
+      .openapi({ example: 2 }),
     lossPoints: z
-      .number()
+      .number({ required_error: messages.error.leagueFormat.lossPointsRequired })
       .int()
       .min(0)
       .max(10)
-      .default(DEFAULT_LOSS_POINTS)
-      .openapi({ example: DEFAULT_LOSS_POINTS }),
+      .openapi({ example: 1 }),
     groupRoundType: z
       .enum(GROUP_ROUND_TYPE_VALUES)
       .optional()

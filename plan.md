@@ -36,7 +36,7 @@ An admin chooses, per league, the competition structure and scoring rules. The d
 | 6 | Admin-only: all files live under `competition/format/admin/`. No public format endpoint now. |
 | 7 | Two endpoints on one single resource: `GET` and `PUT` `/admin/leagues/:leagueId/format`. |
 | 8 | `PUT` replaces the whole format object. For `KNOCKOUT_ONLY`, `groupRoundType` and `defaultQualifiersPerGroup` are **ignored if sent** and stored as `null`. |
-| 9 | `winPoints` / `lossPoints` are always stored (defaults 2 / 1), even for `KNOCKOUT_ONLY`, so the data shape is constant. |
+| 9 | `winPoints` / `lossPoints` are always stored. Both are **required** on `PUT`; the DB defaults (2 / 1) only apply to new or not-yet-configured leagues, so the data shape is constant. |
 | 10 | No new permission. `leagues.view` for `GET`, `leagues.update` for `PUT`. |
 | 11 | Number of groups and per-group qualifier override are **not** part of format (they belong to Stage 2 on `Group`). |
 | 12 | Standings, seeds and brackets are never stored (decision doc, sections 4 and 6). Not relevant to Stage 1 but the format columns must not duplicate any computed value. |
@@ -75,7 +75,7 @@ Notes
 - `format/admin/` follows the `leagues/admin/<sub>/` and `age-categories/admin/<sub>/` pattern already used in the repo.
 - `format/lib/` holds module-private pure logic (same role as `leagues/lib/`). It has no Prisma import.
 - The two `shared/` folders copy the `league-statuses` and `coach-degrees` pattern (public `GET /`, static enum + Persian label).
-- No `format.policy.ts`: the lock is a single status check plus (later) a game-existence check. It is computed in the service and returned as `can` + `lockReason`. If more rules appear, extract a policy then.
+- No `format.policy.ts`: the lock is a single status check plus (later) a game-existence check. It is computed in the service and returned as `lockReason`. Admin responses have no `can` flag; app endpoints keep the project's `can`-flag convention. If more rules appear, extract a policy then.
 
 ---
 
@@ -131,15 +131,14 @@ Mirrors `leagues/lib/league.rules.ts` (const value lists + pure functions, no Pr
 Contents
 - `LEAGUE_FORMAT_VALUES = ["GROUPS_KNOCKOUT", "SINGLE_GROUP_KNOCKOUT", "KNOCKOUT_ONLY"] as const` and the matching type.
 - `GROUP_ROUND_TYPE_VALUES = ["ONE_ROUND", "DOUBLE_ROUND"] as const` and type.
-- `DEFAULT_WIN_POINTS = 2`, `DEFAULT_LOSS_POINTS = 1`.
 - `isGroupStageFormat(format)`: true for `GROUPS_KNOCKOUT` and `SINGLE_GROUP_KNOCKOUT`.
 - `normalizeFormatInput(input)`: takes the validated input and returns exactly the object to persist:
-  - applies point defaults when omitted;
+  - requires `winPoints` and `lossPoints` from the validated input (no fallbacks);
   - for `KNOCKOUT_ONLY` forces `groupRoundType = null` and `defaultQualifiersPerGroup = null`, ignoring whatever was sent;
   - for group formats keeps both values.
 - `FormatLockReason = "FINISHED" | "HAS_GAMES" | null` (type only; `HAS_GAMES` is wired in Stage 3).
 
-The module that later needs scoring (`standings`) imports `DEFAULT_*` or reads the league columns directly; it never re-implements the rules.
+The module that later needs scoring (`standings`) reads the league columns directly; it never re-implements the rules.
 
 ---
 
@@ -153,8 +152,8 @@ Imports `swagger/zod-extend.ts` first, uses `z`, `messages`, and the shared `idF
 | Field | Rule |
 |---|---|
 | `format` | required, `z.enum(LEAGUE_FORMAT_VALUES)` |
-| `winPoints` | optional int, `min(0)`, `max(10)`, default `2` |
-| `lossPoints` | optional int, `min(0)`, `max(10)`, default `1` |
+| `winPoints` | required int, `min(0)`, `max(10)` |
+| `lossPoints` | required int, `min(0)`, `max(10)` |
 | `groupRoundType` | optional `z.enum(GROUP_ROUND_TYPE_VALUES)` |
 | `defaultQualifiersPerGroup` | optional int, `positive()`, `max(64)` |
 
@@ -183,13 +182,12 @@ Response mapper `toFormatResponse(row)`:
   winPoints,
   lossPoints,
   groupRoundType,               // null for KNOCKOUT_ONLY / unset
-  defaultQualifiersPerGroup,    // null for KNOCKOUT_ONLY / unset
-  can: { edit: boolean },
+  defaultQualifiersPerGroup,     // null for KNOCKOUT_ONLY / unset
   lockReason: "FINISHED" | "HAS_GAMES" | null
 }
 ```
 
-`can` + `lockReason` follow the project's `can`-flag convention (decision doc section 10, `canEditFormat`) so the UI shows the reason, not only an error.
+`lockReason` is the admin lock signal (decision doc, locking rules) so the UI shows the reason, not only an error. The admin response has no `can` key; app endpoints keep `can` flags.
 
 Functions
 1. `getFormat(leagueId)`
@@ -241,11 +239,11 @@ Standard shape used everywhere: `try { ...; return apiResponse.sendResponse(res,
 ### 8.3 `format.admin.docs.ts`
 
 - Tag: `"Admin - League Format"`.
-- `leagueFormatSchema` registered with `.openapi("LeagueFormat")` (fields above, including `can` and `lockReason`).
+- `leagueFormatSchema` registered with `.openapi("LeagueFormat")` (fields above, including `lockReason`; no `can`).
 - Two `registerPath` blocks:
   - `GET /admin/leagues/{leagueId}/format` → 200, 401, 403, 404.
   - `PUT /admin/leagues/{leagueId}/format` → 200, 400, 401, 403, 404, 409 (finished / locked).
-- Description of `PUT` states: whole-object replace; group fields ignored for `KNOCKOUT_ONLY`; points default to 2 / 1.
+- Description of `PUT` states: whole-object replace; group fields ignored for `KNOCKOUT_ONLY`; `winPoints` and `lossPoints` required with `winPoints > lossPoints`.
 
 ### 8.4 Mounting — `routes/index.ts`
 
@@ -328,15 +326,16 @@ Each step keeps the app compiling; steps 2–3 can ship alone.
 
 Run through Swagger at `/docs` as `SUPER_ADMIN` and as an `ADMIN` with and without permissions.
 
-- `GET` on a fresh league → `format: null`, `winPoints: 2`, `lossPoints: 1`, group fields `null`, `can.edit: true`, `lockReason: null`.
+- `GET` on a fresh league → `format: null`, `winPoints: 2`, `lossPoints: 1`, group fields `null`, `lockReason: null`.
 - `PUT GROUPS_KNOCKOUT` with `groupRoundType` + `defaultQualifiersPerGroup` → 200, values stored.
 - `PUT GROUPS_KNOCKOUT` missing either group field → 400 `path: message`.
 - `PUT SINGLE_GROUP_KNOCKOUT` valid → 200.
 - `PUT KNOCKOUT_ONLY` with group fields present → 200, both returned as `null`.
+- `PUT` without `winPoints` or without `lossPoints` → 400 (both are required).
 - `PUT` with `winPoints <= lossPoints` → 400.
 - `PUT` with unknown key → 400 (strict).
 - `PUT` after switching from group format to `KNOCKOUT_ONLY` then back → group fields were reset to `null`, must be re-sent.
-- League in `FINISHED` → `PUT` returns 409; `GET` shows `can.edit: false`, `lockReason: "FINISHED"`.
+- League in `FINISHED` → `PUT` returns 409; `GET` shows `lockReason: "FINISHED"`.
 - Non-existent league → 404 on both.
 - No token → 401; admin without `leagues.update` → 403 on `PUT`, `leagues.view` only → 200 on `GET`.
 - `GET /league-formats` and `GET /group-round-types` return Persian labels without a token.
@@ -349,7 +348,7 @@ Run through Swagger at `/docs` as `SUPER_ADMIN` and as an `ADMIN` with and witho
 | Stage | What it adds to format |
 |---|---|
 | 2 – groups | `TODO(Group)` guard: block switching to `KNOCKOUT_ONLY` when groups exist; validate `defaultQualifiersPerGroup` against group sizes where relevant. |
-| 3 – games | Activate `HAS_GAMES` lock via `prisma.game.count` (direct Prisma, no import from `games`); `can.edit = false` + `lockReason = "HAS_GAMES"`; activate `TODO(Game)` in `updateLeagueStatus` and `unregisterTeam`. |
+| 3 – games | Activate `HAS_GAMES` lock via `prisma.game.count` (direct Prisma, no import from `games`); `lockReason = "HAS_GAMES"`; activate `TODO(Game)` in `updateLeagueStatus` and `unregisterTeam`. |
 | 4 – standings | Reads `winPoints` / `lossPoints` from the league row. |
 | 5 – brackets | Reads `format` to know whether a group stage precedes the bracket. |
 

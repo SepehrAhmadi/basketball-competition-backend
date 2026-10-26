@@ -76,6 +76,8 @@ export const messages = {
       endDateBeforeStartDate: "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.",
     },
     leagueFormat: {
+      winPointsRequired: "امتیاز برد الزامی است",
+      lossPointsRequired: "امتیاز باخت الزامی است",
       winPointsMustExceedLoss: "امتیاز برد باید بیشتر از امتیاز باخت باشد",
       groupRoundTypeRequired: "نوع دور مسابقات گروهی الزامی است",
       qualifiersRequired: "تعداد صعود‌کننده‌ی هر گروه الزامی است",

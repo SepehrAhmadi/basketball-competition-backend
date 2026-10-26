@@ -37,9 +37,6 @@ const leagueFormatSchema = z
       .number()
       .nullable()
       .openapi({ example: 2 }),
-    can: z.object({
-      edit: z.boolean().openapi({ example: true }),
-    }),
     lockReason: z
       .enum(["FINISHED", "HAS_GAMES"])
       .nullable()
@@ -59,9 +56,9 @@ registry.registerPath({
   summary: "Get the competition format of a league (admin)",
   description:
     "`format: null` means the structure has not been configured yet. In that " +
-    "case `groupRoundType` and `defaultQualifiersPerGroup` are also null, " +
-    "points are the defaults (2/1), and `can.edit` is true unless the league " +
-    "is FINISHED.",
+    "case `groupRoundType` and `defaultQualifiersPerGroup` are also null and " +
+    "points are the defaults (2/1). `lockReason` is non-null when the format " +
+    "cannot be edited (FINISHED or HAS_GAMES).",
   request: { params: leagueIdParamSchema },
   responses: {
     "200": {
@@ -101,10 +98,9 @@ registry.registerPath({
   description:
     "Replaces the whole format object. `groupRoundType` and " +
     "`defaultQualifiersPerGroup` are required for group formats and ignored " +
-    "(stored as null) for `KNOCKOUT_ONLY`. `winPoints`/`lossPoints` default " +
-    "to 2/1. Locked when the league is FINISHED or has games. Whole-object " +
-    "replace. Omitted `winPoints`/`lossPoints` reset to 2/1, so clients should " +
-    "always send all fields.",
+    "(stored as null) for `KNOCKOUT_ONLY`. `winPoints` and `lossPoints` are " +
+    "required. `winPoints` must be greater than `lossPoints`. Locked when the " +
+    "league is FINISHED or has games. Whole-object replace.",
   request: {
     params: leagueIdParamSchema,
     body: {
