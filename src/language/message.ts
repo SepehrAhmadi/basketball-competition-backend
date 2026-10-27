@@ -51,6 +51,8 @@ export const messages = {
       headCoachAssignForbidden: "فقط مدیر سازمان یا ادمین می‌تواند سرمربی تعیین کند",
       memberInActiveLeague:
         "این عضو در راستر لیگی که در جریان یا تمام‌شده است ثبت شده و قابل حذف یا تغییر نیست",
+      inOpenLeague:
+        "این تیم در لیگی که در حال ثبت‌نام یا فعال است ثبت شده و قابل حذف نیست",
     },
     league: {
       nameRequired: "نام لیگ الزامی است",
@@ -82,6 +84,10 @@ export const messages = {
       groupRoundTypeRequired: "نوع دور مسابقات گروهی الزامی است",
       qualifiersRequired: "تعداد صعود‌کننده‌ی هر گروه الزامی است",
       locked: "پس از شروع اولین بازی، ساختار لیگ قابل تغییر نیست",
+      hasGroups:
+        "این لیگ دارای گروه است و تغییر به حذفی مستقیم امکان‌پذیر نیست",
+      tooManyGroups:
+        "این لیگ بیش از یک گروه دارد و تغییر به تک‌گروهی امکان‌پذیر نیست",
     },
     leagueTeam: {
       notFound: "تیم در این لیگ یافت نشد",
@@ -100,6 +106,16 @@ export const messages = {
       headCoachRowManagerOnly:
         "افزودن یا حذف سرمربی در راستر لیگ فقط توسط مدیر سازمان یا ادمین مجاز است",
       ownRowLocked: "سرمربی نمی‌تواند ردیف خودش را در راستر لیگ تغییر دهد",
+    },
+    group: {
+      notFound: "گروه یافت نشد",
+      nameRequired: "نام گروه الزامی است",
+      nameExists: "گروه دیگری با این نام در این لیگ ثبت شده است",
+      formatNotGrouped:
+        "گروه‌بندی فقط در لیگ با ساختار گروهی امکان‌پذیر است",
+      singleGroupOnly: "در این ساختار فقط یک گروه مجاز است",
+      teamNotInGroup: "این تیم در این گروه قرار ندارد",
+      teamAssignConflict: "این تیم در گروه دیگری ثبت شده است",
     },
     season: {
       nameRequired: "نام فصل الزامی است",
@@ -231,6 +247,16 @@ export const messages = {
       added: "اعضا با موفقیت به راستر لیگ اضافه شدند",
       removed: "عضو با موفقیت از راستر لیگ حذف شد",
     },
+    group: {
+      list: "لیست گروه‌ها با موفقیت دریافت شد",
+      created: "گروه با موفقیت ایجاد شد",
+      updated: "گروه با موفقیت به‌روزرسانی شد",
+      deleted: "گروه با موفقیت حذف شد",
+      unassignedList: "لیست تیم‌های بدون گروه با موفقیت دریافت شد",
+      teamAssigned: "تیم با موفقیت در گروه قرار گرفت",
+      teamRemoved: "تیم با موفقیت از گروه حذف شد",
+      publicList: "لیست گروه‌ها با موفقیت دریافت شد",
+    },
     player: {
       found: "اطلاعات بازیکن با موفقیت دریافت شد",
       updated: "اطلاعات بازیکن با موفقیت به‌روزرسانی شد",
@@ -278,6 +304,19 @@ export const messages = {
       birthDateMissing: "تاریخ تولد ثبت نشده",
       tooOld: "خارج از رده سنی",
       inOtherTeam: "در تیم دیگری عضو است",
+    },
+    groups: {
+      finished: "لیگ تمام‌شده قابل ویرایش نیست",
+      groupTooSmall: (name: string, min: number) =>
+        `تعداد تیم‌های گروه ${name} کمتر از حد مجاز (${min} تیم) است`,
+      qualifiersExceedTeams: (name: string, qualifiers: number, teams: number) =>
+        `تعداد صعودکننده‌های گروه ${name} (${qualifiers}) بیشتر یا برابر تعداد تیم‌ها (${teams}) است`,
+      teamUnassigned: (count: number) =>
+        `${count} تیم بدون گروه باقی مانده است`,
+    },
+    team: {
+      inOpenLeague:
+        "این تیم در لیگی که در حال ثبت‌نام یا فعال است ثبت شده و قابل حذف نیست",
     },
   },
 } as const;

@@ -17,6 +17,11 @@ import {
   canManageMember,
   type RosterCan,
 } from "./teams.policy.ts";
+import {
+  assertTeamDeletable,
+  loadOpenLeagueTeamIds,
+} from "./lib/team.locks.ts";
+import { buildTeamLock } from "./lib/team.advisories.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -163,11 +168,17 @@ async function listTeams(query: {
     prisma.team.count({ where }),
   ]);
 
+  const lockedIds = await loadOpenLeagueTeamIds(items.map((i) => i.id));
   return {
-    items: items.map((item) => ({
-      ...withPublicLogoUrl(item),
-      can: teamPolicy(actor, { organizationId: item.organizationId, teamId: item.id }),
-    })),
+    items: items.map((item) => {
+      const policy = teamPolicy(actor, { organizationId: item.organizationId, teamId: item.id });
+      const locked = lockedIds.has(item.id);
+      return {
+        ...withPublicLogoUrl(item),
+        can: { ...policy, delete: policy.delete && !locked },
+        lock: buildTeamLock(locked),
+      };
+    }),
     total,
     page: query.page,
     pageSize: query.pageSize,
@@ -180,10 +191,15 @@ async function getTeamById(teamId: number, actor: Actor) {
     include: { organization: { select: { id: true, name: true } } },
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
-  const can = teamPolicy(actor, { organizationId: team.organizationId, teamId });
-  assertAllowed(can.view, messages.error.team.notAuthorized);
+  const policy = teamPolicy(actor, { organizationId: team.organizationId, teamId });
+  assertAllowed(policy.view, messages.error.team.notAuthorized);
+  const locked = (await loadOpenLeagueTeamIds([teamId])).has(teamId);
   const result = withPublicLogoUrl(team);
-  return { ...result, can };
+  return {
+    ...result,
+    can: { ...policy, delete: policy.delete && !locked },
+    lock: buildTeamLock(locked),
+  };
 }
 
 // ─── Mutations (auth required) ────────────────────────────────────────────
@@ -219,6 +235,7 @@ async function createTeam(data: CreateTeamInput, actor: Actor, file?: Express.Mu
     return {
       ...withPublicLogoUrl(team),
       can: teamPolicy(actor, { organizationId: team.organizationId, teamId: team.id }),
+      lock: buildTeamLock(false),
     };
   } catch (err) {
     if (file) removeFileIfExists(file.path);
@@ -297,9 +314,12 @@ async function updateTeam(
     if (oldPath && oldPath !== file?.path) removeFileIfExists(oldPath);
   }
 
+  const locked = (await loadOpenLeagueTeamIds([teamId])).has(teamId);
+  const policy = teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id });
   return {
     ...withPublicLogoUrl(updated),
-    can: teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id }),
+    can: { ...policy, delete: policy.delete && !locked },
+    lock: buildTeamLock(locked),
   };
 }
 
@@ -313,6 +333,7 @@ async function deleteTeam(teamId: number, actor: Actor) {
     teamPolicy(actor, { organizationId: team.organizationId, teamId }).delete,
     messages.error.team.notAuthorized,
   );
+  await assertTeamDeletable(teamId);
 
   return prisma.team.update({
     where: { id: teamId },
@@ -356,9 +377,12 @@ async function updateLogo(teamId: number, file: Express.Multer.File, actor: Acto
     if (oldPath && oldPath !== file.path) removeFileIfExists(oldPath);
   }
 
+  const locked = (await loadOpenLeagueTeamIds([teamId])).has(teamId);
+  const policy = teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id });
   return {
     ...withPublicLogoUrl(updated),
-    can: teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id }),
+    can: { ...policy, delete: policy.delete && !locked },
+    lock: buildTeamLock(locked),
   };
 }
 

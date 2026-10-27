@@ -1,6 +1,11 @@
 import prisma from "../../../config/db.config.ts";
 import AppError from "../../../utils/appError.ts";
 import { messages } from "../../../language/message.ts";
+import {
+  assertTeamDeletable,
+  loadOpenLeagueTeamIds,
+} from "../lib/team.locks.ts";
+import { buildTeamLock } from "../lib/team.advisories.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
 import { jalaliToGregorian, gregorianToJalali } from "../../../utils/date.util.ts";
 
@@ -82,8 +87,12 @@ async function adminListTeams(query: AdminListTeamsQuery) {
     prisma.team.count({ where }),
   ]);
 
+  const lockedIds = await loadOpenLeagueTeamIds(items.map((i) => i.id));
   return {
-    items: items.map((item) => withPublicLogoUrl(item)),
+    items: items.map((item) => ({
+      ...withPublicLogoUrl(item),
+      lock: buildTeamLock(lockedIds.has(item.id)),
+    })),
     total,
     page: query.page,
     pageSize: query.pageSize,
@@ -96,7 +105,8 @@ async function adminGetTeamById(teamId: number) {
     include: { organization: { select: { id: true, name: true } } },
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
-  return withPublicLogoUrl(team);
+  const locked = (await loadOpenLeagueTeamIds([teamId])).has(teamId);
+  return { ...withPublicLogoUrl(team), lock: buildTeamLock(locked) };
 }
 
 async function adminCreateTeam(data: AdminCreateTeamInput) {
@@ -157,6 +167,7 @@ async function adminDeleteTeam(teamId: number) {
   const team = await prisma.team.findFirst({ where: { id: teamId } });
   if (!team) throw new AppError(404, messages.error.team.notFound);
   if (team.status === "DELETED") throw new AppError(400, messages.error.team.alreadyDeleted);
+  await assertTeamDeletable(teamId);
   return prisma.team.update({ where: { id: teamId }, data: { status: "DELETED" } });
 }
 

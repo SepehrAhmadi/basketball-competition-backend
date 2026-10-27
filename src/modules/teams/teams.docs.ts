@@ -5,6 +5,7 @@ import {
   errorResponseSchema,
   successResponseSchema,
 } from "../../swagger/helpers.ts";
+import { advisorySchema } from "../../swagger/advisory.docs.ts";
 import {
   paginatedResponseSchema,
   paginationQuerySchema,
@@ -88,7 +89,12 @@ export const teamCanSchema = z
   .object({
     view: z.boolean().openapi({ example: true }),
     edit: z.boolean().openapi({ example: false }),
-    delete: z.boolean().openapi({ example: false }),
+    delete: z.boolean().openapi({
+      example: false,
+      description:
+        "Derived as policy.delete && !locked: false when the team is in an " +
+        "open league (REGISTRATION or ACTIVE).",
+    }),
   })
   .openapi("TeamCan");
 
@@ -128,6 +134,12 @@ export const teamSchema = z
       })
       .optional(),
     can: teamCanSchema.optional(),
+    lock: z.union([advisorySchema, z.null()]).optional().openapi({
+      example: null,
+      description:
+        "Code `IN_OPEN_LEAGUE` (BLOCKER) when the team is registered in a " +
+        "league with status REGISTRATION or ACTIVE.",
+    }),
   })
   .openapi("Team");
 
@@ -404,7 +416,7 @@ registry.registerPath({
   path: "/teams/{teamId}",
   tags: ["Teams"],
   summary: "Delete a team",
-  description: "Soft-deletes a team (sets status to DELETED). Requires being a manager of the organization, or an ADMIN with team access.",
+  description: "Soft-deletes a team (sets status to DELETED). Requires being a manager of the organization, or an ADMIN with team access. Returns 409 when the team is registered in a league with status REGISTRATION or ACTIVE.",
   security: [{ bearerAuth: [] }],
   request: {
     params: teamIdParamSchema,
@@ -436,6 +448,14 @@ registry.registerPath({
       description: "Team not found",
       content: {
         "application/json": { schema: notFoundError() },
+      },
+    },
+    "409": {
+      description: "Team is registered in an open league (REGISTRATION or ACTIVE)",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(409, messages.error.team.inOpenLeague),
+        },
       },
     },
   },

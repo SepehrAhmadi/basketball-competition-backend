@@ -94,6 +94,15 @@ export const leagueTeamItemSchema = z
       id: z.number().openapi({ example: 1 }),
       name: z.string().openapi({ example: "باشگاه عقاب" }),
     }),
+    teamStatus: z
+      .enum(["ACTIVE", "INACTIVE", "DELETED"])
+      .optional()
+      .openapi({
+        example: "ACTIVE",
+        description:
+          "Present only for FINISHED leagues, which keep showing " +
+          "soft-deleted teams so the frontend can render them differently.",
+      }),
     membersCount: z.number().openapi({ example: 5 }),
     createdAt: z.date().openapi({ example: "2026-01-01T10:00:00.000Z" }),
     can: leagueTeamCanSchema.optional(),
@@ -247,8 +256,25 @@ const leagueTeamDetailSchema = z
   .object({
     id: z.number().openapi({ example: 5 }),
     league: leagueSummarySchema,
-    team: teamRefSchema,
+    team: teamRefSchema.extend({
+      status: z
+        .enum(["ACTIVE", "INACTIVE", "DELETED"])
+        .optional()
+        .openapi({
+          example: "ACTIVE",
+          description:
+            "Present only for FINISHED leagues, which keep showing " +
+            "soft-deleted teams so the frontend can render them differently.",
+        }),
+    }),
     organization: organizationRefSchema,
+    group: z
+      .object({
+        id: z.number().openapi({ example: 3 }),
+        name: z.string().openapi({ example: "گروه الف" }),
+      })
+      .nullable()
+      .openapi({ example: null }),
     counts: z.object({
       coaches: z.number().openapi({ example: 2 }),
       players: z.number().openapi({ example: 9 }),

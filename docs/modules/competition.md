@@ -9,10 +9,14 @@ player stats under the same parent folder.
 
 ## Entities
 
-- No new table in Stage 1. `League.format`, `winPoints`, `lossPoints`,
-  `groupRoundType` and `defaultQualifiersPerGroup` hold the settings.
-- Planned: `Group` (Stage 2), `Game` (Stage 3), standings/brackets computed (not
-  stored) and player game stats (Stage 6).
+- `League.format`, `winPoints`, `lossPoints`, `groupRoundType` and
+  `defaultQualifiersPerGroup` hold the format settings.
+- `Group` (`league_groups`: `leagueId`, unique `leagueId`+`name`,
+  `qualifiersOverride`) and `GroupTeam` (`league_group_teams`: `groupId`,
+  unique `leagueTeamId`). One group per league team; hard-deleted on
+  unregister; group delete unassigns teams first.
+- Planned: `Game` (Stage 3), standings/brackets computed (not stored) and
+  player game stats (Stage 6).
 
 ## Sub-modules
 
@@ -20,8 +24,16 @@ player stats under the same parent folder.
   - `format/admin/` — `GET` / `PUT` `/admin/leagues/:leagueId/format` (routes,
     controller, service, validation, docs).
   - `format/lib/format.rules.ts` — pure constants, value lists, format
-    normalization and the lock-reason type; no Prisma or `AppError`.
-- Planned (not implemented): `groups/`, `games/`, `standings/`, `brackets/`,
+    normalization, the lock-reason type, and `evaluateFormatChange`
+    (`HAS_GROUPS` / `TOO_MANY_GROUPS`); no Prisma or `AppError`.
+- `groups/` — done.
+  - `groups/admin/` — admin grouping endpoints (list, unassigned list,
+    create, update, delete, assign/move, remove) with `groups.*` permissions.
+  - `groups/groups.*` — public read `GET /leagues/:leagueId/groups`.
+  - `groups/lib/` — pure `groups.rules.ts` (create/qualifier/issue rules,
+    lock reason), `groups.advisories.ts` (issue/lock builders),
+    `groups.access.ts` (league/group/team loaders), `groups.mapper.ts`.
+- Planned (not implemented): `games/`, `standings/`, `brackets/`,
   `player-stats/`.
 
 ## Responsibilities
@@ -44,6 +56,15 @@ player stats under the same parent folder.
   App-facing league responses keep their `can` flags.
 - Permissions reuse `leagues.view` for `GET` and `leagues.update` for `PUT`; no
   new permission in Stage 1.
+- Groups use `groups.view` (implies `leagues.view` + `league-teams.view`),
+  `groups.create`, `groups.update` (assign/move/remove), `groups.delete`.
+  Creation needs a group format (`GROUPS_KNOCKOUT` / `SINGLE_GROUP_KNOCKOUT`;
+  409 otherwise, single-group limit for `SINGLE_GROUP_KNOCKOUT`). Editing is
+  allowed in `INACTIVE`/`REGISTRATION`/`ACTIVE`; `FINISHED` returns 409 with
+  a `BLOCKER` lock. Issues (`GROUP_TOO_SMALL`, `QUALIFIERS_EXCEED_TEAMS`,
+  `TEAM_UNASSIGNED`) are always `WARNING` and never block saving.
+  Switching format to `KNOCKOUT_ONLY` with groups, or to
+  `SINGLE_GROUP_KNOCKOUT` with more than one group, returns 409.
 
 ## Relationships with other modules
 
@@ -51,8 +72,9 @@ player stats under the same parent folder.
   (e.g. `leagueIdParamSchema`) and reads/writes the `League` row. `leagues`
   never imports `competition`; it only exposes the new columns in its own
   response through its own mapper.
-- Planned chain (one-way): `format ← groups ← games ← standings ← brackets`.
-  Game-existence checks use direct Prisma queries so `format` never imports
-  from `games`.
+- Chain (one-way): `format ← groups ← games ← standings ← brackets`.
+  Game/group-existence checks use direct Prisma queries so `format` never
+  imports from `games` or `groups`; `groups` imports format rules and league
+  mappers only.
 
 See `competition-structure.md` for the Stage 1 decision record.

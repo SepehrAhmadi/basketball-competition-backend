@@ -146,7 +146,10 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "League is FINISHED or has games",
+      description:
+        "League is FINISHED, has games, has groups while switching to " +
+        "KNOCKOUT_ONLY, or has more than one group while switching to " +
+        "SINGLE_GROUP_KNOCKOUT",
       content: { "application/json": { schema: conflictError } },
     },
   },

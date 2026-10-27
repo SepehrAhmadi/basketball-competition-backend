@@ -50,10 +50,15 @@ async function listLeagueTeams(
 ) {
   const league = await loadLeagueContext(leagueId, actor);
   const search = query.search?.trim();
-  const where: Prisma.LeagueTeamWhereInput = activeLeagueTeamWhere(leagueId);
+  const where: Prisma.LeagueTeamWhereInput =
+    league.status === "FINISHED"
+      ? { leagueId, status: "ACTIVE" }
+      : activeLeagueTeamWhere(leagueId);
   if (search)
     where.team = {
-      status: { not: "DELETED" },
+      ...(league.status === "FINISHED"
+        ? {}
+        : { status: { not: "DELETED" } }),
       name: { contains: search },
     };
 
@@ -75,9 +80,15 @@ async function listLeagueTeams(
   );
 
   return {
-    items: items.map((row) =>
-      toLeagueTeamListItem(row, leagueTeamPolicy(league, accessMap.get(row.id)!)),
-    ),
+    items: items.map((row) => ({
+      ...toLeagueTeamListItem(
+        row,
+        leagueTeamPolicy(league, accessMap.get(row.id)!),
+      ),
+      ...(league.status === "FINISHED"
+        ? { teamStatus: row.team.status }
+        : {}),
+    })),
     total,
     page: query.page,
     pageSize: query.pageSize,
@@ -254,6 +265,9 @@ async function unregisterTeam(
     prisma.leagueTeamMember.updateMany({
       where: { leagueTeamId, status: "ACTIVE" },
       data: { status: "DELETED" },
+    }),
+    prisma.groupTeam.deleteMany({
+      where: { leagueTeamId },
     }),
   ]);
 }

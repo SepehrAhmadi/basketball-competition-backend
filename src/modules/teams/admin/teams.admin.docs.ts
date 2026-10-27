@@ -221,7 +221,10 @@ registry.registerPath({
   path: "/admin/teams/{teamId}",
   tags: ["Admin - Teams"],
   summary: "Delete a team (admin)",
-  description: "Soft-delete: sets status to DELETED.",
+  description:
+    "Soft-delete: sets status to DELETED. Same open-league guard as the " +
+    "manager route: returns 409 when the team is registered in a league " +
+    "with status REGISTRATION or ACTIVE. No admin bypass.",
   request: { params: teamIdParamSchema },
   responses: {
     "200": {
@@ -245,6 +248,14 @@ registry.registerPath({
     "404": {
       description: "Team not found",
       content: { "application/json": { schema: notFoundError() } },
+    },
+    "409": {
+      description: "Team is registered in an open league (REGISTRATION or ACTIVE)",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(409, messages.error.team.inOpenLeague),
+        },
+      },
     },
   },
 });

@@ -78,7 +78,7 @@ are never stored.
 - `FINISHED` always blocks format edits (409, `league.finishedLocked`).
 - Once games exist, `HAS_GAMES` locks edits (Stage 3; direct Prisma count, no
   import from `games`).
-- Switching to `KNOCKOUT_ONLY` while groups exist will be blocked in Stage 2.
+- Switching to `KNOCKOUT_ONLY` while groups exist is blocked (409 `hasGroups`); switching to `SINGLE_GROUP_KNOCKOUT` with more than one group is blocked (409 `tooManyGroups`). Count comes from `Group` rows — no `groupCount` column on `leagues`.
 - Admin `GET` reports the lock through the `lock` advisory (`{"code",
   "severity", "message", "params"}`; `FINISHED` today, `HAS_GAMES` once Stage 3
   lands, `null` when editable), so the UI shows the reason instead of only an
@@ -90,7 +90,7 @@ are never stored.
 
 | Stage | Addition |
 |---|---|
-| 2 – groups | `TODO(Group)` guard; per-group qualifier overrides; validate default qualifiers |
+| 2 – groups | ✅ Done: format-change guards, per-group qualifier overrides, group warnings |
 | 3 – games | Activate `HAS_GAMES`; `TODO(Game)` in status/unregister paths |
 | 4 – standings | Read `winPoints` / `lossPoints` from the league row |
 | 5 – brackets | Read `format` to know whether a group stage precedes the bracket |
@@ -100,9 +100,5 @@ are never stored.
 
 ### Group count (decided before Stage 2)
 
-The format action does not store the number of groups; Stage 1 has no such
-column. **Decision: derive the count from `Group` rows for the league in
-Stage 2.** No `groupCount` column is added to `leagues`. The format endpoint
-only supplies `defaultQualifiersPerGroup`; per-group overrides and the actual
-group count belong to `Group` records.
+The format action does not store the number of groups. **Decision (implemented in Stage 2): derive the count from `Group` rows for the league.** No `groupCount` column is added to `leagues`. The format endpoint only supplies `defaultQualifiersPerGroup`; per-group overrides and the actual group count belong to `Group` records.
 

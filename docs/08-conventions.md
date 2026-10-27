@@ -35,6 +35,8 @@ interface Advisory<C extends string = string> {
 | `WARNING` | Allowed and saved, but incomplete or suspicious |
 | `BLOCKER` | Prevents the action the user is looking at |
 
+Severity describes the effect on the action of the current endpoint: group issues (`GROUP_TOO_SMALL`, `QUALIFIERS_EXCEED_TEAMS`, `TEAM_UNASSIGNED`) are always `WARNING` because they never block saving; a groups `lock` is `BLOCKER` because it blocks the edit endpoints right now.
+
 - A list of general warnings is always named `issues: Advisory[]`; empty is `[]`, never `null` and never omitted.
 - A single reason attached to one concern is a nullable `Advisory` named after the concern (`lock`, `toggleLock`, `ineligibility`); `null` means "no reason" and is a legitimate answer.
 - Rules and policies stay pure and return internal codes; the module mapper builds the advisory at the response boundary (`lib/*.advisories.ts`).

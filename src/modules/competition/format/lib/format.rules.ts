@@ -54,3 +54,16 @@ export function normalizeFormatInput(input: FormatInput): FormatData {
 }
 
 export type FormatLockReason = "FINISHED" | "HAS_GAMES" | null;
+
+export type FormatChangeDenial = "HAS_GROUPS" | "TOO_MANY_GROUPS";
+
+export function evaluateFormatChange(
+  nextFormat: LeagueFormatValue,
+  groupCount: number,
+): { allowed: true } | { allowed: false; reason: FormatChangeDenial } {
+  if (nextFormat === "KNOCKOUT_ONLY" && groupCount > 0)
+    return { allowed: false, reason: "HAS_GROUPS" };
+  if (nextFormat === "SINGLE_GROUP_KNOCKOUT" && groupCount > 1)
+    return { allowed: false, reason: "TOO_MANY_GROUPS" };
+  return { allowed: true };
+}

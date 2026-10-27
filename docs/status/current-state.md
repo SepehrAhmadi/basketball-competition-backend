@@ -22,6 +22,8 @@
 | league-formats | ✅ Done | Out of scope |
 | group-round-types | ✅ Done | Out of scope |
 | competition/format | ✅ Done (Stage 1: plan format + scoring settings; admin GET/PUT) | Out of scope |
+| competition/groups | ✅ Done (Stage 2: Group/GroupTeam, manual placement, public read, format guards) | Out of scope |
+| teams delete guard | ✅ Done (409 in REGISTRATION/ACTIVE leagues + `lock`/`can.delete`, no admin bypass) | Out of scope |
 | games / series | ❌ Not Started | Out of scope |
 | stats | ❌ Not Started | Out of scope |
 | media / uploads | ⏳ In Progress (infra only, no module) | Out of scope |

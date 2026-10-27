@@ -17,6 +17,7 @@ Manages teams and their per-season rosters of coaches and players.
 - Roster add/update/remove with head-coach demotion transaction, `P2002` → 409 mapping, reactivation of `DELETED` rows, jersey-unique handling, and role rules (regular coaches manage players only; only admins/org managers assign head coach).
 - Head-coach sync: `addRosterMember` (new/reactivated head coach) and `updateRosterMember` (promotion) call `syncHeadCoachToRegistrationLeagues` (from `leagues/lib/league.head-coach-sync.ts`, batched via `createMany`/`updateMany`) in the same transaction, adding the head coach to ACTIVE league registrations whose league is in `REGISTRATION` for that season. This is an intentional module-level dependency: teams imports the leagues helper, leagues never imports `teams.service` (no cycle).
 - League guards: `isLockedByLeague` blocks remove and role/jersey updates with 409 `memberInActiveLeague` when the member is in an `ACTIVE`/`FINISHED` league roster; removes and role changes otherwise cascade-soft-delete the league roster rows.
+- Team delete guard (`teams/lib/team.rules.ts` pure, `team.locks.ts` Prisma, `team.advisories.ts` builder): both `DELETE /teams/:teamId` and `DELETE /admin/teams/:teamId` return 409 `inOpenLeague` when the team has an ACTIVE `LeagueTeam` in a `REGISTRATION`/`ACTIVE` league — no admin bypass. Responses carry `lock: Advisory | null` (`IN_OPEN_LEAGUE`, `BLOCKER`) and `can.delete` is derived as `policy.delete && !locked`.
 
 ## Relationships with other modules
 

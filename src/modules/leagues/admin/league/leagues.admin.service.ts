@@ -286,6 +286,10 @@ async function deleteLeague(leagueId: number) {
 
   try {
     await prisma.$transaction([
+      prisma.groupTeam.deleteMany({
+        where: { group: { leagueId } },
+      }),
+      prisma.group.deleteMany({ where: { leagueId } }),
       prisma.leagueTeamMember.deleteMany({
         where: { leagueTeam: { leagueId } },
       }),
