@@ -4,7 +4,10 @@ import {
   Role,
   TeamStatus,
   TeamMemberRole,
+  type LeagueStatus,
 } from "../../../prisma/generated/prisma/enums.ts";
+import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
+import { resolveLeagueStatuses, buildLeagueLabel } from "./lib/league-dropdown.rules.ts";
 
 const ORGANIZATION_STATUS_LABELS_FA: Record<OrganizationStatus, string> = {
   ACTIVE: "فعال",
@@ -178,6 +181,71 @@ async function getAgeCategoriesDropdown(query: SearchQuery) {
   };
 }
 
+interface AdminLeagueDropdownQuery {
+  search?: string;
+  seasonId?: number;
+  ageCategoryId?: number;
+  status?: LeagueStatus;
+  page: number;
+  pageSize: number;
+}
+
+// Admin-only: every status is visible, including INACTIVE drafts.
+async function getLeaguesDropdown(query: AdminLeagueDropdownQuery) {
+  const where: Prisma.LeagueWhereInput = {
+    status: { in: [...resolveLeagueStatuses(query.status)] },
+  };
+  if (query.search) {
+    where.name = { contains: query.search };
+  }
+  if (query.seasonId || query.ageCategoryId) {
+    where.ageCategoryCutoff = {
+      ...(query.seasonId ? { seasonId: query.seasonId } : {}),
+      ...(query.ageCategoryId ? { ageCategoryId: query.ageCategoryId } : {}),
+    };
+  }
+
+  const [items, total] = await prisma.$transaction([
+    prisma.league.findMany({
+      where,
+      orderBy: { id: "desc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        ageCategoryCutoff: {
+          select: {
+            seasonId: true,
+            ageCategoryId: true,
+            season: { select: { name: true } },
+            ageCategory: { select: { name: true } },
+          },
+        },
+      },
+    }),
+    prisma.league.count({ where }),
+  ]);
+
+  return {
+    items: items.map((league) => ({
+      value: league.id,
+      label: buildLeagueLabel({
+        name: league.name,
+        seasonName: league.ageCategoryCutoff.season.name,
+        ageCategoryName: league.ageCategoryCutoff.ageCategory.name,
+      }),
+      status: league.status,
+      seasonId: league.ageCategoryCutoff.seasonId,
+      ageCategoryId: league.ageCategoryCutoff.ageCategoryId,
+    })),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
+  };
+}
+
 export default {
   getOrganizationStatuses,
   getTeamStatuses,
@@ -187,4 +255,5 @@ export default {
   getSeasonsDropdown,
   getUsersDropdown,
   getAgeCategoriesDropdown,
+  getLeaguesDropdown,
 };

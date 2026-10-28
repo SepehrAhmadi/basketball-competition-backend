@@ -572,7 +572,7 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Update a roster member",
   description:
-    "Update a team member's role, jersey number, or head coach status. Requires org manager, team head coach, team coach, or ADMIN. Regular coaches can only edit PLAYER entries and cannot promote a PLAYER into a COACH. Only one head coach is allowed per team per season.",  security: [{ bearerAuth: [] }],
+    "Update a team member's role, jersey number, or head coach status. Requires org manager, team head coach, team coach, or ADMIN. Regular coaches can only edit PLAYER entries and cannot promote a PLAYER into a COACH. A coach can only be added once per team per season. Set isHeadCoach to true to assign as head coach (only one per team per season); assigning a new head coach automatically demotes the previous one.",  security: [{ bearerAuth: [] }],
   request: {
     params: rosterMemberParamSchema,
     body: {
@@ -611,7 +611,7 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "Jersey number conflict or head coach already exists",
+      description: "Member already exists in this team and season, or jersey number conflict",
       content: {
         "application/json": {
           schema: errorResponseSchema(409, messages.error.team.headCoachAlreadyExists),

@@ -9,6 +9,7 @@
 | `jalaliPatchValue` | Patch-style date conversion: `undefined` → unchanged, `null` → clear, string → Jalali → `Date` | `src/utils/date.util.ts` |
 | `UPLOADS_ROOT` / `uploadUrlToPath` / `removeFileIfExists` / `withPublicLogoUrl` | Single home for upload-path resolution (prefix + `basename` guard), best-effort file deletion, and logo URL mapping; `UPLOADS_ROOT` resolves to `src/uploads` | `src/utils/files.ts` |
 | `getPublicFileUrl` | Prefixes stored file paths with `BASE_URL` | `src/utils/getFileUrl.ts` |
+| `normalizePersianText` | Trims text and maps Arabic ي/ك to Persian ی/ک for matching stored names | `src/utils/persian.util.ts` |
 | `PERMISSION_CATALOG` / `Permission` | Single source of truth for admin permission codes | `src/shared/permissions.ts` |
 | `Advisory` / `makeAdvisory` | Structured reason shape (`code`, `severity`, `message`, `params`) returned next to `can` flags | `src/shared/advisory.ts` |
 | `idParamSchema` | Shared Zod schema for `:id` params | `src/shared/schemas.validation.ts` |

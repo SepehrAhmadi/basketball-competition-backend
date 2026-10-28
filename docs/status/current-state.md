@@ -16,7 +16,7 @@
 | roles | ✅ Done | Out of scope |
 | coach-degrees | ✅ Done | Out of scope |
 | referee-levels | ✅ Done | Out of scope |
-| dropdowns | ✅ Done (JWT-required reference lookups) | Out of scope |
+| dropdowns | ✅ Done (JWT-required reference lookups + admin league selector at `/dropdowns/admin/leagues`) | Out of scope |
 | leagues | ✅ Done (leagues + league-teams + league-roster; app side rebuilt: head-coach roster access, `my-teams`, team detail) | Out of scope |
 | league-statuses | ✅ Done | Out of scope |
 | league-formats | ✅ Done | Out of scope |
