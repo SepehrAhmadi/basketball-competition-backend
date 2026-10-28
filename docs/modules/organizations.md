@@ -12,7 +12,7 @@ Manages clubs/organizations, their logos, and their managers.
 
 - Member routes (`/organizations`) require `verifyJWT` + `attachActor` only; any authenticated user can create and becomes manager; edit/delete via `organizationPolicy`. Admin `PUT` with `managerId` is the only way to transfer management.
 - Paginated org listing; non-admins scoped to `managers.some { userId }` OR `teamSeasonMembers.some { userId, ACTIVE }`; non-admin items enriched with `isManager` + `memberships[]` (season/team/role).
-- Org create (transaction creating `Organization` + `OrganizationManager`), update, logo replace/remove, soft-delete via `status = DELETED`; `logoUrl` server-generated from upload, client values ignored; orphan files removed on failure.
+- Org create (transaction creating `Organization` + `OrganizationManager`), update, logo replace/remove, soft-delete via `status = DELETED`; `logoUrl` server-generated from upload, client values ignored; orphan files removed on failure; file helpers (`uploadUrlToPath`, `removeFileIfExists`, `withPublicLogoUrl`) come from `utils/files.ts`.
 - Record-level guard via `organizationPolicy` + `assertAllowed` (view/edit/delete/createTeam) with `can` object on responses; 404 checked before 403.
 - `admin/` sub-module (`/admin/organizations`, `verifyJWT` + `verifyAdminLevel(ADMIN, SUPER_ADMIN)` + `organizations.*` permissions): status filter (`ACTIVE|INACTIVE|DELETED|ALL`, default excludes `DELETED`), single-manager replace on update, soft-delete + `POST /:id/restore` (`organizations.restore`).
 

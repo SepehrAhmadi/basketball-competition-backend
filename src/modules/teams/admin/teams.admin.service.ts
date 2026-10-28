@@ -6,18 +6,12 @@ import {
   loadOpenLeagueTeamIds,
 } from "../lib/team.locks.ts";
 import { buildTeamLock } from "../lib/team.advisories.ts";
+import { getTeamLockReason } from "../lib/team.rules.ts";
+import { toPublicTeam } from "../lib/team.mapper.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
-import { jalaliToGregorian, gregorianToJalali } from "../../../utils/date.util.ts";
+import { jalaliPatchValue } from "../../../utils/date.util.ts";
 
 const baseUrl = process.env.BASE_URL;
-
-function withPublicLogoUrl(team: { logoUrl: string | null; foundedDate: Date | null; [key: string]: any }) {
-  return {
-    ...team,
-    logoUrl: getPublicFileUrl(team.logoUrl, baseUrl),
-    foundedDate: gregorianToJalali(team.foundedDate),
-  };
-}
 
 export interface AdminCreateTeamInput {
   organizationId: number;
@@ -90,8 +84,8 @@ async function adminListTeams(query: AdminListTeamsQuery) {
   const lockedIds = await loadOpenLeagueTeamIds(items.map((i) => i.id));
   return {
     items: items.map((item) => ({
-      ...withPublicLogoUrl(item),
-      lock: buildTeamLock(lockedIds.has(item.id)),
+      ...toPublicTeam(item),
+      lock: buildTeamLock(getTeamLockReason(lockedIds.has(item.id))),
     })),
     total,
     page: query.page,
@@ -106,28 +100,23 @@ async function adminGetTeamById(teamId: number) {
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
   const locked = (await loadOpenLeagueTeamIds([teamId])).has(teamId);
-  return { ...withPublicLogoUrl(team), lock: buildTeamLock(locked) };
+  return { ...toPublicTeam(team), lock: buildTeamLock(getTeamLockReason(locked)) };
 }
 
 async function adminCreateTeam(data: AdminCreateTeamInput) {
   await assertActiveOrganization(data.organizationId);
 
-  const { logoUrl: _ignoredLogoUrl, ...safeData } = data as AdminCreateTeamInput & {
-    logoUrl?: unknown;
-  };
-
-  const foundedDate =
-    safeData.foundedDate != null ? jalaliToGregorian(safeData.foundedDate) : undefined;
+  const foundedDate = jalaliPatchValue(data.foundedDate);
 
   const team = await prisma.team.create({
     data: {
-      organizationId: safeData.organizationId,
-      name: safeData.name,
-      status: safeData.status ?? "ACTIVE",
-      ...(foundedDate != null && { foundedDate }),
+      organizationId: data.organizationId,
+      name: data.name,
+      status: data.status ?? "ACTIVE",
+      ...(foundedDate !== undefined && { foundedDate }),
     },
   });
-  return withPublicLogoUrl(team);
+  return toPublicTeam(team);
 }
 
 async function adminUpdateTeam(teamId: number, data: AdminUpdateTeamInput) {
@@ -143,24 +132,30 @@ async function adminUpdateTeam(teamId: number, data: AdminUpdateTeamInput) {
     await assertActiveOrganization(data.organizationId);
   }
 
-  const { logoUrl: _ignoredLogoUrl, ...safeData } = data as AdminUpdateTeamInput & {
-    logoUrl?: unknown;
-  };
+  const foundedDate = jalaliPatchValue(data.foundedDate);
+  const transferred =
+    data.organizationId !== undefined && data.organizationId !== team.organizationId;
 
-  const foundedDate =
-    safeData.foundedDate != null ? jalaliToGregorian(safeData.foundedDate) : undefined;
-
-  const updated = await prisma.team.update({
-    where: { id: teamId },
-    data: {
-      ...(safeData.organizationId !== undefined && { organizationId: safeData.organizationId }),
-      ...(safeData.name !== undefined && { name: safeData.name }),
-      ...(safeData.status !== undefined && { status: safeData.status }),
-      ...(foundedDate != null && { foundedDate }),
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.team.update({
+      where: { id: teamId },
+      data: {
+        ...(data.organizationId !== undefined && { organizationId: data.organizationId }),
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.status !== undefined && { status: data.status }),
+        ...(foundedDate !== undefined && { foundedDate }),
+      },
+    });
+    if (transferred) {
+      await tx.teamSeasonMember.updateMany({
+        where: { teamId },
+        data: { organizationId: result.organizationId },
+      });
+    }
+    return result;
   });
 
-  return withPublicLogoUrl(updated);
+  return toPublicTeam(updated);
 }
 
 async function adminDeleteTeam(teamId: number) {
@@ -179,17 +174,16 @@ async function adminRestoreTeam(teamId: number) {
     where: { id: teamId },
     data: { status: "ACTIVE" },
   });
-  return withPublicLogoUrl(restored);
+  return toPublicTeam(restored);
 }
 
 // ACTIVE members only — status is hardcoded, never client-supplied.
 async function adminGetRoster(teamId: number, query: AdminRosterQuery) {
-  const team = await prisma.team.findFirst({
-    where: { id: teamId, status: { not: "DELETED" } },
-  });
+  const [team, season] = await Promise.all([
+    prisma.team.findFirst({ where: { id: teamId, status: { not: "DELETED" } } }),
+    prisma.season.findFirst({ where: { id: query.seasonId } }),
+  ]);
   if (!team) throw new AppError(404, messages.error.team.notFound);
-
-  const season = await prisma.season.findFirst({ where: { id: query.seasonId } });
   if (!season) throw new AppError(404, messages.error.team.seasonNotFound);
 
   const where: any = { teamId, seasonId: season.id, status: "ACTIVE" };

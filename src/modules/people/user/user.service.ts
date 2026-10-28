@@ -1,7 +1,5 @@
 import bcrypt from "bcrypt";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+
 import prisma from "../../../config/db.config.ts";
 import { messages } from "../../../language/message.ts";
 import AppError from "../../../utils/appError.ts";
@@ -15,16 +13,12 @@ import type {
   Role,
 } from "../../../prisma/generated/prisma/enums.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
+import { removeFileIfExists, uploadUrlToPath } from "../../../utils/files.ts";
 import {
   gregorianToJalali,
   jalaliToGregorian,
 } from "../../../utils/date.util.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// resolves to src/uploads — same root used by createUploader
-const UPLOADS_ROOT = path.join(__dirname, "..", "..", "..", "uploads");
 const AVATAR_URL_PREFIX = "/uploads/avatars/";
 
 export function toUserProfile(user: {
@@ -58,17 +52,7 @@ export function toUserProfile(user: {
 const baseUrl = process.env.BASE_URL;
 
 function avatarUrlToPath(avatarUrl: string | null): string | null {
-  if (!avatarUrl || !avatarUrl.startsWith(AVATAR_URL_PREFIX)) return null;
-  return path.join(UPLOADS_ROOT, "avatars", path.basename(avatarUrl));
-}
-
-function removeFileIfExists(filePath: string | null) {
-  if (!filePath) return;
-  try {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  } catch {
-    // filesystem cleanup is best-effort — the DB is already consistent
-  }
+  return uploadUrlToPath(avatarUrl, AVATAR_URL_PREFIX, "avatars");
 }
 
 async function getOwnProfile(userId: number): Promise<UserProfile> {

@@ -1,6 +1,46 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { evaluateFormatChange } from "./format.rules.ts";
+import {
+  evaluateFormatChange,
+  getFormatLockReason,
+  GROUP_ROUND_TYPE_VALUES,
+  isGroupedFormat,
+  LEAGUE_FORMAT_VALUES,
+} from "./format.rules.ts";
+import {
+  GroupRoundType,
+  LeagueFormat,
+} from "../../../../prisma/generated/prisma/enums.ts";
+
+describe("isGroupedFormat", () => {
+  it("null is not grouped", () => {
+    assert.equal(isGroupedFormat(null), false);
+  });
+  it("group-stage formats are grouped", () => {
+    assert.equal(isGroupedFormat("GROUPS_KNOCKOUT"), true);
+    assert.equal(isGroupedFormat("SINGLE_GROUP_KNOCKOUT"), true);
+  });
+  it("KNOCKOUT_ONLY is not grouped", () => {
+    assert.equal(isGroupedFormat("KNOCKOUT_ONLY"), false);
+  });
+});
+
+describe("getFormatLockReason", () => {
+  it("FINISHED is locked", () => {
+    assert.equal(getFormatLockReason("FINISHED"), "FINISHED");
+  });
+  it("other statuses are not locked", () => {
+    for (const s of ["INACTIVE", "REGISTRATION", "ACTIVE"] as const)
+      assert.equal(getFormatLockReason(s), null);
+  });
+});
+
+describe("value lists", () => {
+  it("equal the Prisma enums", () => {
+    assert.deepEqual([...LEAGUE_FORMAT_VALUES], Object.values(LeagueFormat));
+    assert.deepEqual([...GROUP_ROUND_TYPE_VALUES], Object.values(GroupRoundType));
+  });
+});
 
 describe("evaluateFormatChange", () => {
   it("GROUPS_KNOCKOUT always allowed", () => {

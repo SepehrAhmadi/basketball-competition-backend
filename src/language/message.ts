@@ -40,7 +40,7 @@ export const messages = {
       userNotFound: "کاربر مورد نظر یافت نشد",
       userNotActive: "کاربر مورد نظر فعال نیست",
       coachOnlyManagesPlayer: "مربی فقط می‌تواند بازیکنان را مدیریت کند، نه مربیان دیگر",
-      headCoachConflict: "مربی اصلی این تیم در فصل مورد نظر قبلاً ثبت شده است",
+      memberAlreadyExists: "این عضو قبلاً در راستر تیم برای این فصل ثبت شده است",
       jerseyConflict: "شماره پیراهن تکراری است",
       rosterMemberNotFound: "عضو تیم یافت نشد",
       cannotRemoveOwnHeadCoach: "مربی اصلی نمی‌تواند خود را حذف کند",
@@ -110,6 +110,8 @@ export const messages = {
     group: {
       notFound: "گروه یافت نشد",
       nameRequired: "نام گروه الزامی است",
+      nameTooLong: "نام گروه نمی‌تواند بیش از ۱۰۰ کاراکتر باشد",
+      updateFieldRequired: "حداقل یکی از فیلدها باید ارسال شود",
       nameExists: "گروه دیگری با این نام در این لیگ ثبت شده است",
       formatNotGrouped:
         "گروه‌بندی فقط در لیگ با ساختار گروهی امکان‌پذیر است",
@@ -294,8 +296,8 @@ export const messages = {
   // deliberately shorter than the matching `error.*` sentences, which stay the
   // text of thrown 403/409 responses.
   advisory: {
+    leagueFinished: "لیگ تمام‌شده قابل ویرایش نیست",
     format: {
-      finished: "لیگ تمام‌شده قابل ویرایش نیست",
       hasGames: "پس از شروع اولین بازی، ساختار لیگ قابل تغییر نیست",
     },
     leagueRoster: {
@@ -306,7 +308,6 @@ export const messages = {
       inOtherTeam: "در تیم دیگری عضو است",
     },
     groups: {
-      finished: "لیگ تمام‌شده قابل ویرایش نیست",
       groupTooSmall: (name: string, min: number) =>
         `تعداد تیم‌های گروه ${name} کمتر از حد مجاز (${min} تیم) است`,
       qualifiersExceedTeams: (name: string, qualifiers: number, teams: number) =>

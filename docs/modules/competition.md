@@ -24,7 +24,8 @@ player stats under the same parent folder.
   - `format/admin/` — `GET` / `PUT` `/admin/leagues/:leagueId/format` (routes,
     controller, service, validation, docs).
   - `format/lib/format.rules.ts` — pure constants, value lists, format
-    normalization, the lock-reason type, and `evaluateFormatChange`
+    normalization, `isGroupedFormat`, `getFormatLockReason`, value lists derived
+    from the Prisma enums, and `evaluateFormatChange`
     (`HAS_GROUPS` / `TOO_MANY_GROUPS`); no Prisma or `AppError`.
 - `groups/` — done.
   - `groups/admin/` — admin grouping endpoints (list, unassigned list,
@@ -32,7 +33,11 @@ player stats under the same parent folder.
   - `groups/groups.*` — public read `GET /leagues/:leagueId/groups`.
   - `groups/lib/` — pure `groups.rules.ts` (create/qualifier/issue rules,
     lock reason), `groups.advisories.ts` (issue/lock builders),
-    `groups.access.ts` (league/group/team loaders), `groups.mapper.ts`.
+    `groups.access.ts` (league/group/team loaders; `loadAssignmentContext`
+    runs them in parallel but reports errors in a fixed order),
+    `groups.queries.ts` (`groupWithTeamsInclude`, derived `GroupWithTeams`,
+    `countUnassigned`, counter-only `loadGroupSummaries`), `groups.mapper.ts`
+    (`toGroupItem`, `toGroupTeamItem`).
 - Planned (not implemented): `games/`, `standings/`, `brackets/`,
   `player-stats/`.
 
@@ -63,6 +68,8 @@ player stats under the same parent folder.
   allowed in `INACTIVE`/`REGISTRATION`/`ACTIVE`; `FINISHED` returns 409 with
   a `BLOCKER` lock. Issues (`GROUP_TOO_SMALL`, `QUALIFIERS_EXCEED_TEAMS`,
   `TEAM_UNASSIGNED`) are always `WARNING` and never block saving.
+  `GET .../groups/unassigned-teams` is a read and is allowed in every league
+  status (including `FINISHED`).
   Switching format to `KNOCKOUT_ONLY` with groups, or to
   `SINGLE_GROUP_KNOCKOUT` with more than one group, returns 409.
 

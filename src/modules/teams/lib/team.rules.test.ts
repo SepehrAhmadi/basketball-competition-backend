@@ -1,32 +1,24 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { evaluateTeamDelete } from "./team.rules.ts";
+import {
+  getTeamLockReason,
+  TEAM_DELETE_BLOCKING_LEAGUE_STATUSES,
+} from "./team.rules.ts";
 
-describe("evaluateTeamDelete", () => {
-  it("empty list allowed", () => {
-    assert.deepEqual(evaluateTeamDelete([]), { allowed: true });
+describe("getTeamLockReason", () => {
+  it("not locked returns null", () => {
+    assert.equal(getTeamLockReason(false), null);
   });
-  it("INACTIVE and FINISHED allowed", () => {
-    assert.deepEqual(evaluateTeamDelete(["INACTIVE", "FINISHED"]), {
-      allowed: true,
-    });
+  it("locked returns IN_OPEN_LEAGUE", () => {
+    assert.equal(getTeamLockReason(true), "IN_OPEN_LEAGUE");
   });
-  it("REGISTRATION denied", () => {
-    assert.deepEqual(evaluateTeamDelete(["REGISTRATION"]), {
-      allowed: false,
-      reason: "IN_OPEN_LEAGUE",
-    });
-  });
-  it("ACTIVE denied", () => {
-    assert.deepEqual(evaluateTeamDelete(["ACTIVE"]), {
-      allowed: false,
-      reason: "IN_OPEN_LEAGUE",
-    });
-  });
-  it("mixed list denied", () => {
-    assert.deepEqual(
-      evaluateTeamDelete(["FINISHED", "ACTIVE", "INACTIVE"]),
-      { allowed: false, reason: "IN_OPEN_LEAGUE" },
-    );
+});
+
+describe("TEAM_DELETE_BLOCKING_LEAGUE_STATUSES", () => {
+  it("blocks only REGISTRATION and ACTIVE", () => {
+    assert.deepEqual([...TEAM_DELETE_BLOCKING_LEAGUE_STATUSES], [
+      "REGISTRATION",
+      "ACTIVE",
+    ]);
   });
 });

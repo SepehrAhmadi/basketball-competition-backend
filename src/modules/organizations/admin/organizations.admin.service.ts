@@ -1,16 +1,7 @@
 import prisma from "../../../config/db.config.ts";
 import AppError from "../../../utils/appError.ts";
 import { messages } from "../../../language/message.ts";
-import getPublicFileUrl from "../../../utils/getFileUrl.ts";
-
-const baseUrl = process.env.BASE_URL;
-
-function withPublicLogoUrl<T extends { logoUrl: string | null }>(organization: T) {
-  return {
-    ...organization,
-    logoUrl: getPublicFileUrl(organization.logoUrl, baseUrl),
-  };
-}
+import { withPublicLogoUrl } from "../../../utils/files.ts";
 
 export interface AdminCreateOrganizationInput {
   name: string;

@@ -1,5 +1,6 @@
 import type { LeagueFormat, LeagueStatus } from "../../../../prisma/generated/prisma/enums.ts";
-import { isGroupStageFormat } from "../../format/lib/format.rules.ts";
+import { isGroupedFormat } from "../../format/lib/format.rules.ts";
+import { isLeagueFinished } from "../../../leagues/lib/league.rules.ts";
 
 export const MIN_TEAMS_PER_GROUP = 2;
 export const MAX_GROUPS_SINGLE_GROUP_FORMAT = 1;
@@ -7,7 +8,7 @@ export const MAX_GROUPS_SINGLE_GROUP_FORMAT = 1;
 export type GroupsLockReason = "FINISHED" | null;
 
 export function getGroupsLockReason(status: LeagueStatus): GroupsLockReason {
-  return status === "FINISHED" ? "FINISHED" : null;
+  return isLeagueFinished(status) ? "FINISHED" : null;
 }
 
 export type CreateGroupDenial = "FORMAT_NOT_GROUPED" | "SINGLE_GROUP_ONLY";
@@ -16,7 +17,7 @@ export function evaluateCreateGroup(
   format: LeagueFormat | null,
   existingGroupCount: number,
 ): { allowed: true } | { allowed: false; reason: CreateGroupDenial } {
-  if (format === null || !isGroupStageFormat(format))
+  if (!isGroupedFormat(format))
     return { allowed: false, reason: "FORMAT_NOT_GROUPED" };
   if (
     format === "SINGLE_GROUP_KNOCKOUT" &&

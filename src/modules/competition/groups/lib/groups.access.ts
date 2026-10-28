@@ -7,6 +7,7 @@ import type {
   LeagueStatus,
 } from "../../../../prisma/generated/prisma/enums.ts";
 import { activeLeagueTeamWhere } from "../../../leagues/lib/league.mapper.ts";
+import { getGroupsLockReason } from "./groups.rules.ts";
 
 export interface GroupsLeague {
   id: number;
@@ -39,7 +40,7 @@ export async function loadGroupsLeague(
 }
 
 export function assertGroupsEditable(league: GroupsLeague): void {
-  if (league.status === "FINISHED")
+  if (getGroupsLockReason(league.status) !== null)
     throw new AppError(409, messages.error.league.finishedLocked);
 }
 
@@ -61,4 +62,40 @@ export async function loadActiveLeagueTeam(
   if (!leagueTeam)
     throw new AppError(404, messages.error.leagueTeam.notFound);
   return leagueTeam;
+}
+
+function unwrap<T>(result: PromiseSettledResult<T>): T {
+  if (result.status === "rejected") throw result.reason;
+  return result.value;
+}
+
+// The loaders run together, but errors surface in the documented order:
+// league 404 → FINISHED 409 → group 404 → league team 404.
+export async function loadAssignmentContext(
+  leagueId: number,
+  groupId: number,
+  leagueTeamId: number,
+) {
+  const [league, group, leagueTeam] = await Promise.allSettled([
+    loadGroupsLeague(leagueId),
+    loadGroup(leagueId, groupId),
+    loadActiveLeagueTeam(leagueId, leagueTeamId),
+  ]);
+  const loadedLeague = unwrap(league);
+  assertGroupsEditable(loadedLeague);
+  return {
+    league: loadedLeague,
+    group: unwrap(group),
+    leagueTeam: unwrap(leagueTeam),
+  };
+}
+
+export async function loadRemovalContext(leagueId: number, groupId: number) {
+  const [league, group] = await Promise.allSettled([
+    loadGroupsLeague(leagueId),
+    loadGroup(leagueId, groupId),
+  ]);
+  const loadedLeague = unwrap(league);
+  assertGroupsEditable(loadedLeague);
+  return { league: loadedLeague, group: unwrap(group) };
 }

@@ -20,7 +20,7 @@ function normalizeGroupName(value: string): string {
 const groupNameField = z
   .string({ required_error: messages.error.group.nameRequired })
   .min(2, messages.error.group.nameRequired)
-  .max(100, messages.error.group.nameRequired)
+  .max(100, messages.error.group.nameTooLong)
   .transform(normalizeGroupName)
   .refine((v) => v.length >= 2, messages.error.group.nameRequired)
   .openapi({ example: "گروه الف" });
@@ -59,7 +59,7 @@ export const updateGroupSchema = z
   })
   .strict()
   .refine((data) => data.name !== undefined || data.qualifiersOverride !== undefined, {
-    message: messages.error.group.nameRequired,
+    message: messages.error.group.updateFieldRequired,
   });
 
 export const unassignedTeamsQuerySchema = paginationQuerySchema.extend({

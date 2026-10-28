@@ -6,13 +6,11 @@ import {
   successResponseSchema,
 } from "../../swagger/helpers.ts";
 import { advisorySchema } from "../../swagger/advisory.docs.ts";
-import {
-  paginatedResponseSchema,
-  paginationQuerySchema,
-} from "../../shared/schemas.validation.ts";
+import { paginatedResponseSchema } from "../../shared/schemas.validation.ts";
 import {
   teamIdParamSchema,
   rosterMemberParamSchema,
+  listTeamsQuerySchema,
   rosterQuerySchema,
   createTeamSchema,
   updateTeamSchema,
@@ -178,9 +176,6 @@ const rosterResponseSchema = z
   })
   .openapi("TeamRoster");
 
-const listTeamsQuerySchema = paginationQuerySchema.extend({
-  organizationId: z.coerce.number().int().positive().optional(),
-});
 
 // ---- error schemas ----
 
@@ -564,7 +559,7 @@ registry.registerPath({
       description: "Duplicate coach, jersey number conflict, or head coach already exists",
       content: {
         "application/json": {
-          schema: errorResponseSchema(409, messages.error.team.headCoachConflict),
+          schema: errorResponseSchema(409, messages.error.team.memberAlreadyExists),
         },
       },
     },

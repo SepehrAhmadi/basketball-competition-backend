@@ -5,6 +5,8 @@ import {
   buildGroupsLock,
   buildUnassignedIssue,
 } from "./groups.advisories.ts";
+import { evaluateGroupIssues } from "./groups.rules.ts";
+import { messages } from "../../../../language/message.ts";
 
 describe("buildGroupIssues", () => {
   it("too small is WARNING with params", () => {
@@ -40,6 +42,20 @@ describe("buildGroupIssues", () => {
       current: 2,
     });
   });
+  it("issue codes derive from evaluateGroupIssues", () => {
+    const cases = [
+      { teamsCount: 0, qualifiers: null },
+      { teamsCount: 1, qualifiers: 5 },
+      { teamsCount: 2, qualifiers: 2 },
+      { teamsCount: 3, qualifiers: 2 },
+      { teamsCount: 4, qualifiers: null },
+    ];
+    for (const c of cases)
+      assert.deepEqual(
+        buildGroupIssues({ id: 1, name: "x", ...c }).map((i) => i.code),
+        evaluateGroupIssues(c),
+      );
+  });
   it("healthy group has no issues", () => {
     assert.deepEqual(
       buildGroupIssues({ id: 1, name: "x", teamsCount: 4, qualifiers: 2 }),
@@ -68,5 +84,6 @@ describe("buildGroupsLock", () => {
     const lock = buildGroupsLock("FINISHED");
     assert.equal(lock?.code, "FINISHED");
     assert.equal(lock?.severity, "BLOCKER");
+    assert.equal(lock?.message, messages.advisory.leagueFinished);
   });
 });

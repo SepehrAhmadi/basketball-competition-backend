@@ -31,10 +31,17 @@ const groupTeamSchema = z
         name: z.string().openapi({ example: "باشگاه عقاب" }),
       })
       .nullable(),
+    teamStatus: z
+      .enum(["ACTIVE", "INACTIVE", "DELETED"])
+      .optional()
+      .openapi({
+        example: "ACTIVE",
+        description:
+          "Present only for FINISHED leagues, which keep showing " +
+          "soft-deleted teams so the frontend can render them differently.",
+      }),
   })
   .openapi("AdminGroupTeam");
-
-const groupIssueSchema = advisorySchema.openapi("AdminGroupIssue");
 
 const groupItemSchema = z
   .object({
@@ -43,7 +50,7 @@ const groupItemSchema = z
     qualifiersOverride: z.number().nullable().openapi({ example: null }),
     qualifiers: z.number().nullable().openapi({ example: 2 }),
     teamsCount: z.number().openapi({ example: 1 }),
-    issues: z.array(groupIssueSchema).openapi({
+    issues: z.array(advisorySchema).openapi({
       description:
         "`issues` is always present; an empty array means no issues. " +
         "All group issues are warnings and never block saving. Codes: " +
@@ -58,7 +65,7 @@ const groupSummarySchema = z
     id: z.number().openapi({ example: 3 }),
     teamsCount: z.number().openapi({ example: 2 }),
     qualifiers: z.number().nullable().openapi({ example: 2 }),
-    issues: z.array(groupIssueSchema),
+    issues: z.array(advisorySchema),
   })
   .openapi("AdminGroupSummary");
 
@@ -80,7 +87,7 @@ const groupsListSchema = z
     }),
     groups: z.array(groupItemSchema),
     unassignedCount: z.number().openapi({ example: 3 }),
-    issues: z.array(groupIssueSchema).openapi({
+    issues: z.array(advisorySchema).openapi({
       description:
         "League-level issues. Code `TEAM_UNASSIGNED` when teams are not " +
         "placed in any group.",
@@ -100,7 +107,7 @@ const unassignedListSchema = z
 const deleteGroupSchema = z
   .object({
     unassignedCount: z.number().openapi({ example: 3 }),
-    issues: z.array(groupIssueSchema),
+    issues: z.array(advisorySchema),
   })
   .openapi("AdminDeleteGroupResult");
 
@@ -108,7 +115,7 @@ const placementSchema = z
   .object({
     affectedGroups: z.array(groupSummarySchema),
     unassignedCount: z.number().openapi({ example: 3 }),
-    issues: z.array(groupIssueSchema),
+    issues: z.array(advisorySchema),
   })
   .openapi("AdminGroupPlacement");
 
@@ -197,10 +204,6 @@ registry.registerPath({
           schema: notFoundError(messages.error.league.notFound),
         },
       },
-    },
-    "409": {
-      description: "League is FINISHED",
-      content: { "application/json": { schema: conflictError } },
     },
   },
 });

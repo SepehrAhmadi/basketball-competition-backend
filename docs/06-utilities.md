@@ -6,6 +6,8 @@
 | `sendResponse` | Builds uniform success envelope `{statusCode, message, data}` | `src/utils/apiResponse.ts` |
 | `findOrFail` | Record lookup that throws 404 `AppError` when missing | `src/utils/findOrFail.ts` |
 | `jalaliToGregorian` / `gregorianToJalali` | Converts Jalali `YYYY/MM/DD` input to stored `Date` and back | `src/utils/date.util.ts` |
+| `jalaliPatchValue` | Patch-style date conversion: `undefined` → unchanged, `null` → clear, string → Jalali → `Date` | `src/utils/date.util.ts` |
+| `UPLOADS_ROOT` / `uploadUrlToPath` / `removeFileIfExists` / `withPublicLogoUrl` | Single home for upload-path resolution (prefix + `basename` guard), best-effort file deletion, and logo URL mapping; `UPLOADS_ROOT` resolves to `src/uploads` | `src/utils/files.ts` |
 | `getPublicFileUrl` | Prefixes stored file paths with `BASE_URL` | `src/utils/getFileUrl.ts` |
 | `PERMISSION_CATALOG` / `Permission` | Single source of truth for admin permission codes | `src/shared/permissions.ts` |
 | `Advisory` / `makeAdvisory` | Structured reason shape (`code`, `severity`, `message`, `params`) returned next to `can` flags | `src/shared/advisory.ts` |

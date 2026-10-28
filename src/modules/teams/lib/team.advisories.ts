@@ -5,13 +5,8 @@ import type { TeamDeleteDenial } from "./team.rules.ts";
 export type TeamLockCode = TeamDeleteDenial;
 
 export function buildTeamLock(
-  denied: boolean,
+  reason: TeamLockCode | null,
 ): Advisory<TeamLockCode> | null {
-  if (!denied) return null;
-  return makeAdvisory(
-    "IN_OPEN_LEAGUE",
-    "BLOCKER",
-    messages.advisory.team.inOpenLeague,
-    {},
-  );
+  if (reason === null) return null;
+  return makeAdvisory(reason, "BLOCKER", messages.advisory.team.inOpenLeague, {});
 }

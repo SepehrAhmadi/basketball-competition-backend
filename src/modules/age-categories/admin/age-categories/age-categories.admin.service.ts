@@ -56,13 +56,6 @@ async function getAgeCategoryById(ageCategoryId: number) {
 }
 
 async function createAgeCategory(input: { name: string }) {
-  const duplicate = await prisma.ageCategory.findFirst({
-    where: { name: input.name },
-  });
-  if (duplicate) {
-    throw new AppError(409, messages.error.ageCategory.nameExists);
-  }
-
   try {
     return await prisma.ageCategory.create({ data: { name: input.name } });
   } catch (err: any) {
@@ -75,15 +68,6 @@ async function createAgeCategory(input: { name: string }) {
 
 async function updateAgeCategory(ageCategoryId: number, input: { name?: string }) {
   await findOrFail(prisma.ageCategory, ageCategoryId, messages.error.ageCategory.notFound);
-
-  if (input.name !== undefined) {
-    const duplicate = await prisma.ageCategory.findFirst({
-      where: { name: input.name, id: { not: ageCategoryId } },
-    });
-    if (duplicate) {
-      throw new AppError(409, messages.error.ageCategory.nameExists);
-    }
-  }
 
   try {
     return await prisma.ageCategory.update({

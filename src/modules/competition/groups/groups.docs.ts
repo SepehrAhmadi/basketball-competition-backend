@@ -21,6 +21,15 @@ const publicGroupTeamSchema = z
         name: z.string().openapi({ example: "باشگاه عقاب" }),
       })
       .nullable(),
+    teamStatus: z
+      .enum(["ACTIVE", "INACTIVE", "DELETED"])
+      .optional()
+      .openapi({
+        example: "ACTIVE",
+        description:
+          "Present only for FINISHED leagues, which keep showing " +
+          "soft-deleted teams so the frontend can render them differently.",
+      }),
   })
   .openapi("PublicGroupTeam");
 
