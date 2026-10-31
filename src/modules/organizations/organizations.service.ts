@@ -1,20 +1,15 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import prisma from "../../config/db.config.ts";
 import AppError from "../../utils/appError.ts";
 import { messages } from "../../language/message.ts";
-import getPublicFileUrl from "../../utils/getFileUrl.ts";
+import {
+  removeFileIfExists,
+  uploadUrlToPath,
+  withPublicLogoUrl,
+} from "../../utils/files.ts";
 import type { Actor } from "../../authz/actor.ts";
 import { assertAllowed } from "../../authz/assert.ts";
 import { organizationPolicy } from "./organizations.policy.ts";
 
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// resolves to src/uploads — same root used by createUploader
-const UPLOADS_ROOT = path.join(__dirname, "..", "..", "uploads");
 const ORGANIZATION_LOGO_URL_PREFIX = "/uploads/organizations/";
 
 export interface CreateOrganizationInput {
@@ -35,31 +30,8 @@ export interface UpdateOrganizationInput {
   removeLogo?: boolean;
 }
 
-// Never delete arbitrary files based on the DB value — only resolve paths
-// that live under the organization logo directory.
 function organizationLogoUrlToPath(logoUrl: string | null | undefined): string | null {
-  if (!logoUrl || !logoUrl.startsWith(ORGANIZATION_LOGO_URL_PREFIX)) return null;
-  return path.join(UPLOADS_ROOT, "organizations", path.basename(logoUrl));
-}
-
-const baseUrl = process.env.BASE_URL;
-function withPublicLogoUrl<T extends { logoUrl: string | null }>(
-  organization: T,
-) {
-  return {
-    ...organization,
-    logoUrl: getPublicFileUrl(organization.logoUrl, baseUrl),
-  };
-}
-
-function removeFileIfExists(filePath: string | null) {
-  if (!filePath) return;
-  try {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  } catch (err) {
-    // filesystem cleanup is best-effort — the DB is already consistent
-    console.error(`Failed to delete file at ${filePath}:`, err);
-  }
+  return uploadUrlToPath(logoUrl, ORGANIZATION_LOGO_URL_PREFIX, "organizations");
 }
 
 interface ListOrganizationsQuery {

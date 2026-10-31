@@ -1,232 +1,300 @@
-# Plan: Advisory System (Backend) and Migration of Existing Reason Codes
+# Backend Plan: League Dropdown Endpoint
 
 ## 1. Goal
 
-Introduce one shared, structured shape for "reasons and warnings" returned by the API, and migrate every place that currently returns a raw reason code to it.
+Add one read-only endpoint that returns leagues as dropdown items, so the admin panel and the app can let a user pick a league (for example, the league selector on the group-management page).
 
-Today the frontend hardcodes Persian text for raw codes (`OWN_ROW`, `TOO_OLD`, `FINISHED`, ...). After this plan the backend sends the code, a severity, a ready-to-display Persian message, and params.
-
-**Out of scope:** groups (Stage 2). It resumes after this plan is done and will use the advisory system from day one.
-
-**Compatibility decision:** the raw fields are **replaced**, not kept alongside. This is a breaking change; backend and frontend (admin panel + PWA) ship together.
+- **Route:** `GET /api/v1/dropdowns/leagues`
+- **Access:** any authenticated user (`verifyJWT`), like the other dropdowns.
+- **Scope:** read-only. No writes, no new permission, no new table, no migration.
 
 ---
 
-## 2. Contract
+## 2. Decisions
 
-```ts
-type AdvisorySeverity = "INFO" | "WARNING" | "BLOCKER";
-
-interface Advisory<C extends string = string> {
-  code: C;                       // stable, for frontend logic (icon, color, filtering)
-  severity: AdvisorySeverity;
-  message: string;               // Persian, from message.ts, ready to display
-  params: Record<string, string | number | boolean | null>;
-}
-```
-
-Severity meaning:
-
-| Severity | Meaning |
-|---|---|
-| `INFO` | Informational, nothing is wrong |
-| `WARNING` | Allowed and saved, but incomplete or suspicious |
-| `BLOCKER` | Prevents an action the user is looking at (edit, toggle, add) |
-
-Field naming rules (applies to every endpoint from now on):
-
-- A list of general warnings is always named **`issues: Advisory[]`**; when empty it is `[]`, never `null` and never omitted.
-- A single reason attached to one concern is a **nullable `Advisory`** named after the concern (`lock`, `toggleLock`, `ineligibility`); `null` means "no reason".
-- `can` flags stay as they are. They answer "may I?"; advisories answer "why not / what is wrong?".
-
-Principles:
-
-1. An advisory is **output data**, not middleware, an event, or a stored record. No tables.
-2. Real enforcement stays in services via `AppError` (403/409). Rules stay pure and return **internal codes**; the advisory is built at the response boundary (mapper). The same pure rule can later both warn and block (the same code feeds `AppError` and `Advisory`).
-3. Each module owns its code union; the shared file stays generic.
-4. All message text lives in `src/language/message.ts` (project convention). Where an advisory has the same meaning as an existing error message, **reuse the same Persian text** instead of writing a second one.
+| # | Topic | Decision |
+|---|---|---|
+| 1 | Who can call it | Every logged-in user. The route sits under `dropdownsRoutes`, which already applies `verifyJWT`. |
+| 2 | Visibility of `INACTIVE` leagues | **Hidden from non-admins, visible to admins.** This matches the public league rules (`leaguePolicy.view`, `loadLeagueContext`). Without this, an `INACTIVE` league (a draft that has not been published) would leak to every user through the dropdown. |
+| 3 | Visibility of other statuses | `REGISTRATION`, `ACTIVE`, `FINISHED` are visible to everyone. |
+| 4 | Admin check | Read `req.adminLevel` from the token (set by `verifyJWT`). No database call is needed. |
+| 5 | Ordering | `id desc` (newest first), same as the league lists. |
+| 6 | Pagination | Standard `page` / `pageSize` (default 20, max 100), same as all dropdowns. |
+| 7 | Label | `"<league name> — <season name> — <age category name>"` (em dash with spaces). |
+| 8 | Search | Case-sensitive `contains` on the league name. The input is trimmed and Arabic `ي` / `ك` are mapped to Persian `ی` / `ک`, the same normalization used when league names are saved. |
+| 9 | Status filter | Optional `status`. It is intersected with the statuses the caller is allowed to see, so a non-admin asking for `status=INACTIVE` gets an empty list (not a 403). |
+| 10 | Cache | None. Same as the other dropdowns. |
 
 ---
 
-## 3. Stage A: Foundation
+## 3. API Contract
 
-### A1. `src/shared/advisory.ts` (new)
+### 3.1 Request
 
-- Types `AdvisorySeverity`, `Advisory<C>`.
-- Helper `makeAdvisory(code, severity, message, params = {})` returning an `Advisory`.
-- Helper `noIssues: Advisory[]` is **not** shared (avoid shared mutable arrays); callers return a fresh `[]`.
-- No Prisma, no `AppError`, no Express imports (pure, unit-testable).
+`GET /dropdowns/leagues?page=1&pageSize=20&search=...&seasonId=...&ageCategoryId=...&status=...`
 
-### A2. `src/language/message.ts`
-
-Add a new top-level section `advisory` (the rest of the file is untouched). It may contain functions because the file is `as const`:
-
-```ts
-advisory: {
-  format: {
-    finished: messages-equivalent text,
-    hasGames: ...,
-  },
-  leagueRoster: {
-    ownRow: ...,
-    managerOnly: ...,
-    birthDateMissing: ...,
-    tooOld: ...,
-    inOtherTeam: ...,
-  },
-}
-```
-
-Rules:
-
-- Static strings reuse the exact Persian text of the matching error where one exists (`league.finishedLocked`, `leagueFormat.locked`, `leagueRoster.ownRowLocked`, `leagueRoster.headCoachRowManagerOnly`, `leagueRoster.birthDateRequired`, `leagueRoster.ageIneligible`, `leagueRoster.playerInOtherTeam`). To avoid duplicated strings, the advisory entry should reference the error entry (`advisory.x: error.y`) or the error should be the single definition.
-- Parameterized texts use function templates, e.g. `(name: string, min: number) => ...`. None are needed for the migration below; the mechanism exists for Stage 2.
-
-### A3. Swagger
-
-In `src/swagger/helpers.ts` (or a new `src/swagger/advisory.docs.ts`):
-
-- `advisorySchema` registered as `"Advisory"` with `code`, `severity` (enum), `message`, `params`.
-- Helper `advisoryCodeSchema(codes)` or per-module enums so each endpoint documents its possible codes.
-- Short note in `*.docs.ts` descriptions: "`issues` is always present; empty array means no issues."
-
-### A4. Tests (`tsx --test`)
-
-- `src/shared/advisory.test.ts`: `makeAdvisory` shape, default `params`.
-- Per-module builder tests (see stages B and C): every code maps to the expected severity and message, and unknown inputs are not possible by type.
-
----
-
-## 4. Stage B: Migrate league format lock
-
-**Current:** `GET/PUT /admin/leagues/:leagueId/format` returns `lockReason: "FINISHED" | "HAS_GAMES" | null`.
-
-| File | Change |
-|---|---|
-| `competition/format/lib/format.rules.ts` | Keep `FormatLockReason` as the **internal** code type |
-| `competition/format/lib/format.advisories.ts` (new) | `buildFormatLock(reason): Advisory<FormatLockReason> \| null` (`FINISHED` and `HAS_GAMES` are both `BLOCKER`) |
-| `competition/format/admin/format.admin.service.ts` | `getLockReason` unchanged; `toFormatResponse` returns `lock: buildFormatLock(...)` instead of `lockReason` |
-| `competition/format/admin/format.admin.docs.ts` | Replace `lockReason` schema with `lock: advisorySchema.nullable()`; document codes |
-| `docs/modules/competition.md`, `docs/modules/competition-structure.md` | Replace `lockReason` wording with `lock` advisory |
-
-Response field change:
-
-```diff
-- "lockReason": "FINISHED"
-+ "lock": { "code": "FINISHED", "severity": "BLOCKER", "message": "...", "params": {} }
-```
-
-The 409 error on `PUT` (`league.finishedLocked`) is unchanged.
-
----
-
-## 5. Stage C: Migrate league roster reasons
-
-Two raw reason fields live on roster candidates (`GET .../members/candidates`, public app and admin variants):
-
-- `toggleLockReason: "OWN_ROW" | "MANAGER_ONLY" | null`
-- `ineligibleReason: "BIRTH_DATE_MISSING" | "TOO_OLD" | "IN_OTHER_TEAM" | null`
-
-### C1. Code and severity mapping
-
-| Old field | Code | Severity | Message source |
+| Query param | Type | Required | Notes |
 |---|---|---|---|
-| `toggleLockReason` | `OWN_ROW` | `BLOCKER` | `leagueRoster.ownRowLocked` |
-| `toggleLockReason` | `MANAGER_ONLY` | `BLOCKER` | `leagueRoster.headCoachRowManagerOnly` |
-| `ineligibleReason` | `BIRTH_DATE_MISSING` | `BLOCKER` | `leagueRoster.birthDateRequired` |
-| `ineligibleReason` | `TOO_OLD` | `BLOCKER` | `leagueRoster.ageIneligible` |
-| `ineligibleReason` | `IN_OTHER_TEAM` | `BLOCKER` | `leagueRoster.playerInOtherTeam` |
+| `page` | int ≥ 1 | no (default 1) | from `paginationQuerySchema` |
+| `pageSize` | int 1–100 | no (default 20) | from `paginationQuerySchema` |
+| `search` | string | no | name contains, normalized (see decision 8) |
+| `seasonId` | positive int | no | filters through `ageCategoryCutoff.seasonId` |
+| `ageCategoryId` | positive int | no | filters through `ageCategoryCutoff.ageCategoryId` |
+| `status` | enum | no | one of `INACTIVE`, `REGISTRATION`, `ACTIVE`, `FINISHED` |
 
-### C2. New response fields (replacing the old ones)
+### 3.2 Response (`200`)
 
-| Old | New |
+Uses the standard envelope `{ statusCode, message, data }` with `data` shaped as `paginatedResponseSchema(leagueDropdownItemSchema)`:
+
+```json
+{
+  "statusCode": 200,
+  "message": "فهرست با موفقیت دریافت شد",
+  "data": {
+    "items": [
+      {
+        "value": 3,
+        "label": "لیگ برتر نوجوانان — فصل ۱۴۰۵ — نوجوانان",
+        "status": "REGISTRATION",
+        "seasonId": 2,
+        "ageCategoryId": 1
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
+Item fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `value` | number | league id |
+| `label` | string | display text (decision 7) |
+| `status` | enum | league status, so the UI can color or group items |
+| `seasonId` | number | lets the UI filter or group without a second request |
+| `ageCategoryId` | number | same reason as `seasonId` |
+
+### 3.3 Errors
+
+| Code | When |
 |---|---|
-| `toggleLockReason` | `toggleLock: Advisory \| null` |
-| `ineligibleReason` | `ineligibility: Advisory \| null` |
+| `400` | invalid query (for example `pageSize=500`, `status=DRAFT`), via `validate` |
+| `401` | missing or invalid access token |
 
-`canToggle`, `eligible`, `selected` stay unchanged (the frontend keeps using booleans for logic and shows the advisory text as the reason).
+No `403` and no `404` on this endpoint.
 
-### C3. File changes
+---
+
+## 4. Files to Change
+
+All paths are under `src/modules/shared/dropdowns/`.
 
 | File | Change |
 |---|---|
-| `leagues/lib/league.advisories.ts` (new) | `buildToggleLock(reason: LockReason)` and `buildIneligibility(reason)`; both return `Advisory \| null` |
-| `leagues/leagues.policy.ts` | **No change** to `RosterRowDecision` / `LockReason` (pure policy keeps returning codes). `lockReasonMessage` stays for 403 errors |
-| `leagues/lib/league.rules.ts` | **No change** (`isPlayerAgeEligible` keeps returning codes) |
-| `leagues/lib/league.candidates.ts` | `mapCandidate` passes codes to builders; the string `"IN_OTHER_TEAM"` becomes a typed code; `CandidateExtras` carries advisories |
-| `leagues/lib/league.mapper.ts` | `CandidateExtras` and `toCandidateItem` output `toggleLock` and `ineligibility`; drop `toggleLockReason` / `ineligibleReason` |
-| `leagues/leagues.docs.ts` | `leagueCandidateSchema`: replace the two fields with advisory schemas and list the codes |
-| `leagues/admin/league-team/league-teams.admin.docs.ts` | Inherits via `.extend`; verify the generated `AdminLeagueCandidate` schema |
-| `docs/modules/leagues.md` | Update the candidates bullet (`toggleLockReason` → `toggleLock`, etc.) |
-| `docs/09-authorization.md` | Note that `can` flags are paired with advisory reasons |
+| `dropdowns.validation.ts` | Add `leagueDropdownQuerySchema` = `dropdownSearchQuerySchema.extend({ seasonId, ageCategoryId, status })`. Export it in the default object. |
+| `lib/league-dropdown.rules.ts` (new) | Pure helpers, no Prisma and no Express: `allowedLeagueStatuses(isAdmin, requested?)` and `buildLeagueLabel({ name, seasonName, ageCategoryName })`. |
+| `lib/league-dropdown.rules.test.ts` (new) | Unit tests (see section 6). |
+| `dropdowns.service.ts` | Add `getLeaguesDropdown(query, { isAdmin })`. Builds the `where`, runs `findMany` and `count` in one `$transaction`, maps rows to items. |
+| `dropdowns.controller.ts` | Add `getLeagues`. Reads `req.validatedQuery` and `req.adminLevel`, calls the service, responds with `sendDropdown`. |
+| `dropdowns.routes.ts` | Add `router.get("/leagues", validate(leagueDropdownQuerySchema, "query"), dropdownsController.getLeagues)`. |
+| `dropdowns.docs.ts` | Add a `registerPath` for `GET /dropdowns/leagues` with `bearerAuth`, the query schema, and the `200` / `400` / `401` responses. Add `leagueDropdownItemSchema` with `.openapi("LeagueDropdownItem")`. |
 
-Error paths that must not change: `loadAddableRows` (403 via `lockReasonMessage`), `assertPlayersEligible` (400/409), `throwDenial`. Advisory text and error text must stay identical by sharing the message source (see A2).
+No change to `schema.prisma`, no migration, no new permission, no new message key (use `messages.success.dropdown.fetched`).
 
 ---
 
-## 6. Stage D: Audit for any other raw reason codes
+## 5. Implementation Details
 
-Before closing the work, grep for other raw reason-style fields and classify each:
+### 5.1 Pure helpers (`lib/league-dropdown.rules.ts`)
 
-- `grep -rn "Reason" src/modules` (e.g. `lockReason`, `ineligibleReason`, `toggleLockReason`, `LockReason`, `Denial`).
-- `Denial` in `leagues.policy.ts` is an **internal** code mapped to `AppError`; it is not exposed in a response and stays as is.
-- Anything exposed in a JSON response as a bare code string joins this migration; anything internal stays.
+```ts
+import type { LeagueStatus } from "../../../../prisma/generated/prisma/enums.ts";
 
-Expected result: only the three fields above are exposed raw codes, so no further migration is needed.
+const ALL_STATUSES: LeagueStatus[] = ["INACTIVE", "REGISTRATION", "ACTIVE", "FINISHED"];
+const PUBLIC_STATUSES: LeagueStatus[] = ["REGISTRATION", "ACTIVE", "FINISHED"];
+
+// Statuses the caller may see, narrowed by the optional requested status.
+// Returns [] when the request asks for a status the caller may not see.
+export function allowedLeagueStatuses(isAdmin: boolean, requested?: LeagueStatus): LeagueStatus[] {
+  const base = isAdmin ? ALL_STATUSES : PUBLIC_STATUSES;
+  if (!requested) return base;
+  return base.includes(requested) ? [requested] : [];
+}
+
+export function buildLeagueLabel(input: {
+  name: string;
+  seasonName: string;
+  ageCategoryName: string;
+}): string {
+  return `${input.name} — ${input.seasonName} — ${input.ageCategoryName}`;
+}
+```
+
+Adjust the import path to the actual depth of the `lib` folder.
+
+### 5.2 Service (`dropdowns.service.ts`)
+
+```ts
+async function getLeaguesDropdown(
+  query: LeagueDropdownQuery,
+  requester: { isAdmin: boolean },
+) {
+  const statuses = allowedLeagueStatuses(requester.isAdmin, query.status);
+  const search = normalizeSearch(query.search); // trim + ي/ك mapping, undefined if empty
+
+  const where: Prisma.LeagueWhereInput = {
+    status: { in: statuses },
+    ...(search ? { name: { contains: search } } : {}),
+    ...(query.seasonId || query.ageCategoryId
+      ? {
+          ageCategoryCutoff: {
+            ...(query.seasonId ? { seasonId: query.seasonId } : {}),
+            ...(query.ageCategoryId ? { ageCategoryId: query.ageCategoryId } : {}),
+          },
+        }
+      : {}),
+  };
+
+  const [items, total] = await prisma.$transaction([
+    prisma.league.findMany({
+      where,
+      orderBy: { id: "desc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        ageCategoryCutoff: {
+          select: {
+            seasonId: true,
+            ageCategoryId: true,
+            season: { select: { name: true } },
+            ageCategory: { select: { name: true } },
+          },
+        },
+      },
+    }),
+    prisma.league.count({ where }),
+  ]);
+
+  return {
+    items: items.map((l) => ({
+      value: l.id,
+      label: buildLeagueLabel({
+        name: l.name,
+        seasonName: l.ageCategoryCutoff.season.name,
+        ageCategoryName: l.ageCategoryCutoff.ageCategory.name,
+      }),
+      status: l.status,
+      seasonId: l.ageCategoryCutoff.seasonId,
+      ageCategoryId: l.ageCategoryCutoff.ageCategoryId,
+    })),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
+  };
+}
+```
+
+Notes:
+
+- `status: { in: [] }` returns no rows in Prisma, which gives the empty result for decision 9 without a special branch.
+- Only the fields needed for the label are selected. Do not reuse `leagueInclude`; it also counts teams, which a dropdown does not need.
+- `normalizeSearch` should be the same helper that the league-name normalization uses. If it lives in `age-categories` or `leagues` validation, move it to `src/utils/` so both modules share one function. Do not copy it.
+
+### 5.3 Controller (`dropdowns.controller.ts`)
+
+```ts
+async function getLeagues(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = req.validatedQuery as LeagueDropdownQuery;
+    const result = await dropdownsService.getLeaguesDropdown(query, {
+      isAdmin: req.adminLevel != null,
+    });
+    return sendDropdown(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+```
+
+Use `req.validatedQuery` directly, because the route always runs `validate`.
+
+### 5.4 Route (`dropdowns.routes.ts`)
+
+```ts
+router.get(
+  "/leagues",
+  validate(dropdownsValidation.leagueDropdownQuerySchema, "query"),
+  dropdownsController.getLeagues,
+);
+```
+
+The router-level `verifyJWT` already covers it. Place it with the other dropdown routes.
+
+### 5.5 Swagger (`dropdowns.docs.ts`)
+
+- `security: [{ bearerAuth: [] }]`, same as the other dropdowns.
+- Description: "Searchable list of leagues for dropdowns. Non-admin callers never receive `INACTIVE` leagues. Admins receive all statuses."
+- Responses: `200` (paginated `LeagueDropdownItem`), `400`, `401`.
 
 ---
 
-## 7. Stage E: Conventions and documentation
+## 6. Tests
 
-- `docs/08-conventions.md`: add an "Advisories" section: contract, severity meaning, `issues` naming, "rules return codes, mappers build advisories", "reuse error message text".
-- `docs/06-utilities.md`: add rows for `Advisory` / `makeAdvisory` (`src/shared/advisory.ts`).
-- `docs/03-project-structure.md`: mention `shared/advisory.ts`.
-- `docs/status/current-state.md`: add a "Known Issues Fixed" line for the advisory migration.
-- Update Swagger descriptions on every migrated endpoint.
+Add `lib/league-dropdown.rules.test.ts` using `node:test`, like the existing rule tests:
+
+- `allowedLeagueStatuses(false)` → `REGISTRATION`, `ACTIVE`, `FINISHED` (no `INACTIVE`).
+- `allowedLeagueStatuses(true)` → all four statuses.
+- `allowedLeagueStatuses(false, "INACTIVE")` → `[]`.
+- `allowedLeagueStatuses(false, "ACTIVE")` → `["ACTIVE"]`.
+- `allowedLeagueStatuses(true, "INACTIVE")` → `["INACTIVE"]`.
+- `buildLeagueLabel` joins with ` — ` in the right order.
+
+Manual checks (Swagger or Postman):
+
+1. Non-admin token: the response has no `INACTIVE` items, even with no status filter.
+2. Non-admin token with `status=INACTIVE`: `items: []`, `total: 0`.
+3. Admin token: `INACTIVE` leagues appear.
+4. `search=برتر` matches a name that contains `برتر`, and a name written with Arabic `ي` still matches after normalization.
+5. `seasonId` and `ageCategoryId` filter correctly, and together they narrow the result.
+6. `pageSize=101` → `400`. No token → `401`.
+7. Order is `id desc`.
 
 ---
 
-## 8. Breaking-change rollout
+## 7. Documentation Updates
 
-All changes are in one backend release, coordinated with admin panel and PWA releases.
-
-| Endpoint(s) | Frontend change |
+| File | Change |
 |---|---|
-| `GET/PUT /admin/leagues/:leagueId/format` | Read `lock.message` / `lock.code` instead of mapping `lockReason` |
-| `GET /leagues/:leagueId/teams/:leagueTeamId/members/candidates` | `toggleLockReason` → `toggleLock`; `ineligibleReason` → `ineligibility`; display `.message` directly |
-| `GET /admin/leagues/:leagueId/teams/:leagueTeamId/members/candidates` | Same as above |
-
-Frontend work: build one shared component that renders an `Advisory` (color/icon by `severity`, text from `message`), and remove all hardcoded reason-text maps.
+| `docs/modules/shared.md` | Add `GET /dropdowns/leagues` under `dropdowns`: any authenticated user, `INACTIVE` hidden from non-admins, label format. |
+| `docs/status/current-state.md` | Note that the league dropdown is done (backend). |
+| `docs/status/roadmap.md` | No change needed unless you want to track the frontend selector separately. |
 
 ---
 
-## 9. Implementation order
+## 8. Frontend Notes (no backend change)
 
-1. A1 → A2 → A3 → A4 (foundation, no behavior change).
-2. Stage B (format) with tests.
-3. Stage C (roster candidates) with tests.
-4. Stage D audit.
-5. Stage E docs.
-6. Smoke test through Swagger: format `GET/PUT` for a `FINISHED` league; candidates for manager, head coach, regular coach, and player roles (each lock and ineligibility code).
-
-Each step is independently mergeable except the frontend-visible breaking changes in B and C, which should be released together.
+- Use `search` with a debounce (for example 300 ms) for the autocomplete.
+- Store the chosen league id in the URL (`?leagueId=`), as agreed for the group page.
+- Show `status` as a small badge next to the label if you want to distinguish drafts (admin only sees them) and finished leagues.
+- The same endpoint can feed any other league selector in the admin panel and the app.
 
 ---
 
-## 10. Acceptance checklist
+## 9. Acceptance Checklist
 
-- [ ] `src/shared/advisory.ts` exists with types, `makeAdvisory`, and tests.
-- [ ] `message.ts` has an `advisory` section; no advisory text is written inline in code; no duplicate Persian strings.
-- [ ] No response exposes `lockReason`, `toggleLockReason`, or `ineligibleReason`.
-- [ ] Every migrated field is `Advisory | null`; every list-level warning field would be named `issues` and never `null`.
-- [ ] 403/409/400 errors behave exactly as before (same messages and status codes).
-- [ ] Swagger documents `Advisory` and all codes per endpoint.
-- [ ] Docs updated; groups work (Stage 2) is unblocked and uses `issues: Advisory[]`.
-
----
-
-## 11. Open points to confirm before coding
-
-1. **Field names:** `lock`, `toggleLock`, `ineligibility` (proposed above). Change now if you prefer other names, since they are breaking.
-2. **Severity of row locks:** all roster reasons are `BLOCKER` in this plan; `INFO` is kept for non-blocking notices introduced later.
-3. **Where builders live:** per-module `lib/*.advisories.ts` (proposed) versus one central file. Per-module keeps codes owned by their module and respects the one-directional dependency rule.
+- [ ] `GET /dropdowns/leagues` works for any logged-in user and returns `401` without a token.
+- [ ] Non-admins never receive `INACTIVE` leagues, with or without a filter.
+- [ ] Admins receive all statuses.
+- [ ] `label` follows `name — season — age category`.
+- [ ] `search` is trimmed and Arabic/Persian letters are normalized.
+- [ ] `seasonId`, `ageCategoryId`, and `status` filters work, alone and combined.
+- [ ] Results are ordered by `id desc` and paginated.
+- [ ] Swagger documents the endpoint and its responses.
+- [ ] Unit tests for the pure helpers pass.
+- [ ] Shared module docs and current-state are updated.

@@ -8,6 +8,10 @@ League management: leagues linked to an age-category cutoff (season + category d
 
 - `League` — name (unique per cutoff), `ageCategoryCutoffId`, status (`INACTIVE`/`REGISTRATION`/`ACTIVE`/`FINISHED`), dates, roster deadline.
 - `LeagueTeam` — registration of a team in a league (soft-delete via `DELETED`).
+  `Group` / `GroupTeam` live in `competition/groups` (see
+  `competition.md`): one group per league team; unregister hard-deletes the
+  `GroupTeam` row (re-registration starts unassigned); deleting a group
+  unassigns its teams; deleting a league deletes groups first.
 - `LeagueTeamMember` — selection of a `TeamSeasonMember` into a league roster (soft-delete).
 
 ## Sub-modules
@@ -36,6 +40,7 @@ League management: leagues linked to an age-category cutoff (season + category d
 - `GET /leagues/me` returns `{ league, myRoles, myTeamsCount }` (DB-paginated, no teams); per-league teams come from `GET /leagues/:leagueId/my-teams`.
 - Candidates are ordered selected → head coach → coaches → players (two-phase paging) and expose `leagueTeamMemberId`, `canToggle`, `toggleLock`, `eligible` and `ineligibility`; public members are ordered head coach → coaches → players → jersey. `toggleLock` and `ineligibility` are `Advisory` objects (`{code, severity, message, params}`) built by `lib/league.advisories.ts` from the internal policy/rule codes; `null` means "no specific reason" (e.g. a view-only role gets `canToggle: false` with `toggleLock: null`). Candidates list (`GET /leagues/:leagueId/teams/:leagueTeamId/members/candidates`) is viewable by any ACTIVE member of that league team (manager, head coach, coach, player); only outsiders (`rosterRole === null`) get 403 — regular coaches/players get `canToggle: false` rows.
 - Public roster (`GET /leagues/:leagueId/teams/:leagueTeamId/members`) is genuinely public (no ownership check) and exposes safe fields only; admin variants add phone + birth date.
+- League-team list and detail apply a FINISHED exception: non-FINISHED reads filter `team.status != DELETED`, while FINISHED reads include DELETED teams and surface `teamStatus` (list) / `team.status` (detail) plus the `group` field (`{ id, name } | null`) so the frontend can render deleted teams differently.
 - Roster candidates are paginated (`page`/`pageSize`/`total`).
 
 ## Relationships with other modules

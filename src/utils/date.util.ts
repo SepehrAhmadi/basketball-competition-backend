@@ -32,6 +32,15 @@ export function jalaliToGregorianOrNull(
   return jalaliToGregorian(value);
 }
 
+// Patch semantics: undefined → leave unchanged, null → clear, string → Jalali → Date
+export function jalaliPatchValue(
+  value: string | null | undefined,
+): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return jalaliToGregorian(value);
+}
+
 export function sameDate(a: Date | null, b: Date | null): boolean {
   return (a?.getTime() ?? null) === (b?.getTime() ?? null);
 }

@@ -10,6 +10,7 @@ import {
   dropdownSearchQuerySchema,
   teamsDropdownQuerySchema,
   usersDropdownQuerySchema,
+  adminLeagueDropdownQuerySchema,
 } from "./dropdowns.validation.ts";
 
 const valueLabelItemSchema = z
@@ -42,7 +43,22 @@ const userDropdownItemSchema = idLabelItemSchema
   .extend({ roles: z.array(z.string()).openapi({ example: ["COACH"] }) })
   .openapi("UserDropdownItem");
 
+const leagueDropdownItemSchema = z
+  .object({
+    value: z.number().openapi({ example: 3 }),
+    label: z
+      .string()
+      .openapi({ example: "لیگ برتر نوجوانان — فصل ۱۴۰۵ — نوجوانان" }),
+    status: z
+      .enum(["INACTIVE", "REGISTRATION", "ACTIVE", "FINISHED"])
+      .openapi({ example: "REGISTRATION" }),
+    seasonId: z.number().openapi({ example: 2 }),
+    ageCategoryId: z.number().openapi({ example: 1 }),
+  })
+  .openapi("LeagueDropdownItem");
+
 const unauthorizedError = errorResponseSchema(401, "Unauthorized");
+const forbiddenError = errorResponseSchema(403, "Forbidden");
 
 function registerStaticDropdown(path: string, summary: string, itemName: string) {
   registry.registerPath({
@@ -185,6 +201,46 @@ registry.registerPath({
     "401": {
       description: "Missing or invalid access token",
       content: { "application/json": { schema: unauthorizedError } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/dropdowns/admin/leagues",
+  tags: ["Dropdowns"],
+  summary: "League options (admin)",
+  description:
+    "Searchable id/label list of leagues for admin selectors. Returns every status, including INACTIVE drafts. Admin or super admin only.",
+  security: [{ bearerAuth: [] }],
+  request: { query: adminLeagueDropdownQuerySchema },
+  responses: {
+    "200": {
+      description: "League options",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(
+            paginatedResponseSchema(leagueDropdownItemSchema),
+            { messageExample: messages.success.dropdown.fetched },
+          ),
+        },
+      },
+    },
+    "400": {
+      description: "Invalid query",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(400, "pageSize: Too big"),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: { "application/json": { schema: unauthorizedError } },
+    },
+    "403": {
+      description: "Caller is not an admin",
+      content: { "application/json": { schema: forbiddenError } },
     },
   },
 });

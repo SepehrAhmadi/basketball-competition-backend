@@ -26,8 +26,10 @@
 ## Leagues
 
 - `League` — belongs to `AgeCategoryCutoff` (season + category derived, no `seasonId` column); name unique per cutoff; status `INACTIVE`/`REGISTRATION`/`ACTIVE`/`FINISHED` (default `INACTIVE`); dates + `rosterDeadline` as `@db.Date`; competition settings `format` (`LeagueFormat?`), `winPoints` (default 2), `lossPoints` (default 1), `groupRoundType` (`GroupRoundType?`) and `defaultQualifiersPerGroup` (Int?).
-- `LeagueTeam` — registration join `League`–`Team`, unique `[leagueId, teamId]`; soft-delete via `DELETED` (reactivation starts with an empty roster).
+- `LeagueTeam` — registration join `League`–`Team`, unique `[leagueId, teamId]`; soft-delete via `DELETED` (reactivation starts with an empty roster); has optional `groupTeam` back-relation.
 - `LeagueTeamMember` — league roster selection of `TeamSeasonMember`, unique `[leagueTeamId, teamSeasonMemberId]`, index on `teamSeasonMemberId`; soft-delete via `DELETED`.
+- `Group` (`league_groups`) — group of a league: `leagueId`, unique `leagueId`+`name`, `qualifiersOverride`; has `teams` relation.
+- `GroupTeam` (`league_group_teams`) — placement join `Group`–`LeagueTeam`: `groupId` (index), unique `leagueTeamId` (one group per league team).
 
 ## Key decisions
 
@@ -35,7 +37,8 @@
 - Coaches are seasonal roster members via unified `TeamSeasonMember` (`role` enum, `isHeadCoach`, `jerseyNumber`), not a separate `team_coaches` table.
 - `Season` is standalone; a league's season is derived through its cutoff (`league.ageCategoryCutoff.season`).
 - League roster is a selection of `TeamSeasonMember` rows, not a copy; jersey numbers stay on the team roster.
-- Format is a setting on `League`, not a separate entity: `LeagueFormat` (`GROUPS_KNOCKOUT`, `SINGLE_GROUP_KNOCKOUT`, `KNOCKOUT_ONLY`) with `GroupRoundType` (`ONE_ROUND`, `DOUBLE_ROUND`). `format = null` means the structure is not configured yet; group fields are non-null only for group formats; `winPoints`/`lossPoints` are always stored. Number of groups and per-group qualifier overrides belong to future `Group` rows.
+- Format is a setting on `League`, not a separate entity: `LeagueFormat` (`GROUPS_KNOCKOUT`, `SINGLE_GROUP_KNOCKOUT`, `KNOCKOUT_ONLY`) with `GroupRoundType` (`ONE_ROUND`, `DOUBLE_ROUND`). `format = null` means the structure is not configured yet; group fields are non-null only for group formats; `winPoints`/`lossPoints` are always stored. Groups are `Group` rows with per-group `qualifiersOverride`; placement is manual via `GroupTeam` (upsert assign/move, `DELETE` remove). Unregister hard-deletes the `GroupTeam` row, so re-registration starts unassigned and restores never leak the old group. Deleting a group unassigns its teams first; deleting a league deletes groups first (`P2003` otherwise).
 - No `Game`, series, or `player_game_stats` tables exist yet; media is URL strings (`avatarUrl`, `photoUrl`, `logoUrl`), not a table.
+- Teams in `REGISTRATION`/`ACTIVE` leagues cannot be soft-deleted (409 `inOpenLeague`, no admin bypass); responses carry a `BLOCKER` `lock` and `can.delete` is derived as `policy.delete && !locked`.
 
 See `src/prisma/schema.prisma` for exact fields, uniques, and relations.

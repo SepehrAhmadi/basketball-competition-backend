@@ -260,12 +260,13 @@ async function getLeagueTeamDetail(
   actor: Actor,
 ) {
   const league = await loadLeagueContext(leagueId, actor);
+  const includeDeleted = league.status === "FINISHED";
   const leagueTeam = await prisma.leagueTeam.findFirst({
     where: {
       id: leagueTeamId,
       leagueId,
       status: "ACTIVE",
-      team: { status: { not: "DELETED" } },
+      ...(includeDeleted ? {} : { team: { status: { not: "DELETED" } } }),
     },
     include: {
       team: {
@@ -273,8 +274,12 @@ async function getLeagueTeamDetail(
           id: true,
           name: true,
           logoUrl: true,
+          status: true,
           organization: { select: { id: true, name: true } },
         },
+      },
+      groupTeam: {
+        select: { group: { select: { id: true, name: true } } },
       },
     },
   });
@@ -313,8 +318,10 @@ async function getLeagueTeamDetail(
       id: leagueTeam.team.id,
       name: leagueTeam.team.name,
       logoUrl: getPublicFileUrl(leagueTeam.team.logoUrl, process.env.BASE_URL),
+      ...(includeDeleted ? { status: leagueTeam.team.status } : {}),
     },
     organization: leagueTeam.team.organization,
+    group: leagueTeam.groupTeam?.group ?? null,
     counts: { coaches, players },
     myRoles: rolesForTeam(actor, orgId, rows),
     can: leagueTeamPolicy(league, access),

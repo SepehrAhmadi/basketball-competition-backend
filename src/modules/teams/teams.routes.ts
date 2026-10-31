@@ -6,13 +6,8 @@ import createUploader from "../../middleware/upload/createUploader.ts";
 import uploadConfig from "../../config/upload.config.ts";
 import teamsValidation from "./teams.validation.ts";
 import teamsController from "./teams.controller.ts";
-import { paginationQuerySchema } from "../../shared/schemas.validation.ts";
 
 const router = Router();
-
-const listTeamsQuerySchema = paginationQuerySchema.extend({
-  organizationId: teamsValidation.createTeamSchema.shape.organizationId.optional(),
-});
 
 const teamLogoUploader = createUploader({
   destination: "team-logos",
@@ -25,7 +20,7 @@ router.get(
   "/",
   verifyJWT,
   attachActor,
-  validate(listTeamsQuerySchema, "query"),
+  validate(teamsValidation.listTeamsQuerySchema, "query"),
   teamsController.listTeams,
 );
 
@@ -97,7 +92,7 @@ router.put(
   "/:teamId/roster/:memberId",
   verifyJWT,
   attachActor,
-  validate(teamsValidation.teamIdParamSchema, "params"),
+  validate(teamsValidation.rosterMemberParamSchema, "params"),
   validate(teamsValidation.updateRosterMemberSchema),
   teamsController.updateRosterMember,
 );
@@ -106,7 +101,7 @@ router.delete(
   "/:teamId/roster/:memberId",
   verifyJWT,
   attachActor,
-  validate(teamsValidation.teamIdParamSchema, "params"),
+  validate(teamsValidation.rosterMemberParamSchema, "params"),
   validate(teamsValidation.removeRosterMemberSchema),
   teamsController.removeRosterMember,
 );

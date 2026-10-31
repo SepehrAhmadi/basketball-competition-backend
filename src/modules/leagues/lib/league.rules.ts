@@ -9,6 +9,13 @@ export const LEAGUE_STATUS_VALUES = [
 
 export type LeagueStatusValue = (typeof LEAGUE_STATUS_VALUES)[number];
 
+export function isLeagueFinished(status: LeagueStatus): boolean {
+  return status === "FINISHED";
+}
+
+/** League statuses in which a team's roster members are locked. */
+export const ROSTER_LOCKING_LEAGUE_STATUSES = ["ACTIVE", "FINISHED"] as const;
+
 export function isRosterWindowOpen(
   rosterDeadline: Date | null,
   now: Date = new Date(),

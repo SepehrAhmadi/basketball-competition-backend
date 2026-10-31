@@ -7,9 +7,10 @@ import type {
   LeagueStatus,
 } from "../../../../prisma/generated/prisma/enums.ts";
 import {
+  evaluateFormatChange,
+  getFormatLockReason,
   normalizeFormatInput,
   type FormatInput,
-  type FormatLockReason,
 } from "../lib/format.rules.ts";
 import { buildFormatLock } from "../lib/format.advisories.ts";
 
@@ -33,12 +34,9 @@ type FormatRow = {
   defaultQualifiersPerGroup: number | null;
 };
 
-function getLockReason(status: LeagueStatus): FormatLockReason {
-  return status === "FINISHED" ? "FINISHED" : null;
-}
 
 function toFormatResponse(row: FormatRow) {
-  const lock = buildFormatLock(getLockReason(row.status));
+  const lock = buildFormatLock(getFormatLockReason(row.status));
   return {
     leagueId: row.id,
     format: row.format,
@@ -65,12 +63,21 @@ async function updateFormat(leagueId: number, input: FormatInput) {
     select: formatSelect,
   });
   if (!existing) throw new AppError(404, messages.error.league.notFound);
-  if (existing.status === "FINISHED")
+  if (getFormatLockReason(existing.status) === "FINISHED")
     throw new AppError(409, messages.error.league.finishedLocked);
+
+  const groupCount = await prisma.group.count({ where: { leagueId } });
+  const groupCheck = evaluateFormatChange(input.format, groupCount);
+  if (!groupCheck.allowed)
+    throw new AppError(
+      409,
+      groupCheck.reason === "HAS_GROUPS"
+        ? messages.error.leagueFormat.hasGroups
+        : messages.error.leagueFormat.tooManyGroups,
+    );
 
   // TODO(Game): block with a direct prisma.game.count({ where: { leagueId } })
   // > 0 → 409 messages.error.leagueFormat.locked once games exist (Stage 3).
-  // TODO(Group): block switching to KNOCKOUT_ONLY while groups exist (Stage 2).
 
   const data = normalizeFormatInput(input);
 

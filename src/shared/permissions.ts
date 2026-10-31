@@ -85,6 +85,15 @@ export const PERMISSION_CATALOG = [
       { code: "league-roster.delete", label: "حذف عضو از راستر لیگ" },
     ],
   },
+  {
+    title: "گروه‌ها",
+    permissions: [
+      { code: "groups.view", label: "مشاهده گروه‌ها" },
+      { code: "groups.create", label: "ایجاد گروه" },
+      { code: "groups.update", label: "ویرایش گروه" },
+      { code: "groups.delete", label: "حذف گروه" },
+    ],
+  },
 ] as const;
 
 // Union of the exact code literals — derived from the catalog itself (NOT from
@@ -114,6 +123,7 @@ const CROSS_RESOURCE_DEPENDENCIES: Readonly<Record<string, readonly Permission[]
   "roster.view": ["teams.view"],
   "league-teams.view": ["leagues.view"],
   "league-roster.view": ["league-teams.view"],
+  "groups.view": ["leagues.view", "league-teams.view"],
 };
 
 const PERMISSION_SET: ReadonlySet<string> = new Set(PERMISSION_CODES);

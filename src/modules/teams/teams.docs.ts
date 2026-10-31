@@ -5,13 +5,12 @@ import {
   errorResponseSchema,
   successResponseSchema,
 } from "../../swagger/helpers.ts";
-import {
-  paginatedResponseSchema,
-  paginationQuerySchema,
-} from "../../shared/schemas.validation.ts";
+import { advisorySchema } from "../../swagger/advisory.docs.ts";
+import { paginatedResponseSchema } from "../../shared/schemas.validation.ts";
 import {
   teamIdParamSchema,
   rosterMemberParamSchema,
+  listTeamsQuerySchema,
   rosterQuerySchema,
   createTeamSchema,
   updateTeamSchema,
@@ -88,7 +87,12 @@ export const teamCanSchema = z
   .object({
     view: z.boolean().openapi({ example: true }),
     edit: z.boolean().openapi({ example: false }),
-    delete: z.boolean().openapi({ example: false }),
+    delete: z.boolean().openapi({
+      example: false,
+      description:
+        "Derived as policy.delete && !locked: false when the team is in an " +
+        "open league (REGISTRATION or ACTIVE).",
+    }),
   })
   .openapi("TeamCan");
 
@@ -128,6 +132,12 @@ export const teamSchema = z
       })
       .optional(),
     can: teamCanSchema.optional(),
+    lock: z.union([advisorySchema, z.null()]).optional().openapi({
+      example: null,
+      description:
+        "Code `IN_OPEN_LEAGUE` (BLOCKER) when the team is registered in a " +
+        "league with status REGISTRATION or ACTIVE.",
+    }),
   })
   .openapi("Team");
 
@@ -166,9 +176,6 @@ const rosterResponseSchema = z
   })
   .openapi("TeamRoster");
 
-const listTeamsQuerySchema = paginationQuerySchema.extend({
-  organizationId: z.coerce.number().int().positive().optional(),
-});
 
 // ---- error schemas ----
 
@@ -404,7 +411,7 @@ registry.registerPath({
   path: "/teams/{teamId}",
   tags: ["Teams"],
   summary: "Delete a team",
-  description: "Soft-deletes a team (sets status to DELETED). Requires being a manager of the organization, or an ADMIN with team access.",
+  description: "Soft-deletes a team (sets status to DELETED). Requires being a manager of the organization, or an ADMIN with team access. Returns 409 when the team is registered in a league with status REGISTRATION or ACTIVE.",
   security: [{ bearerAuth: [] }],
   request: {
     params: teamIdParamSchema,
@@ -436,6 +443,14 @@ registry.registerPath({
       description: "Team not found",
       content: {
         "application/json": { schema: notFoundError() },
+      },
+    },
+    "409": {
+      description: "Team is registered in an open league (REGISTRATION or ACTIVE)",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(409, messages.error.team.inOpenLeague),
+        },
       },
     },
   },
@@ -544,7 +559,7 @@ registry.registerPath({
       description: "Duplicate coach, jersey number conflict, or head coach already exists",
       content: {
         "application/json": {
-          schema: errorResponseSchema(409, messages.error.team.headCoachConflict),
+          schema: errorResponseSchema(409, messages.error.team.memberAlreadyExists),
         },
       },
     },
@@ -557,7 +572,7 @@ registry.registerPath({
   tags: ["Teams"],
   summary: "Update a roster member",
   description:
-    "Update a team member's role, jersey number, or head coach status. Requires org manager, team head coach, team coach, or ADMIN. Regular coaches can only edit PLAYER entries and cannot promote a PLAYER into a COACH. Only one head coach is allowed per team per season.",  security: [{ bearerAuth: [] }],
+    "Update a team member's role, jersey number, or head coach status. Requires org manager, team head coach, team coach, or ADMIN. Regular coaches can only edit PLAYER entries and cannot promote a PLAYER into a COACH. A coach can only be added once per team per season. Set isHeadCoach to true to assign as head coach (only one per team per season); assigning a new head coach automatically demotes the previous one.",  security: [{ bearerAuth: [] }],
   request: {
     params: rosterMemberParamSchema,
     body: {
@@ -596,7 +611,7 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "Jersey number conflict or head coach already exists",
+      description: "Member already exists in this team and season, or jersey number conflict",
       content: {
         "application/json": {
           schema: errorResponseSchema(409, messages.error.team.headCoachAlreadyExists),

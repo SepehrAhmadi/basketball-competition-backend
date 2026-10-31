@@ -3,12 +3,16 @@ import validate from "../../../middleware/validate.ts";
 import verifyJWT from "../../../middleware/auth/verifyJWT.middleware.ts";
 import dropdownsValidation from "./dropdowns.validation.ts";
 import dropdownsController from "./dropdowns.controller.ts";
+import dropdownsAdminRoutes from "./admin/dropdowns.admin.routes.ts";
 
 const router = Router();
 
 // Authenticated reference data for filters/forms — no admin gate so every
 // logged-in client (admin panel + PWA) can populate dropdowns from the server.
 router.use(verifyJWT);
+
+// Admin-only lookups (drafts included).
+router.use("/admin", dropdownsAdminRoutes);
 
 router.get("/organization-statuses", dropdownsController.getOrganizationStatuses);
 router.get("/team-statuses", dropdownsController.getTeamStatuses);

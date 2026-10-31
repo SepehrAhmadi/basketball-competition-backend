@@ -103,6 +103,23 @@ async function getAgeCategories(req: Request, res: Response, next: NextFunction)
   }
 }
 
+async function getLeagues(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = (req.validatedQuery ?? req.query) as {
+      search?: string;
+      seasonId?: number;
+      ageCategoryId?: number;
+      status?: "INACTIVE" | "REGISTRATION" | "ACTIVE" | "FINISHED";
+      page: number;
+      pageSize: number;
+    };
+    const result = await dropdownsService.getLeaguesDropdown(query);
+    return sendDropdown(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   getOrganizationStatuses,
   getTeamStatuses,
@@ -112,4 +129,5 @@ export default {
   getSeasons,
   getUsers,
   getAgeCategories,
+  getLeagues,
 };

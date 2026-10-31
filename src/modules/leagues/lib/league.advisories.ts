@@ -21,29 +21,16 @@ export function buildToggleLock(
   return makeAdvisory(reason, "BLOCKER", message);
 }
 
+const INELIGIBILITY_MESSAGES: Record<IneligibilityReason, string> = {
+  BIRTH_DATE_MISSING: messages.advisory.leagueRoster.birthDateMissing,
+  TOO_OLD: messages.advisory.leagueRoster.tooOld,
+  IN_OTHER_TEAM: messages.advisory.leagueRoster.inOtherTeam,
+};
+
 /** Why a player cannot be added to this league's roster. */
 export function buildIneligibility(
   reason: IneligibilityReason | null,
 ): Advisory<IneligibilityReason> | null {
   if (reason === null) return null;
-  switch (reason) {
-    case "BIRTH_DATE_MISSING":
-      return makeAdvisory(
-        reason,
-        "BLOCKER",
-        messages.advisory.leagueRoster.birthDateMissing,
-      );
-    case "TOO_OLD":
-      return makeAdvisory(
-        reason,
-        "BLOCKER",
-        messages.advisory.leagueRoster.tooOld,
-      );
-    case "IN_OTHER_TEAM":
-      return makeAdvisory(
-        reason,
-        "BLOCKER",
-        messages.advisory.leagueRoster.inOtherTeam,
-      );
-  }
+  return makeAdvisory(reason, "BLOCKER", INELIGIBILITY_MESSAGES[reason]);
 }

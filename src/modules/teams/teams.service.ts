@@ -1,15 +1,17 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import prisma from "../../config/db.config.ts";
 import AppError from "../../utils/appError.ts";
 import { messages } from "../../language/message.ts";
 import getPublicFileUrl from "../../utils/getFileUrl.ts";
-import { jalaliToGregorian, gregorianToJalali } from "../../utils/date.util.ts";
+import { jalaliPatchValue } from "../../utils/date.util.ts";
+import { removeFileIfExists, uploadUrlToPath } from "../../utils/files.ts";
 import type { Actor } from "../../authz/actor.ts";
 import { assertAllowed } from "../../authz/assert.ts";
 import { organizationPolicy } from "../organizations/organizations.policy.ts";
-import { syncHeadCoachToRegistrationLeagues } from "../leagues/lib/league.head-coach-sync.ts";
+import {
+  syncHeadCoachToRegistrationLeagues,
+  type TransactionClient,
+} from "../leagues/lib/league.head-coach-sync.ts";
+import { ROSTER_LOCKING_LEAGUE_STATUSES } from "../leagues/lib/league.rules.ts";
 import {
   teamPolicy,
   rosterPolicy,
@@ -17,12 +19,13 @@ import {
   canManageMember,
   type RosterCan,
 } from "./teams.policy.ts";
+import {
+  assertTeamDeletable,
+  loadOpenLeagueTeamIds,
+} from "./lib/team.locks.ts";
+import { withTeamLock } from "./lib/team.access.ts";
+import { toPublicTeam } from "./lib/team.mapper.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// resolves to src/uploads — same root used by createUploader
-const UPLOADS_ROOT = path.join(__dirname, "..", "..", "..", "uploads");
 const TEAM_LOGO_URL_PREFIX = "/uploads/team-logos/";
 
 export interface CreateTeamInput {
@@ -39,29 +42,31 @@ export interface UpdateTeamInput {
   removeLogo?: boolean;
 }
 
-// Never delete arbitrary files based on the DB value — only resolve paths
-// that live under the team logo directory.
 function teamLogoUrlToPath(logoUrl: string | null | undefined): string | null {
-  if (!logoUrl || !logoUrl.startsWith(TEAM_LOGO_URL_PREFIX)) return null;
-  return path.join(UPLOADS_ROOT, "team-logos", path.basename(logoUrl));
+  return uploadUrlToPath(logoUrl, TEAM_LOGO_URL_PREFIX, "team-logos");
 }
 
 const baseUrl = process.env.BASE_URL;
-export function withPublicLogoUrl(team: { logoUrl: string | null; foundedDate: Date | null; [key: string]: any }) {
-  return {
-    ...team,
-    logoUrl: getPublicFileUrl(team.logoUrl, baseUrl),
-    foundedDate: gregorianToJalali(team.foundedDate),
-  };
-}
 
-function removeFileIfExists(filePath: string | null) {
-  if (!filePath) return;
-  try {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  } catch (err) {
-    console.error(`Failed to delete file at ${filePath}:`, err);
-  }
+
+// Head-coach uniqueness is not a DB constraint, so every path that sets a new
+// head coach demotes the previous one through this helper.
+async function demoteOtherHeadCoaches(
+  tx: TransactionClient,
+  teamId: number,
+  seasonId: number,
+  exceptMemberId?: number,
+) {
+  await tx.teamSeasonMember.updateMany({
+    where: {
+      teamId,
+      seasonId,
+      isHeadCoach: true,
+      status: "ACTIVE",
+      ...(exceptMemberId !== undefined && { id: { not: exceptMemberId } }),
+    },
+    data: { isHeadCoach: false },
+  });
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -125,7 +130,7 @@ async function isLockedByLeague(memberId: number): Promise<boolean> {
       status: "ACTIVE",
       leagueTeam: {
         status: "ACTIVE",
-        league: { status: { in: ["ACTIVE", "FINISHED"] } },
+        league: { status: { in: [...ROSTER_LOCKING_LEAGUE_STATUSES] } },
       },
     },
     select: { id: true },
@@ -163,11 +168,16 @@ async function listTeams(query: {
     prisma.team.count({ where }),
   ]);
 
+  const lockedIds = await loadOpenLeagueTeamIds(items.map((i) => i.id));
   return {
-    items: items.map((item) => ({
-      ...withPublicLogoUrl(item),
-      can: teamPolicy(actor, { organizationId: item.organizationId, teamId: item.id }),
-    })),
+    items: items.map((item) => {
+      const policy = teamPolicy(actor, { organizationId: item.organizationId, teamId: item.id });
+
+      return {
+        ...toPublicTeam(item),
+        ...withTeamLock(policy, lockedIds.has(item.id)),
+      };
+    }),
     total,
     page: query.page,
     pageSize: query.pageSize,
@@ -180,10 +190,10 @@ async function getTeamById(teamId: number, actor: Actor) {
     include: { organization: { select: { id: true, name: true } } },
   });
   if (!team) throw new AppError(404, messages.error.team.notFound);
-  const can = teamPolicy(actor, { organizationId: team.organizationId, teamId });
-  assertAllowed(can.view, messages.error.team.notAuthorized);
-  const result = withPublicLogoUrl(team);
-  return { ...result, can };
+  const policy = teamPolicy(actor, { organizationId: team.organizationId, teamId });
+  assertAllowed(policy.view, messages.error.team.notAuthorized);
+  const locked = (await loadOpenLeagueTeamIds([teamId])).has(teamId);
+  return { ...toPublicTeam(team), ...withTeamLock(policy, locked) };
 }
 
 // ─── Mutations (auth required) ────────────────────────────────────────────
@@ -199,26 +209,24 @@ async function createTeam(data: CreateTeamInput, actor: Actor, file?: Express.Mu
     throw err;
   }
 
-  const {
-    logoUrl: _ignoredLogoUrl,
-    removeLogo: _ignoredRemoveLogo,
-    ...safeData
-  } = data as CreateTeamInput & { logoUrl?: unknown; removeLogo?: unknown };
-
-  // Convert Jalali date string to Gregorian Date before persisting
-  const foundedDate = safeData.foundedDate != null
-    ? jalaliToGregorian(safeData.foundedDate)
-    : undefined;
-
   const logoUrl = file ? `${TEAM_LOGO_URL_PREFIX}${file.filename}` : undefined;
 
   try {
+    const foundedDate = jalaliPatchValue(data.foundedDate);
     const team = await prisma.team.create({
-      data: { ...safeData, ...(foundedDate != null && { foundedDate }), ...(logoUrl != null && { logoUrl }) },
+      data: {
+        organizationId: data.organizationId,
+        name: data.name,
+        ...(foundedDate !== undefined && { foundedDate }),
+        ...(logoUrl !== undefined && { logoUrl }),
+      },
     });
     return {
-      ...withPublicLogoUrl(team),
-      can: teamPolicy(actor, { organizationId: team.organizationId, teamId: team.id }),
+      ...toPublicTeam(team),
+      ...withTeamLock(
+        teamPolicy(actor, { organizationId: team.organizationId, teamId: team.id }),
+        false,
+      ),
     };
   } catch (err) {
     if (file) removeFileIfExists(file.path);
@@ -262,30 +270,30 @@ async function updateTeam(
     }
   }
 
-  const {
-    logoUrl: _ignoredLogoUrl,
-    removeLogo,
-    ...safeData
-  } = data as UpdateTeamInput & { logoUrl?: unknown; removeLogo?: boolean };
-
-  // Convert Jalali date string to Gregorian Date before persisting
-  const foundedDate = safeData.foundedDate != null
-    ? jalaliToGregorian(safeData.foundedDate)
-    : undefined;
-
   const newLogoUrl = file ? `${TEAM_LOGO_URL_PREFIX}${file.filename}` : undefined;
-  const shouldRemoveLogo = !file && removeLogo === true;
+  const shouldRemoveLogo = !file && data.removeLogo === true;
 
   let updated;
   try {
-    updated = await prisma.team.update({
-      where: { id: teamId },
-      data:
-        newLogoUrl !== undefined
-          ? { ...safeData, ...(foundedDate != null && { foundedDate }), logoUrl: newLogoUrl }
-          : shouldRemoveLogo
-            ? { ...safeData, ...(foundedDate != null && { foundedDate }), logoUrl: null }
-            : { ...safeData, ...(foundedDate != null && { foundedDate }) },
+    const foundedDate = jalaliPatchValue(data.foundedDate);
+    const teamData = {
+      ...(data.organizationId !== undefined && { organizationId: data.organizationId }),
+      ...(data.name !== undefined && { name: data.name }),
+      ...(foundedDate !== undefined && { foundedDate }),
+      ...(newLogoUrl !== undefined && { logoUrl: newLogoUrl }),
+      ...(shouldRemoveLogo && { logoUrl: null }),
+    };
+    const transferred =
+      data.organizationId !== undefined && data.organizationId !== team.organizationId;
+    updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.team.update({ where: { id: teamId }, data: teamData });
+      if (transferred) {
+        await tx.teamSeasonMember.updateMany({
+          where: { teamId },
+          data: { organizationId: result.organizationId },
+        });
+      }
+      return result;
     });
   } catch (err) {
     if (file) removeFileIfExists(file.path);
@@ -297,10 +305,9 @@ async function updateTeam(
     if (oldPath && oldPath !== file?.path) removeFileIfExists(oldPath);
   }
 
-  return {
-    ...withPublicLogoUrl(updated),
-    can: teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id }),
-  };
+  const locked = (await loadOpenLeagueTeamIds([teamId])).has(teamId);
+  const policy = teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id });
+  return { ...toPublicTeam(updated), ...withTeamLock(policy, locked) };
 }
 
 async function deleteTeam(teamId: number, actor: Actor) {
@@ -313,6 +320,7 @@ async function deleteTeam(teamId: number, actor: Actor) {
     teamPolicy(actor, { organizationId: team.organizationId, teamId }).delete,
     messages.error.team.notAuthorized,
   );
+  await assertTeamDeletable(teamId);
 
   return prisma.team.update({
     where: { id: teamId },
@@ -356,10 +364,9 @@ async function updateLogo(teamId: number, file: Express.Multer.File, actor: Acto
     if (oldPath && oldPath !== file.path) removeFileIfExists(oldPath);
   }
 
-  return {
-    ...withPublicLogoUrl(updated),
-    can: teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id }),
-  };
+  const locked = (await loadOpenLeagueTeamIds([teamId])).has(teamId);
+  const policy = teamPolicy(actor, { organizationId: updated.organizationId, teamId: updated.id });
+  return { ...toPublicTeam(updated), ...withTeamLock(policy, locked) };
 }
 
 // ─── Roster ────────────────────────────────────────────────────────────────
@@ -463,23 +470,17 @@ async function addRosterMember(
     assertCanAssignHeadCoach(addCan);
   }
 
-  // Validate team season exists
-  const season = await prisma.season.findFirst({
-    where: { id: data.seasonId },
-  });
-  if (!season) throw new AppError(404, messages.error.team.seasonNotFound);
-
-  // Verify target user exists and is active
-  const targetUser = await prisma.user.findFirst({
-    where: { id: data.userId, status: "ACTIVE" },
-  });
-  if (!targetUser) throw new AppError(404, messages.error.team.userNotFound);
-
-  // Check if the target user has the required role
+  // Independent lookups run together; results are checked in a fixed order.
   const requiredUserRole = data.role === "COACH" ? "COACH" : "PLAYER";
-  const hasUserRole = await prisma.userRole.findFirst({
-    where: { userId: data.userId, role: requiredUserRole },
-  });
+  const [season, targetUser, hasUserRole] = await Promise.all([
+    prisma.season.findFirst({ where: { id: data.seasonId } }),
+    prisma.user.findFirst({ where: { id: data.userId, status: "ACTIVE" } }),
+    prisma.userRole.findFirst({
+      where: { userId: data.userId, role: requiredUserRole },
+    }),
+  ]);
+  if (!season) throw new AppError(404, messages.error.team.seasonNotFound);
+  if (!targetUser) throw new AppError(404, messages.error.team.userNotFound);
   if (!hasUserRole) {
     throw new AppError(400, messages.error.team.userMissingRole);
   }
@@ -504,73 +505,67 @@ async function addRosterMember(
     },
   });
 
-  if (existingDeletedMember) {
-    return prisma.$transaction(async (tx) => {
-      const reactivated = await tx.teamSeasonMember.update({
-        where: { id: existingDeletedMember.id },
-        data: {
-          status: "ACTIVE",
-          jerseyNumber,
-          isHeadCoach,
-          organizationId: team.organizationId,
-        },
-      });
+  // Reactivate a soft-deleted row or create a new one; either way a new head
+  // coach demotes the previous one in the same transaction.
+  try {
+    return await prisma.$transaction(async (tx) => {
+      if (isHeadCoach) {
+        await demoteOtherHeadCoaches(
+          tx,
+          teamId,
+          data.seasonId,
+          existingDeletedMember?.id,
+        );
+      }
+
+      const member = existingDeletedMember
+        ? await tx.teamSeasonMember.update({
+            where: { id: existingDeletedMember.id },
+            data: {
+              status: "ACTIVE",
+              jerseyNumber,
+              isHeadCoach,
+              organizationId: team.organizationId,
+            },
+          })
+        : await tx.teamSeasonMember.create({
+            data: {
+              teamId,
+              seasonId: data.seasonId,
+              userId: data.userId,
+              organizationId: team.organizationId,
+              role: data.role,
+              jerseyNumber,
+              isHeadCoach,
+              status: "ACTIVE",
+            },
+          });
       if (isHeadCoach) {
         await syncHeadCoachToRegistrationLeagues(tx, {
           teamId,
           seasonId: data.seasonId,
-          teamSeasonMemberId: reactivated.id,
+          teamSeasonMemberId: member.id,
         });
       }
-      return reactivated;
+      return member;
     });
-  }
-
-  // Create the roster member inside a transaction that handles head-coach demotion
-  try {
-    const member = await prisma.$transaction(async (tx) => {
-      // If setting as head coach, demote any existing head coach for this team/season
-      if (isHeadCoach) {
-        await tx.teamSeasonMember.updateMany({
-          where: {
-            teamId,
-            seasonId: data.seasonId,
-            isHeadCoach: true,
-            status: "ACTIVE",
-          },
-          data: { isHeadCoach: false },
-        });
-      }
-
-      const created = await tx.teamSeasonMember.create({
-        data: {
+  } catch (err: any) {
+    if (err?.code === "P2002") {
+      const duplicate = await prisma.teamSeasonMember.findFirst({
+        where: {
           teamId,
           seasonId: data.seasonId,
           userId: data.userId,
-          organizationId: team.organizationId,
           role: data.role,
-          jerseyNumber,
-          isHeadCoach,
           status: "ACTIVE",
         },
       });
-      if (isHeadCoach) {
-        await syncHeadCoachToRegistrationLeagues(tx, {
-          teamId,
-          seasonId: data.seasonId,
-          teamSeasonMemberId: created.id,
-        });
-      }
-      return created;
-    });
-    return member;
-  } catch (err: any) {
-    if (err?.code === "P2002") {
-      const target = await prisma.teamSeasonMember.findFirst({
-        where: { teamId, seasonId: data.seasonId, userId: data.userId, role: data.role },
-      });
-      if (target) throw new AppError(409, messages.error.team.headCoachConflict);
-      throw new AppError(409, messages.error.team.jerseyConflict);
+      throw new AppError(
+        409,
+        duplicate
+          ? messages.error.team.memberAlreadyExists
+          : messages.error.team.jerseyConflict,
+      );
     }
     throw err;
   }
@@ -641,10 +636,10 @@ async function updateRosterMember(
   // Determine effective jerseyNumber: only for PLAYERs, null for COACHs
   let effectiveJerseyNumber: number | null | undefined;
   if (data.jerseyNumber !== undefined) {
-    effectiveJerseyNumber = data.role === "COACH" ? null : data.jerseyNumber;
+    effectiveJerseyNumber = effectiveRole === "COACH" ? null : data.jerseyNumber;
   } else if (data.role !== undefined) {
     // Role changed — recalculate jersey
-    effectiveJerseyNumber = data.role === "COACH" ? null : member.jerseyNumber;
+    effectiveJerseyNumber = effectiveRole === "COACH" ? null : member.jerseyNumber;
   }
 
   const roleChanged = data.role !== undefined && data.role !== member.role;
@@ -659,16 +654,7 @@ async function updateRosterMember(
     const updated = await prisma.$transaction(async (tx) => {
       // If becoming head coach (was not before), demote any existing head coach
       if (effectiveIsHeadCoach && !member.isHeadCoach) {
-        await tx.teamSeasonMember.updateMany({
-          where: {
-            teamId,
-            seasonId: data.seasonId,
-            isHeadCoach: true,
-            status: "ACTIVE",
-            id: { not: memberId },
-          },
-          data: { isHeadCoach: false },
-        });
+        await demoteOtherHeadCoaches(tx, teamId, data.seasonId, memberId);
       }
 
       // A role change invalidates the league selection — clear it.
