@@ -21,6 +21,8 @@
 | league-statuses | ✅ Done | Out of scope |
 | league-formats | ✅ Done | Out of scope |
 | group-round-types | ✅ Done | Out of scope |
+| dropdown/seasons (public) | ✅ Done | Out of scope |
+| dropdown/age-categories (public) | ✅ Done | Out of scope |
 | competition/format | ✅ Done (Stage 1: plan format + scoring settings; admin GET/PUT) | Out of scope |
 | competition/groups | ✅ Done (Stage 2: Group/GroupTeam, manual placement, public read, format guards) | Out of scope |
 | teams delete guard | ✅ Done (409 in REGISTRATION/ACTIVE leagues + `lock`/`can.delete`, no admin bypass) | Out of scope |

@@ -18,6 +18,7 @@ Serves static enum lookups for dropdowns and validation.
 - `dropdowns/static/league-statuses` — public `GET /dropdown/league-statuses` listing `LeagueStatus` values with Persian labels.
 - `dropdowns/static/league-formats` — public `GET /dropdown/league-formats` listing `LeagueFormat` values with Persian labels.
 - `dropdowns/static/group-round-types` — public `GET /dropdown/group-round-types` listing `GroupRoundType` values with Persian labels.
+- `dropdowns/public` (`dropdowns.public.routes.ts`) — public DB-backed `GET /dropdown/seasons` (active first) and `GET /dropdown/age-categories` (creation order), reusing the authenticated dropdown controller/service/validation.
 
 ## Responsibilities
 
