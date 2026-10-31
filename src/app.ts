@@ -25,7 +25,13 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Interactive API docs, generated from the zod validation schemas
 if (process.env.NODE_ENV !== "production") {
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
+  app.use(
+    "/docs",
+    swaggerUi.serve,
+    swaggerUi.setup(openApiDocument, {
+      swaggerOptions: { docExpansion: "none" },
+    }),
+  );
 }
 
 app.use("/api/v1", routes);

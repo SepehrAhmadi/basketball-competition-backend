@@ -14,6 +14,16 @@ interface GroupIssueInput {
   qualifiers: number | null;
 }
 
+function format(
+  template: string,
+  params: Record<string, string | number>,
+): string {
+  return Object.entries(params).reduce(
+    (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
+    template,
+  );
+}
+
 const GROUP_ISSUE_BUILDERS: Record<
   GroupIssueCode,
   (input: GroupIssueInput) => GroupIssueAdvisory
@@ -22,7 +32,10 @@ const GROUP_ISSUE_BUILDERS: Record<
     makeAdvisory(
       "GROUP_TOO_SMALL",
       "WARNING",
-      messages.advisory.groups.groupTooSmall(input.name, MIN_TEAMS_PER_GROUP),
+      format(messages.advisory.groups.groupTooSmall, {
+        name: input.name,
+        min: MIN_TEAMS_PER_GROUP,
+      }),
       {
         groupId: input.id,
         name: input.name,
@@ -34,11 +47,11 @@ const GROUP_ISSUE_BUILDERS: Record<
     makeAdvisory(
       "QUALIFIERS_EXCEED_TEAMS",
       "WARNING",
-      messages.advisory.groups.qualifiersExceedTeams(
-        input.name,
-        input.qualifiers as number,
-        input.teamsCount,
-      ),
+      format(messages.advisory.groups.qualifiersExceedTeams, {
+        name: input.name,
+        qualifiers: input.qualifiers as number,
+        teams: input.teamsCount,
+      }),
       {
         groupId: input.id,
         name: input.name,
@@ -61,7 +74,7 @@ export function buildUnassignedIssue(count: number): UnassignedIssueAdvisory[] {
     makeAdvisory(
       "TEAM_UNASSIGNED",
       "WARNING",
-      messages.advisory.groups.teamUnassigned(count),
+      format(messages.advisory.groups.teamUnassigned, { count }),
       { count },
     ),
   ];

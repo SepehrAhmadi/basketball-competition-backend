@@ -308,12 +308,11 @@ export const messages = {
       inOtherTeam: "در تیم دیگری عضو است",
     },
     groups: {
-      groupTooSmall: (name: string, min: number) =>
-        `تعداد تیم‌های گروه ${name} کمتر از حد مجاز (${min} تیم) است`,
-      qualifiersExceedTeams: (name: string, qualifiers: number, teams: number) =>
-        `تعداد صعودکننده‌های گروه ${name} (${qualifiers}) بیشتر یا برابر تعداد تیم‌ها (${teams}) است`,
-      teamUnassigned: (count: number) =>
-        `${count} تیم بدون گروه باقی مانده است`,
+      groupTooSmall:
+        "تعداد تیم‌های گروه {name} کمتر از حد مجاز ({min} تیم) است",
+      qualifiersExceedTeams:
+        "تعداد صعودکننده‌های گروه {name} ({qualifiers}) بیشتر یا برابر تعداد تیم‌ها ({teams}) است",
+      teamUnassigned: "{count} تیم بدون گروه باقی مانده است",
     },
     team: {
       inOpenLeague:
