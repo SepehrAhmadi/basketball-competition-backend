@@ -67,8 +67,13 @@ export function normalizeFormatInput(input: FormatInput): FormatData {
 
 export type FormatLockReason = "FINISHED" | "HAS_GAMES" | null;
 
-export function getFormatLockReason(status: LeagueStatus): FormatLockReason {
-  return isLeagueFinished(status) ? "FINISHED" : null;
+export function getFormatLockReason(
+  status: LeagueStatus,
+  hasGames = false,
+): FormatLockReason {
+  if (isLeagueFinished(status)) return "FINISHED";
+  if (hasGames) return "HAS_GAMES";
+  return null;
 }
 
 export type FormatChangeDenial = "HAS_GROUPS" | "TOO_MANY_GROUPS";

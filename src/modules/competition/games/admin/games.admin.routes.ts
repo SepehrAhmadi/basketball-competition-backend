@@ -59,6 +59,13 @@ router.put(
 );
 
 router.delete(
+  "/:gameId/result",
+  verifyPermission("games.result"),
+  validate(gamesAdminValidation.gameIdParamSchema, "params"),
+  gamesAdminController.clearResult,
+);
+
+router.delete(
   "/:gameId",
   verifyPermission("games.delete"),
   validate(gamesAdminValidation.gameIdParamSchema, "params"),

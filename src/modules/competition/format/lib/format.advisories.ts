@@ -11,7 +11,7 @@ const FORMAT_LOCK_MESSAGES: Record<FormatLockCode, string> = {
 
 /**
  * Turns the internal lock code into display data. Both codes block editing, so
- * both are BLOCKER; `HAS_GAMES` is reserved for Stage 3 and is not emitted yet.
+ * both are BLOCKER; `HAS_GAMES` is emitted once the league has any game.
  */
 export function buildFormatLock(
   reason: FormatLockReason,

@@ -422,10 +422,10 @@ model Game {
   updatedAt           DateTime        @updatedAt @map("updated_at")
 
   league      League     @relation(fields: [leagueId], references: [id])
-  group       Group?     @relation(fields: [groupId], references: [id])
+  group       Group?     @relation(fields: [groupId], references: [id], onDelete: Restrict)
   homeTeam    LeagueTeam @relation("GameHome", fields: [homeLeagueTeamId], references: [id])
   awayTeam    LeagueTeam @relation("GameAway", fields: [awayLeagueTeamId], references: [id])
-  forfeitTeam LeagueTeam? @relation("GameForfeit", fields: [forfeitLeagueTeamId], references: [id])
+  forfeitTeam LeagueTeam? @relation("GameForfeit", fields: [forfeitLeagueTeamId], references: [id], onDelete: Restrict)
   rescheduledFrom Game? @relation("Reschedule", fields: [rescheduledFromGameId], references: [id], onDelete: Restrict)
   rescheduledTo   Game? @relation("Reschedule")
 

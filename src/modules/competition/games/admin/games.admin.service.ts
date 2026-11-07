@@ -2,47 +2,49 @@ import prisma from "../../../../config/db.config.ts";
 import AppError from "../../../../utils/appError.ts";
 import { messages } from "../../../../language/message.ts";
 import { isGroupedFormat } from "../../format/lib/format.rules.ts";
-import { isLeagueFinished } from "../../../leagues/lib/league.rules.ts";
 import {
   loadActiveLeagueTeam,
   loadCompetitionLeague,
   unwrap,
+  type CompetitionLeague,
 } from "../../lib/competition.access.ts";
 import {
-  evaluateNormalResult,
+  buildResultData,
+  evaluateGameActions,
   evaluatePairQuota,
-  evaluateStatusTransition,
-  forfeitScores,
   getGamesLockReason,
-  isDeletable,
-  isResultEditable,
-  isResultPending,
-  isOutsideLeaguePeriod,
-  isScheduleEditable,
-  pairKey,
+  notSwappedGameIds,
+  type PairGame,
+  type ResultDenial,
+  type ResultInput,
 } from "../lib/games.rules.ts";
-import { buildGameWarnings, buildGamesLock } from "../lib/games.advisories.ts";
 import {
+  buildGamesLock,
+  buildUnfinishedGamesIssues,
+} from "../lib/games.advisories.ts";
+import {
+  buildGamesWhere,
+  countGamesByStatus,
+  countResultPending,
   gameInclude,
-  gameListInclude,
+  gamesOrderBy,
+  loadPairGames,
+  type GameRow,
+  type GamesListQuery,
 } from "../lib/games.queries.ts";
-import { toGameItem } from "../lib/games.mapper.ts";
+import { toAdminGameItem } from "../lib/games.mapper.ts";
 import type {
   GameStatus,
   GroupRoundType,
 } from "../../../../prisma/generated/prisma/enums.ts";
 import { jalaliToGregorianOrNull } from "../../../../utils/date.util.ts";
-import { loadGame, loadGameWriteContext, loadRescheduleSource } from "../lib/games.access.ts";
-
-interface AdminGamesQuery {
-  page: number;
-  pageSize: number;
-  status?: GameStatus;
-  groupId?: number;
-  leagueTeamId?: number;
-  dateFrom?: string;
-  dateTo?: string;
-}
+import {
+  assertGamesCreatable,
+  loadGame,
+  loadGameWriteContext,
+  loadRescheduleSource,
+  throwGameDenial,
+} from "../lib/games.access.ts";
 
 interface CreateGameInput {
   homeLeagueTeamId: number;
@@ -52,183 +54,117 @@ interface CreateGameInput {
   rescheduledFromGameId?: number | null;
 }
 
-function buildWhere(leagueId: number, query: AdminGamesQuery) {
+const RESULT_DENIAL_MESSAGES: Record<ResultDenial, string> = {
+  SCORE_INVALID: messages.error.game.scoreInvalid,
+  TIE_NOT_ALLOWED: messages.error.game.tieNotAllowed,
+  FORFEIT_TEAM_INVALID: messages.error.game.forfeitTeamInvalid,
+};
+
+async function notSwappedFor(
+  league: CompetitionLeague,
+  rows: GameRow[],
+): Promise<Set<number>> {
+  if (league.groupRoundType !== "DOUBLE_ROUND") return new Set();
+  const pairGames = await loadPairGames(league.id, rows);
+  return notSwappedGameIds(pairGames, league.groupRoundType);
+}
+
+function toItem(
+  league: CompetitionLeague,
+  row: GameRow,
+  notSwappedIds: ReadonlySet<number>,
+) {
+  return toAdminGameItem(row, {
+    leagueStatus: league.status,
+    leagueStartDate: league.startDate,
+    leagueEndDate: league.endDate,
+    notSwappedIds,
+  });
+}
+
+async function toItemWithPairs(league: CompetitionLeague, row: GameRow) {
+  return toItem(league, row, await notSwappedFor(league, [row]));
+}
+
+
+function emptySummary() {
   return {
-    leagueId,
-    ...(query.status ? { status: query.status } : {}),
-    ...(query.groupId ? { groupId: query.groupId } : {}),
-    ...(query.leagueTeamId
-      ? {
-          OR: [
-            { homeLeagueTeamId: query.leagueTeamId },
-            { awayLeagueTeamId: query.leagueTeamId },
-          ],
-        }
-      : {}),
-    ...(query.dateFrom || query.dateTo
-      ? {
-          scheduledDate: {
-            ...(query.dateFrom
-              ? { gte: jalaliToGregorianOrNull(query.dateFrom)! }
-              : {}),
-            ...(query.dateTo
-              ? { lte: jalaliToGregorianOrNull(query.dateTo)! }
-              : {}),
-          },
-        }
-      : {}),
+    byStatus: { SCHEDULED: 0, LIVE: 0, FINISHED: 0, CANCELED: 0 },
+    resultPending: 0,
+    unfinished: 0,
+    issues: [],
   };
 }
 
-async function listGames(leagueId: number, query: AdminGamesQuery) {
+async function listGames(leagueId: number, query: GamesListQuery) {
   const league = await loadCompetitionLeague(leagueId);
   const lock = buildGamesLock(
     getGamesLockReason({ status: league.status, format: league.format }),
   );
+  const header = { league: { id: league.id, format: league.format }, lock };
   if (!isGroupedFormat(league.format)) {
     return {
-      league: { id: league.id, format: league.format },
-      lock,
+      ...header,
       items: [],
       total: 0,
       page: query.page,
       pageSize: query.pageSize,
-      summary: { byStatus: {}, resultPending: 0, unfinishedAtFinish: 0 },
+      summary: emptySummary(),
     };
   }
-  const where = buildWhere(leagueId, query);
-  const [rows, total, pairRows] = await prisma.$transaction([
+  const where = buildGamesWhere(leagueId, query);
+  const [rows, total, statusCounts, resultPending] = await prisma.$transaction([
     prisma.game.findMany({
       where,
-      orderBy: [{ scheduledDate: "asc" }, { id: "asc" }],
+      orderBy: gamesOrderBy,
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
-      include: gameListInclude,
+      include: gameInclude,
     }),
     prisma.game.count({ where }),
-    prisma.game.findMany({
-      where: { leagueId, status: { not: "CANCELED" } },
-      select: {
-        id: true,
-        homeLeagueTeamId: true,
-        awayLeagueTeamId: true,
-        scheduledDate: true,
-        status: true,
-      },
-    }),
+    countGamesByStatus(leagueId),
+    countResultPending(leagueId),
   ]);
-  const pairCounts = new Map<string, number>();
-  for (const g of pairRows) {
-    const key = pairKey(g.homeLeagueTeamId, g.awayLeagueTeamId);
-    pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+  const notSwappedIds = await notSwappedFor(league, rows);
+  const byStatus: Record<GameStatus, number> = {
+    SCHEDULED: 0,
+    LIVE: 0,
+    FINISHED: 0,
+    CANCELED: 0,
+  };
+  for (const entry of statusCounts) {
+    const count = entry._count;
+    byStatus[entry.status] =
+      typeof count === "object" && count !== null ? (count._all ?? 0) : 0;
   }
-  const items = rows.map((row) => {
-    const firstOfPair = pairRows.find(
-      (g) =>
-        pairKey(g.homeLeagueTeamId, g.awayLeagueTeamId) ===
-        pairKey(row.homeLeagueTeamId, row.awayLeagueTeamId),
-    );
-    const homeAwayNotSwapped =
-      league.groupRoundType === "DOUBLE_ROUND" &&
-      pairCounts.get(
-        pairKey(row.homeLeagueTeamId, row.awayLeagueTeamId),
-      ) === 2 &&
-      firstOfPair !== undefined &&
-      firstOfPair.homeLeagueTeamId === row.homeLeagueTeamId;
-    return {
-      ...toGameItem(row),
-      can: {
-        editSchedule:
-          isScheduleEditable(row.status) && league.status === "ACTIVE",
-        enterResult:
-          row.status !== "CANCELED" && !isLeagueFinished(league.status),
-        cancel:
-          (row.status === "SCHEDULED" ||
-            row.status === "LIVE" ||
-            row.status === "FINISHED") &&
-          !isLeagueFinished(league.status),
-        delete:
-          isDeletable(row.status) && !isLeagueFinished(league.status),
-      },
-      issues: buildGameWarnings({
-        resultPending: isResultPending(row.status, row.scheduledDate),
-        unscheduled: row.scheduledDate === null,
-        homeAwayNotSwapped,
-        outsideLeaguePeriod: isOutsideLeaguePeriod(
-          row.scheduledDate,
-          league.startDate,
-          league.endDate,
-        ),
-      }),
-    };
-  });
-  const byStatus: Record<string, number> = {};
-  let resultPending = 0;
-  for (const g of pairRows) {
-    byStatus[g.status] = (byStatus[g.status] ?? 0) + 1;
-    if (isResultPending(g.status as GameStatus, g.scheduledDate))
-      resultPending += 1;
-  }
+  const unfinished = byStatus.SCHEDULED + byStatus.LIVE;
   return {
-    league: { id: league.id, format: league.format },
-    lock,
-    items,
+    ...header,
+    items: rows.map((row) => toItem(league, row, notSwappedIds)),
     total,
     page: query.page,
     pageSize: query.pageSize,
     summary: {
       byStatus,
       resultPending,
-      unfinishedAtFinish: resultPending,
+      unfinished,
+      issues: buildUnfinishedGamesIssues(unfinished),
     },
   };
 }
 
 async function getGame(leagueId: number, gameId: number) {
-  const league = await loadCompetitionLeague(leagueId);
-  const game = await loadGame(leagueId, gameId);
-  const lock = buildGamesLock(
-    getGamesLockReason({ status: league.status, format: league.format }),
-  );
-  return {
-    ...toGameItem(game),
-    can: {
-      editSchedule:
-        isScheduleEditable(game.status) && league.status === "ACTIVE",
-      enterResult:
-        game.status !== "CANCELED" && !isLeagueFinished(league.status),
-      cancel:
-        (game.status === "SCHEDULED" ||
-          game.status === "LIVE" ||
-          game.status === "FINISHED") &&
-        !isLeagueFinished(league.status),
-      delete:
-        isDeletable(game.status) && !isLeagueFinished(league.status),
-    },
-    issues: buildGameWarnings({
-      resultPending: isResultPending(game.status, game.scheduledDate),
-      unscheduled: game.scheduledDate === null,
-      homeAwayNotSwapped: false,
-      outsideLeaguePeriod: isOutsideLeaguePeriod(
-        game.scheduledDate,
-        league.startDate,
-        league.endDate,
-      ),
-    }),
-    lock,
-  };
+  const [league, game] = await Promise.allSettled([
+    loadCompetitionLeague(leagueId),
+    loadGame(leagueId, gameId),
+  ]);
+  const loadedLeague = unwrap(league);
+  return toItemWithPairs(loadedLeague, unwrap(game));
 }
 
 async function createGame(leagueId: number, input: CreateGameInput) {
   const league = await loadCompetitionLeague(leagueId);
-  if (isLeagueFinished(league.status))
-    throw new AppError(409, messages.error.league.finishedLocked);
-  if (league.status !== "ACTIVE")
-    throw new AppError(409, messages.error.game.leagueNotActive);
-  if (league.format === null)
-    throw new AppError(409, messages.error.game.formatRequired);
-  if (!isGroupedFormat(league.format))
-    throw new AppError(409, messages.error.game.formatNotGrouped);
+  assertGamesCreatable(league);
 
   const [home, away] = await Promise.allSettled([
     loadActiveLeagueTeam(leagueId, input.homeLeagueTeamId),
@@ -261,24 +197,14 @@ async function createGame(leagueId: number, input: CreateGameInput) {
     throw new AppError(400, messages.error.game.teamsNotInSameGroup);
   const groupId = homeMembership.groupId;
 
-  const existingPair = await prisma.game.count({
-    where: {
-      leagueId,
-      status: { not: "CANCELED" },
-      OR: [
-        {
-          homeLeagueTeamId: input.homeLeagueTeamId,
-          awayLeagueTeamId: input.awayLeagueTeamId,
-        },
-        {
-          homeLeagueTeamId: input.awayLeagueTeamId,
-          awayLeagueTeamId: input.homeLeagueTeamId,
-        },
-      ],
+  const existingPair: PairGame[] = await loadPairGames(leagueId, [
+    {
+      homeLeagueTeamId: input.homeLeagueTeamId,
+      awayLeagueTeamId: input.awayLeagueTeamId,
     },
-  });
+  ]);
   const quota = evaluatePairQuota(
-    existingPair,
+    existingPair.length,
     (league.groupRoundType ?? "ONE_ROUND") as GroupRoundType,
   );
   if (!quota.allowed)
@@ -293,60 +219,30 @@ async function createGame(leagueId: number, input: CreateGameInput) {
     );
   }
 
-  const scheduledDate =
-    input.scheduledDate === undefined
-      ? undefined
-      : jalaliToGregorianOrNull(input.scheduledDate);
-
-  const created = await prisma.game.create({
-    data: {
-      leagueId,
-      groupId,
-      homeLeagueTeamId: input.homeLeagueTeamId,
-      awayLeagueTeamId: input.awayLeagueTeamId,
-      scheduledDate: scheduledDate ?? null,
-      scheduledTime: input.scheduledTime ?? null,
-      rescheduledFromGameId: input.rescheduledFromGameId ?? null,
-    },
-    include: gameInclude,
-  });
-  const item = toGameItem(created);
-  const pairGames = await prisma.game.findMany({
-    where: {
-      leagueId,
-      id: { not: created.id },
-      status: { not: "CANCELED" },
-      OR: [
-        {
-          homeLeagueTeamId: input.homeLeagueTeamId,
-          awayLeagueTeamId: input.awayLeagueTeamId,
-        },
-        {
-          homeLeagueTeamId: input.awayLeagueTeamId,
-          awayLeagueTeamId: input.homeLeagueTeamId,
-        },
-      ],
-    },
-    select: { id: true, homeLeagueTeamId: true },
-    orderBy: { id: "asc" },
-  });
-  const homeAwayNotSwapped =
-    league.groupRoundType === "DOUBLE_ROUND" &&
-    pairGames.length === 1 &&
-    pairGames[0].homeLeagueTeamId === input.homeLeagueTeamId;
-  return {
-    ...item,
-    issues: buildGameWarnings({
-      resultPending: false,
-      unscheduled: created.scheduledDate === null,
-      homeAwayNotSwapped,
-      outsideLeaguePeriod: isOutsideLeaguePeriod(
-        created.scheduledDate,
-        league.startDate,
-        league.endDate,
-      ),
-    }),
-  };
+  let created: GameRow;
+  try {
+    created = await prisma.game.create({
+      data: {
+        leagueId,
+        groupId,
+        homeLeagueTeamId: input.homeLeagueTeamId,
+        awayLeagueTeamId: input.awayLeagueTeamId,
+        scheduledDate: jalaliToGregorianOrNull(input.scheduledDate),
+        scheduledTime: input.scheduledTime ?? null,
+        rescheduledFromGameId: input.rescheduledFromGameId ?? null,
+      },
+      include: gameInclude,
+    });
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === "P2002")
+      throw new AppError(409, messages.error.game.alreadyRescheduled);
+    throw err;
+  }
+  const notSwappedIds = notSwappedGameIds(
+    [...existingPair, created],
+    league.groupRoundType,
+  );
+  return toItem(league, created, notSwappedIds);
 }
 
 async function updateSchedule(
@@ -355,10 +251,12 @@ async function updateSchedule(
   input: { scheduledDate?: string | null; scheduledTime?: string | null },
 ) {
   const { league, game } = await loadGameWriteContext(leagueId, gameId);
-  if (league.status !== "ACTIVE")
-    throw new AppError(409, messages.error.game.leagueNotActive);
-  if (!isScheduleEditable(game.status))
-    throw new AppError(409, messages.error.game.scheduleLocked);
+  const actions = evaluateGameActions({
+    status: game.status,
+    leagueStatus: league.status,
+    hasReplacement: game.rescheduledTo !== null,
+  });
+  throwGameDenial("schedule", actions.schedule);
   const data: { scheduledDate?: Date | null; scheduledTime?: string | null } =
     {};
   if (input.scheduledDate !== undefined)
@@ -370,7 +268,7 @@ async function updateSchedule(
     data,
     include: gameInclude,
   });
-  return toGameItem(updated);
+  return toItemWithPairs(league, updated);
 }
 
 async function updateStatus(
@@ -379,113 +277,90 @@ async function updateStatus(
   input: { status: "LIVE" | "CANCELED"; cancelReason?: string | null },
 ) {
   const { league, game } = await loadGameWriteContext(leagueId, gameId);
-  const check = evaluateStatusTransition(game.status, input.status);
-  if (!check.allowed)
-    throw new AppError(409, messages.error.game.statusLocked);
-  const data: {
-    status: GameStatus;
-    cancelReason?: string | null;
-    homeScore?: null;
-    awayScore?: null;
-    resultType?: null;
-    forfeitLeagueTeamId?: null;
-    resultNote?: null;
-  } = { status: input.status };
-  if (input.status === "CANCELED") {
-    data.cancelReason = input.cancelReason ?? game.cancelReason;
-    if (game.status === "FINISHED") {
-      data.homeScore = null;
-      data.awayScore = null;
-      data.resultType = null;
-      data.forfeitLeagueTeamId = null;
-      data.resultNote = null;
-    }
-  }
+  const actions = evaluateGameActions({
+    status: game.status,
+    leagueStatus: league.status,
+    hasReplacement: game.rescheduledTo !== null,
+  });
+  if (input.status === "LIVE") throwGameDenial("start", actions.start);
+  else throwGameDenial("cancel", actions.cancel);
   const updated = await prisma.game.update({
     where: { id: gameId },
-    data,
+    data: {
+      status: input.status,
+      ...(input.status === "CANCELED"
+        ? { cancelReason: input.cancelReason ?? null }
+        : {}),
+    },
     include: gameInclude,
   });
-  return toGameItem(updated);
+  return toItemWithPairs(league, updated);
 }
-
-type ResultInput =
-  | {
-      resultType: "NORMAL";
-      homeScore: number;
-      awayScore: number;
-      resultNote?: string | null;
-    }
-  | {
-      resultType: "FORFEIT";
-      forfeitLeagueTeamId: number;
-      resultNote?: string | null;
-    };
 
 async function enterResult(
   leagueId: number,
   gameId: number,
   input: ResultInput,
 ) {
-  const { game } = await loadGameWriteContext(leagueId, gameId);
-  if (game.status === "CANCELED")
-    throw new AppError(409, messages.error.game.statusLocked);
-  if (!isResultEditable(game.status))
-    throw new AppError(409, messages.error.game.statusLocked);
-  if (input.resultType === "NORMAL") {
-    const check = evaluateNormalResult(input.homeScore, input.awayScore);
-    if (!check.allowed)
-      throw new AppError(
-        400,
-        check.reason === "TIE_NOT_ALLOWED"
-          ? messages.error.game.tieNotAllowed
-          : messages.error.game.scoreInvalid,
-      );
-    const updated = await prisma.game.update({
-      where: { id: gameId },
-      data: {
-        status: "FINISHED",
-        homeScore: input.homeScore,
-        awayScore: input.awayScore,
-        resultType: "NORMAL",
-        forfeitLeagueTeamId: null,
-        resultNote: input.resultNote ?? null,
-        cancelReason: null,
-      },
-      include: gameInclude,
-    });
-    return toGameItem(updated);
-  }
-  if (
-    input.forfeitLeagueTeamId !== game.homeLeagueTeamId &&
-    input.forfeitLeagueTeamId !== game.awayLeagueTeamId
-  )
-    throw new AppError(400, messages.error.game.scoreInvalid);
-  const scores = forfeitScores(
-    input.forfeitLeagueTeamId === game.homeLeagueTeamId,
-  );
+  const { league, game } = await loadGameWriteContext(leagueId, gameId);
+  const actions = evaluateGameActions({
+    status: game.status,
+    leagueStatus: league.status,
+    hasReplacement: game.rescheduledTo !== null,
+  });
+  throwGameDenial("result", actions.result);
+  const built = buildResultData(input, {
+    homeLeagueTeamId: game.homeLeagueTeamId,
+    awayLeagueTeamId: game.awayLeagueTeamId,
+  });
+  if (!built.ok)
+    throw new AppError(400, RESULT_DENIAL_MESSAGES[built.reason]);
   const updated = await prisma.game.update({
     where: { id: gameId },
     data: {
+      ...built.data,
       status: "FINISHED",
-      homeScore: scores.homeScore,
-      awayScore: scores.awayScore,
-      resultType: "FORFEIT",
-      forfeitLeagueTeamId: input.forfeitLeagueTeamId,
-      resultNote: input.resultNote ?? null,
       cancelReason: null,
+      resultNote: input.resultNote ?? null,
     },
     include: gameInclude,
   });
-  return toGameItem(updated);
+  return toItemWithPairs(league, updated);
+}
+
+async function clearResult(leagueId: number, gameId: number) {
+  const { league, game } = await loadGameWriteContext(leagueId, gameId);
+  const actions = evaluateGameActions({
+    status: game.status,
+    leagueStatus: league.status,
+    hasReplacement: game.rescheduledTo !== null,
+  });
+  throwGameDenial("result", actions.result);
+  if (game.status !== "FINISHED")
+    throw new AppError(409, messages.error.game.noResultToClear);
+  const updated = await prisma.game.update({
+    where: { id: gameId },
+    data: {
+      status: "SCHEDULED",
+      homeScore: null,
+      awayScore: null,
+      resultType: null,
+      forfeitLeagueTeamId: null,
+      resultNote: null,
+    },
+    include: gameInclude,
+  });
+  return toItemWithPairs(league, updated);
 }
 
 async function deleteGame(leagueId: number, gameId: number) {
-  const { game } = await loadGameWriteContext(leagueId, gameId);
-  if (!isDeletable(game.status))
-    throw new AppError(409, messages.error.game.deleteNotAllowed);
-  if (game.rescheduledTo !== null)
-    throw new AppError(409, messages.error.game.hasReplacement);
+  const { league, game } = await loadGameWriteContext(leagueId, gameId);
+  const actions = evaluateGameActions({
+    status: game.status,
+    leagueStatus: league.status,
+    hasReplacement: game.rescheduledTo !== null,
+  });
+  throwGameDenial("delete", actions.delete);
   await prisma.game.delete({ where: { id: gameId } });
   return { id: gameId };
 }
@@ -497,5 +372,6 @@ export default {
   updateSchedule,
   updateStatus,
   enterResult,
+  clearResult,
   deleteGame,
 };

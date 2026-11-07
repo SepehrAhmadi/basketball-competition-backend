@@ -51,4 +51,9 @@ export function todayInTehran(now: Date = new Date()): string {
   }).format(now);
 }
 
+/** Start of "today in Tehran" as a UTC-midnight boundary (dates are stored at UTC noon). */
+export function tehranDayStart(now: Date = new Date()): Date {
+  return new Date(`${todayInTehran(now)}T00:00:00Z`);
+}
+
 

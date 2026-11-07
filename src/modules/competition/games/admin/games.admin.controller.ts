@@ -2,19 +2,12 @@ import type { Request, Response, NextFunction } from "express";
 import { messages } from "../../../../language/message.ts";
 import apiResponse from "../../../../utils/apiResponse.ts";
 import gamesAdminService from "./games.admin.service.ts";
-import type { GameStatus } from "../../../../prisma/generated/prisma/client.ts";
+import type { GamesListQuery } from "../lib/games.queries.ts";
+import type { ResultInput } from "../lib/games.rules.ts";
 
 async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const query = req.validatedQuery as {
-      page: number;
-      pageSize: number;
-      status?: GameStatus;
-      groupId?: number;
-      leagueTeamId?: number;
-      dateFrom?: string;
-      dateTo?: string;
-    };
+    const query = req.validatedQuery as GamesListQuery;
     const data = await gamesAdminService.listGames(
       Number(req.params.leagueId),
       query,
@@ -107,18 +100,7 @@ async function updateStatus(req: Request, res: Response, next: NextFunction) {
 
 async function enterResult(req: Request, res: Response, next: NextFunction) {
   try {
-    const input = (req.validatedBody ?? req.body) as
-      | {
-          resultType: "NORMAL";
-          homeScore: number;
-          awayScore: number;
-          resultNote?: string | null;
-        }
-      | {
-          resultType: "FORFEIT";
-          forfeitLeagueTeamId: number;
-          resultNote?: string | null;
-        };
+    const input = (req.validatedBody ?? req.body) as ResultInput;
     const data = await gamesAdminService.enterResult(
       Number(req.params.leagueId),
       Number(req.params.gameId),
@@ -128,6 +110,23 @@ async function enterResult(req: Request, res: Response, next: NextFunction) {
       res,
       200,
       messages.success.game.resultSaved,
+      data,
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function clearResult(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await gamesAdminService.clearResult(
+      Number(req.params.leagueId),
+      Number(req.params.gameId),
+    );
+    return apiResponse.sendResponse(
+      res,
+      200,
+      messages.success.game.resultCleared,
       data,
     );
   } catch (error) {
@@ -159,5 +158,6 @@ export default {
   updateSchedule,
   updateStatus,
   enterResult,
+  clearResult,
   remove,
 };

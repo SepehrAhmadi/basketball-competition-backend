@@ -63,6 +63,7 @@ export const messages = {
       deleteNotAllowed: "فقط لیگ غیرفعال یا در حال ثبت‌نام قابل حذف است",
       hasTeams: "این لیگ دارای تیم ثبت‌نام‌شده است و قابل حذف نیست",
       hasDependents: "این لیگ دارای رکورد وابسته است و قابل حذف نیست",
+      hasGames: "این لیگ دارای بازی است و این عملیات روی آن امکان‌پذیر نیست",
       minTeamsRequired: "برای شروع لیگ حداقل دو تیم ثبت‌نام‌شده لازم است",
       teamWithoutPlayers:
         "هر تیم برای شروع لیگ باید حداقل یک بازیکن در راستر داشته باشد",
@@ -118,6 +119,8 @@ export const messages = {
       singleGroupOnly: "در این ساختار فقط یک گروه مجاز است",
       teamNotInGroup: "این تیم در این گروه قرار ندارد",
       teamAssignConflict: "این تیم در گروه دیگری ثبت شده است",
+      hasGames:
+        "این گروه دارای بازی است؛ ترکیب تیم‌های آن قابل تغییر و خود گروه قابل حذف نیست",
     },
     season: {
       nameRequired: "نام فصل الزامی است",
@@ -169,11 +172,16 @@ export const messages = {
       scheduleLocked: "زمان‌بندی این بازی دیگر قابل تغییر نیست",
       statusLocked: "تغییر وضعیت این بازی مجاز نیست",
       scoreInvalid: "امتیازها باید عدد صحیح و غیرمنفی باشند",
-      tieNotAllowed: "نتیحه مساوری قابل ثبت نیست.",
+      tieNotAllowed: "در بسکتبال نتیجه‌ی مساوی ثبت نمی‌شود",
+      forfeitTeamInvalid: "تیم فورفیت‌کننده باید یکی از دو تیم این بازی باشد",
+      timeInvalid: "ساعت بازی باید به‌صورت HH:mm و معتبر باشد",
+      alreadyRescheduled:
+        "برای این بازی کنسل‌شده قبلاً بازی جایگزین ثبت شده است",
+      noResultToClear: "برای این بازی نتیجه‌ای ثبت نشده است",
+      updateFieldRequired: "حداقل یکی از فیلدها باید ارسال شود",
       deleteNotAllowed: "فقط بازی برنامه‌ریزی‌شده یا کنسل‌شده قابل حذف است",
       hasReplacement: "این بازی کنسل‌شده جایگزین دارد و قابل حذف نیست",
       dateTimeTogether: "تاریخ و ساعت باید همزمان وارد شوند",
-      hasGames: "این لیگ بازی دارد",
     },
   },
   success: {
@@ -286,6 +294,7 @@ export const messages = {
       statusUpdated: "وضعیت بازی با موفقیت تغییر کرد",
       resultSaved: "نتیجه‌ی بازی با موفقیت ثبت شد",
       deleted: "بازی با موفقیت حذف شد",
+      resultCleared: "نتیجه‌ی بازی با موفقیت پاک شد",
     },
     player: {
       found: "اطلاعات بازیکن با موفقیت دریافت شد",
@@ -341,6 +350,7 @@ export const messages = {
       qualifiersExceedTeams:
         "تعداد صعودکننده‌های گروه {name} ({qualifiers}) بیشتر یا برابر تعداد تیم‌ها ({teams}) است",
       teamUnassigned: "{count} تیم بدون گروه باقی مانده است",
+      hasGames: "گروه بازی دارد؛ ترکیب تیم‌ها قفل است",
     },
     games: {
       resultPending: "نتیجه‌ی این بازی هنوز ثبت نشده",
@@ -352,6 +362,8 @@ export const messages = {
       formatNotGrouped: "ساختار لیگ گروهی نیست",
       unfinishedGames: "بازی‌های بدون نتیجه در لیگ وجود دارد",
       dependentStarted: "بازی وابسته شروع شده است",
+      statusLocked: "وضعیت فعلی بازی اجازه‌ی این کار را نمی‌دهد",
+      hasReplacement: "این بازی کنسل‌شده جایگزین دارد",
     },
     team: {
       inOpenLeague:

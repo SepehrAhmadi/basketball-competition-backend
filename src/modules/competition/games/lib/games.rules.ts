@@ -1,7 +1,7 @@
 import {
-  GameResultType,
   GameStatus,
   GroupRoundType,
+  type GameResultType,
   type GameStatus as GameStatusValue,
   type LeagueFormat,
   type LeagueStatus,
@@ -14,10 +14,6 @@ export const GAME_STATUS_VALUES = Object.values(GameStatus) as [
   ...GameStatusValue[],
 ];
 
-export const GAME_RESULT_TYPE_VALUES = Object.values(GameResultType) as [
-  GameResultType,
-  ...GameResultType[],
-];
 
 export const MAX_PAIR_GAMES: Record<GroupRoundType, number> = {
   ONE_ROUND: 1,
@@ -57,29 +53,49 @@ export function evaluatePairQuota(
   return { allowed: true };
 }
 
-export type StatusTransitionDenial = "STATUS_LOCKED";
+export type GameActionDenial =
+  | "FINISHED"
+  | "LEAGUE_NOT_ACTIVE"
+  | "STATUS_LOCKED"
+  | "HAS_REPLACEMENT"
+  | "DEPENDENT_STARTED"; // reserved for Stage 5, never emitted now
 
-export function evaluateStatusTransition(
-  from: GameStatusValue,
-  to: GameStatusValue,
-): { allowed: true } | { allowed: false; reason: StatusTransitionDenial } {
-  if (from === "SCHEDULED" && (to === "LIVE" || to === "CANCELED"))
-    return { allowed: true };
-  if (from === "LIVE" && to === "CANCELED") return { allowed: true };
-  if (from === "FINISHED" && to === "CANCELED") return { allowed: true };
-  return { allowed: false, reason: "STATUS_LOCKED" };
-}
+export type GameAction = "schedule" | "start" | "cancel" | "result" | "delete";
 
-export function isScheduleEditable(status: GameStatusValue): boolean {
-  return status === "SCHEDULED" || status === "LIVE";
-}
+export type GameActions = Record<GameAction, GameActionDenial | null>;
 
-export function isResultEditable(status: GameStatusValue): boolean {
-  return status === "SCHEDULED" || status === "LIVE" || status === "FINISHED";
-}
-
-export function isDeletable(status: GameStatusValue): boolean {
-  return status === "SCHEDULED" || status === "CANCELED";
+/** Single source of truth for every game action (admin locks and service errors). */
+export function evaluateGameActions(input: {
+  status: GameStatusValue;
+  leagueStatus: LeagueStatus;
+  hasReplacement: boolean;
+}): GameActions {
+  const { status, leagueStatus, hasReplacement } = input;
+  const leagueDenial: GameActionDenial | null =
+    leagueStatus === "FINISHED"
+      ? "FINISHED"
+      : leagueStatus !== "ACTIVE"
+        ? "LEAGUE_NOT_ACTIVE"
+        : null;
+  const gate = (
+    gameAllowed: boolean,
+    extra: GameActionDenial | null = null,
+  ): GameActionDenial | null => {
+    if (leagueDenial) return leagueDenial;
+    if (!gameAllowed) return "STATUS_LOCKED";
+    return extra;
+  };
+  const open = status === "SCHEDULED" || status === "LIVE";
+  return {
+    schedule: gate(open),
+    start: gate(status === "SCHEDULED"),
+    cancel: gate(open),
+    result: gate(status !== "CANCELED"),
+    delete: gate(
+      status === "SCHEDULED" || status === "CANCELED",
+      hasReplacement ? "HAS_REPLACEMENT" : null,
+    ),
+  };
 }
 
 export type ScoreDenial = "SCORE_INVALID" | "TIE_NOT_ALLOWED";
@@ -98,6 +114,98 @@ export function evaluateNormalResult(
   if (homeScore === awayScore)
     return { allowed: false, reason: "TIE_NOT_ALLOWED" };
   return { allowed: true };
+}
+
+export type ResultInput =
+  | {
+      resultType: "NORMAL";
+      homeScore: number;
+      awayScore: number;
+      resultNote?: string | null;
+    }
+  | {
+      resultType: "FORFEIT";
+      forfeitLeagueTeamId: number;
+      resultNote?: string | null;
+    };
+
+export type ResultDenial =
+  | "SCORE_INVALID"
+  | "TIE_NOT_ALLOWED"
+  | "FORFEIT_TEAM_INVALID";
+
+export function buildResultData(
+  input: ResultInput,
+  teams: { homeLeagueTeamId: number; awayLeagueTeamId: number },
+):
+  | {
+      ok: true;
+      data: {
+        homeScore: number;
+        awayScore: number;
+        resultType: GameResultType;
+        forfeitLeagueTeamId: number | null;
+      };
+    }
+  | { ok: false; reason: ResultDenial } {
+  if (input.resultType === "NORMAL") {
+    const check = evaluateNormalResult(input.homeScore, input.awayScore);
+    if (!check.allowed) return { ok: false, reason: check.reason };
+    return {
+      ok: true,
+      data: {
+        homeScore: input.homeScore,
+        awayScore: input.awayScore,
+        resultType: "NORMAL",
+        forfeitLeagueTeamId: null,
+      },
+    };
+  }
+  if (
+    input.forfeitLeagueTeamId !== teams.homeLeagueTeamId &&
+    input.forfeitLeagueTeamId !== teams.awayLeagueTeamId
+  )
+    return { ok: false, reason: "FORFEIT_TEAM_INVALID" };
+  return {
+    ok: true,
+    data: {
+      ...forfeitScores(input.forfeitLeagueTeamId === teams.homeLeagueTeamId),
+      resultType: "FORFEIT",
+      forfeitLeagueTeamId: input.forfeitLeagueTeamId,
+    },
+  };
+}
+
+export interface PairGame {
+  id: number;
+  homeLeagueTeamId: number;
+  awayLeagueTeamId: number;
+}
+
+/**
+ * DOUBLE_ROUND only: for a pair with exactly two non-canceled games, the
+ * second game (larger id) is flagged when it has the same home team as the first.
+ */
+export function notSwappedGameIds(
+  nonCanceledGames: PairGame[],
+  roundType: GroupRoundType | null,
+): Set<number> {
+  const flagged = new Set<number>();
+  if (roundType !== "DOUBLE_ROUND") return flagged;
+  const byPair = new Map<string, PairGame[]>();
+  for (const game of nonCanceledGames) {
+    const key = pairKey(game.homeLeagueTeamId, game.awayLeagueTeamId);
+    const list = byPair.get(key);
+    if (list) list.push(game);
+    else byPair.set(key, [game]);
+  }
+  for (const games of byPair.values()) {
+    if (games.length !== 2) continue;
+    const [first, second] = [...games].sort((a, b) => a.id - b.id);
+    if (second.homeLeagueTeamId === first.homeLeagueTeamId)
+      flagged.add(second.id);
+  }
+  return flagged;
 }
 
 export function forfeitScores(forfeitIsHome: boolean): {

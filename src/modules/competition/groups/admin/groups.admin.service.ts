@@ -125,7 +125,10 @@ async function createGroup(
       },
     });
     // A new group has no teams yet.
-    return toGroupItem({ ...created, teams: [] }, league.defaultQualifiersPerGroup);
+    return toGroupItem(
+      { ...created, teams: [], _count: { games: 0 } },
+      league.defaultQualifiersPerGroup,
+    );
   } catch (err: unknown) {
     if ((err as { code?: string })?.code === "P2002")
       throw new AppError(409, messages.error.group.nameExists);
@@ -136,7 +139,7 @@ async function createGroup(
 async function assertGroupHasNoGames(groupId: number): Promise<void> {
   const gameCount = await prisma.game.count({ where: { groupId } });
   if (gameCount > 0)
-    throw new AppError(409, messages.error.game.hasGames);
+    throw new AppError(409, messages.error.group.hasGames);
 }
 
 async function updateGroup(
@@ -147,7 +150,6 @@ async function updateGroup(
   const league = await loadGroupsLeague(leagueId);
   assertGroupsEditable(league);
   await loadGroup(leagueId, groupId);
-  await assertGroupHasNoGames(groupId);
   const data: { name?: string; qualifiersOverride?: number | null } = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.qualifiersOverride !== undefined)
@@ -176,10 +178,17 @@ async function deleteGroup(leagueId: number, groupId: number) {
   assertGroupsEditable(league);
   await loadGroup(leagueId, groupId);
   await assertGroupHasNoGames(groupId);
-  await prisma.$transaction([
-    prisma.groupTeam.deleteMany({ where: { groupId } }),
-    prisma.group.delete({ where: { id: groupId } }),
-  ]);
+  try {
+    await prisma.$transaction([
+      prisma.groupTeam.deleteMany({ where: { groupId } }),
+      prisma.group.delete({ where: { id: groupId } }),
+    ]);
+  } catch (err: unknown) {
+    // Backstop for the Restrict FK from games.group_id (a game created concurrently).
+    if ((err as { code?: string })?.code === "P2003")
+      throw new AppError(409, messages.error.group.hasGames);
+    throw err;
+  }
   const unassignedCount = await countUnassigned(leagueId);
   return { unassignedCount, issues: buildUnassignedIssue(unassignedCount) };
 }

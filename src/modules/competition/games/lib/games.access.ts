@@ -4,9 +4,58 @@ import { messages } from "../../../../language/message.ts";
 import {
   loadCompetitionLeague,
   unwrap,
+  type CompetitionLeague,
 } from "../../lib/competition.access.ts";
 import { isLeagueFinished } from "../../../leagues/lib/league.rules.ts";
 import { gameInclude } from "./games.queries.ts";
+import {
+  getGamesLockReason,
+  type GameAction,
+  type GameActionDenial,
+} from "./games.rules.ts";
+
+
+export function assertGamesCreatable(league: CompetitionLeague): void {
+  const reason = getGamesLockReason({
+    status: league.status,
+    format: league.format,
+  });
+  switch (reason) {
+    case null:
+      return;
+    case "FINISHED":
+      throw new AppError(409, messages.error.league.finishedLocked);
+    case "LEAGUE_NOT_ACTIVE":
+      throw new AppError(409, messages.error.game.leagueNotActive);
+    case "FORMAT_NOT_SET":
+      throw new AppError(409, messages.error.game.formatRequired);
+    case "FORMAT_NOT_GROUPED":
+      throw new AppError(409, messages.error.game.formatNotGrouped);
+  }
+}
+
+export function throwGameDenial(
+  action: GameAction,
+  reason: GameActionDenial | null,
+): void {
+  if (reason === null) return;
+  switch (reason) {
+    case "FINISHED":
+      throw new AppError(409, messages.error.league.finishedLocked);
+    case "LEAGUE_NOT_ACTIVE":
+      throw new AppError(409, messages.error.game.leagueNotActive);
+    case "HAS_REPLACEMENT":
+      throw new AppError(409, messages.error.game.hasReplacement);
+    case "STATUS_LOCKED":
+      if (action === "schedule")
+        throw new AppError(409, messages.error.game.scheduleLocked);
+      if (action === "delete")
+        throw new AppError(409, messages.error.game.deleteNotAllowed);
+      throw new AppError(409, messages.error.game.statusLocked);
+    case "DEPENDENT_STARTED":
+      throw new AppError(409, messages.error.game.statusLocked);
+  }
+}
 
 export async function loadGame(leagueId: number, gameId: number) {
   const game = await prisma.game.findFirst({
@@ -40,12 +89,10 @@ export async function loadRescheduleSource(
       source.awayLeagueTeamId === awayLeagueTeamId) ||
     (source.homeLeagueTeamId === awayLeagueTeamId &&
       source.awayLeagueTeamId === homeLeagueTeamId);
-  if (
-    source.status !== "CANCELED" ||
-    !samePair ||
-    source.rescheduledTo !== null
-  )
+  if (source.status !== "CANCELED" || !samePair)
     throw new AppError(409, messages.error.game.rescheduleSourceInvalid);
+  if (source.rescheduledTo !== null)
+    throw new AppError(409, messages.error.game.alreadyRescheduled);
   return source;
 }
 

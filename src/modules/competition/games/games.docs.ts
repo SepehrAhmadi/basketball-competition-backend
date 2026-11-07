@@ -9,7 +9,11 @@ import {
   gameIdParamSchema,
   leagueIdParamSchema,
   publicGamesQuerySchema,
-} from "./admin/games.admin.validation.ts";
+} from "./games.validation.ts";
+
+const publicNote =
+  "Public endpoint. A Bearer token is optional. Ordered by `scheduledDate`, " +
+  "`scheduledTime`, `id` ascending (unscheduled games first).";
 
 const publicGameTeamSchema = z
   .object({
@@ -25,6 +29,13 @@ const publicGameTeamSchema = z
         name: z.string().openapi({ example: "باشگاه عقاب" }),
       })
       .nullable(),
+    teamStatus: z
+      .enum(["ACTIVE", "INACTIVE", "DELETED"])
+      .optional()
+      .openapi({
+        example: "ACTIVE",
+        description: "Present only for FINISHED leagues.",
+      }),
   })
   .openapi("PublicGameTeam");
 
@@ -47,8 +58,7 @@ const publicGameSchema = z
     awayScore: z.number().nullable().openapi({ example: null }),
     winnerLeagueTeamId: z.number().nullable().openapi({ example: null }),
     forfeitLeagueTeamId: z.number().nullable().openapi({ example: null }),
-    resultNote: z.string().nullable().openapi({ example: null }),
-    cancelReason: z.string().nullable().openapi({ example: null }),
+
     rescheduledFrom: z
       .object({
         id: z.number().openapi({ example: 7 }),
@@ -80,7 +90,9 @@ registry.registerPath({
   tags: ["League Games"],
   summary: "List games of a league (public)",
   description:
-    "Group-stage games of a grouped league. Empty when the format is not grouped.",
+    "Group-stage games of a grouped league. Empty when the format is not grouped. " +
+    publicNote,
+  security: [],
   request: { params: leagueIdParamSchema, query: publicGamesQuerySchema },
   responses: {
     "200": {
@@ -109,7 +121,8 @@ registry.registerPath({
   path: "/leagues/{leagueId}/games/{gameId}",
   tags: ["League Games"],
   summary: "Get a game (public)",
-  description: "Full game detail including reschedule links.",
+  description: "Full game detail including reschedule links. " + publicNote,
+  security: [],
   request: { params: gameIdParamSchema },
   responses: {
     "200": {

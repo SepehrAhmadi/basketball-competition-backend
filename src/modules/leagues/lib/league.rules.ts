@@ -1,4 +1,5 @@
 import type { LeagueStatus } from "../../../prisma/generated/prisma/enums.ts";
+import { todayInTehran } from "../../../utils/date.util.ts";
 
 export const LEAGUE_STATUS_VALUES = [
   "INACTIVE",
@@ -21,11 +22,8 @@ export function isRosterWindowOpen(
   now: Date = new Date(),
 ): boolean {
   if (!rosterDeadline) return true;
-  const todayInTehran = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tehran",
-  }).format(now);
   const deadlineDay = rosterDeadline.toISOString().slice(0, 10);
-  return todayInTehran <= deadlineDay;
+  return todayInTehran(now) <= deadlineDay;
 }
 
 export function canEditByStatus(

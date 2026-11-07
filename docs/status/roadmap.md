@@ -1,9 +1,9 @@
 # Roadmap (backend only)
 
-- Leagues: leagues / league-teams / league-roster / competition format / groups done; games, standings, brackets and player stats next.
-- Competition: format (Stage 1) and groups (Stage 2) done, including the format-change guards. Games (Stage 3) enable the `HAS_GAMES` format lock and activate the existing `TODO(Game)` guards.
-- Games: add `Game`/series models, scheduling, results, referee assignment endpoints.
+- Leagues: leagues / league-teams / league-roster / competition format / groups / games done; standings, brackets and player stats next.
+- Competition: format (Stage 1), groups (Stage 2) and games (Stage 3) done; `HAS_GAMES` locks format, group composition and league status/delete. Next: standings (Stage 4) and brackets (Stage 5, which also emits `DEPENDENT_STARTED`).
+- Games: series and referee assignment endpoints remain.
 - Stats: add atomic per-player-per-game table plus report aggregations.
 - Media: decide dedicated module vs current inline uploader + URL-string approach.
 - Seasons: schedule `deactivateExpiredSeasons()` via cron.
-- Permissions: `leagues.*`, `league-teams.*`, `league-roster.*`, `groups.*` added; expand further as games/stats land.
+- Permissions: `leagues.*`, `league-teams.*`, `league-roster.*`, `groups.*`, `games.*` added; expand further as games/stats land.

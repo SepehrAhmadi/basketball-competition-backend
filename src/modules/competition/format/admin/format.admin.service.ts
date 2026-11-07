@@ -35,8 +35,8 @@ type FormatRow = {
 };
 
 
-function toFormatResponse(row: FormatRow) {
-  const lock = buildFormatLock(getFormatLockReason(row.status));
+function toFormatResponse(row: FormatRow, hasGames: boolean) {
+  const lock = buildFormatLock(getFormatLockReason(row.status, hasGames));
   return {
     leagueId: row.id,
     format: row.format,
@@ -54,7 +54,8 @@ async function getFormat(leagueId: number) {
     select: formatSelect,
   });
   if (!league) throw new AppError(404, messages.error.league.notFound);
-  return toFormatResponse(league);
+  const gameCount = await prisma.game.count({ where: { leagueId } });
+  return toFormatResponse(league, gameCount > 0);
 }
 
 async function updateFormat(leagueId: number, input: FormatInput) {
@@ -63,8 +64,12 @@ async function updateFormat(leagueId: number, input: FormatInput) {
     select: formatSelect,
   });
   if (!existing) throw new AppError(404, messages.error.league.notFound);
-  if (getFormatLockReason(existing.status) === "FINISHED")
+  const gameCount = await prisma.game.count({ where: { leagueId } });
+  const lockReason = getFormatLockReason(existing.status, gameCount > 0);
+  if (lockReason === "FINISHED")
     throw new AppError(409, messages.error.league.finishedLocked);
+  if (lockReason === "HAS_GAMES")
+    throw new AppError(409, messages.error.leagueFormat.locked);
 
   const groupCount = await prisma.group.count({ where: { leagueId } });
   const groupCheck = evaluateFormatChange(input.format, groupCount);
@@ -76,10 +81,6 @@ async function updateFormat(leagueId: number, input: FormatInput) {
         : messages.error.leagueFormat.tooManyGroups,
     );
 
-  const gameCount = await prisma.game.count({ where: { leagueId } });
-  if (gameCount > 0)
-    throw new AppError(409, messages.error.leagueFormat.locked);
-
   const data = normalizeFormatInput(input);
 
   try {
@@ -88,7 +89,7 @@ async function updateFormat(leagueId: number, input: FormatInput) {
       data,
       select: formatSelect,
     });
-    return toFormatResponse(updated);
+    return toFormatResponse(updated, false);
   } catch (err: any) {
     if (err?.code === "P2025")
       throw new AppError(404, messages.error.league.notFound);

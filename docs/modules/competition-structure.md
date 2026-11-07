@@ -76,12 +76,12 @@ are never stored.
 ## Locking
 
 - `FINISHED` always blocks format edits (409, `league.finishedLocked`).
-- Once games exist, `HAS_GAMES` locks edits (Stage 3; direct Prisma count, no
-  import from `games`).
+- Once games exist, `HAS_GAMES` locks edits (direct Prisma count, no import
+  from `games`). `getFormatLockReason(status, hasGames)` checks `FINISHED`
+  first, then `HAS_GAMES`.
 - Switching to `KNOCKOUT_ONLY` while groups exist is blocked (409 `hasGroups`); switching to `SINGLE_GROUP_KNOCKOUT` with more than one group is blocked (409 `tooManyGroups`). Count comes from `Group` rows — no `groupCount` column on `leagues`.
 - Admin `GET` reports the lock through the `lock` advisory (`{"code",
-  "severity", "message", "params"}`; `FINISHED` today, `HAS_GAMES` once Stage 3
-  lands, `null` when editable), so the UI shows the reason instead of only an
+  "severity", "message", "params"}`; `FINISHED`, `HAS_GAMES`, `null` when editable), so the UI shows the reason instead of only an
   error. The admin format response has no `can` flag.
 - App-facing league responses keep using `can` flags (`leagues.policy.ts`) and
   are unchanged by the format contract.
@@ -91,7 +91,7 @@ are never stored.
 | Stage | Addition |
 |---|---|
 | 2 – groups | ✅ Done: format-change guards, per-group qualifier overrides, group warnings |
-| 3 – games | Activate `HAS_GAMES`; `TODO(Game)` in status/unregister paths |
+| 3 – games | ✅ Done: `HAS_GAMES` emitted, group lock, league status/delete guards |
 | 4 – standings | Read `winPoints` / `lossPoints` from the league row |
 | 5 – brackets | Read `format` to know whether a group stage precedes the bracket |
 | 6 – player stats | Add per-player-per-game stats referencing league records |

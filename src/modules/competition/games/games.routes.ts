@@ -2,7 +2,7 @@ import { Router } from "express";
 import validate from "../../../middleware/validate.ts";
 import optionalJWT from "../../../middleware/auth/optionalJWT.middleware.ts";
 import { optionalActor } from "../../../middleware/auth/attachActor.middleware.ts";
-import gamesValidation from "./admin/games.admin.validation.ts";
+import gamesValidation from "./games.validation.ts";
 import gamesController from "./games.controller.ts";
 
 const router = Router({ mergeParams: true });

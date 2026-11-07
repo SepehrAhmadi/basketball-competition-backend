@@ -2,19 +2,11 @@ import type { Request, Response, NextFunction } from "express";
 import { messages } from "../../../language/message.ts";
 import apiResponse from "../../../utils/apiResponse.ts";
 import gamesService from "./games.service.ts";
-import type { GameStatus } from "../../../prisma/generated/prisma/enums.ts";
+import type { GamesListQuery } from "./lib/games.queries.ts";
 
 async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const query = req.validatedQuery as {
-      page: number;
-      pageSize: number;
-      status?: GameStatus;
-      groupId?: number;
-      leagueTeamId?: number;
-      dateFrom?: string;
-      dateTo?: string;
-    };
+    const query = req.validatedQuery as GamesListQuery;
     const data = await gamesService.listPublicGames(
       Number(req.params.leagueId),
       query,
