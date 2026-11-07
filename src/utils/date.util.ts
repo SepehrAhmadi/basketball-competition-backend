@@ -45,4 +45,10 @@ export function sameDate(a: Date | null, b: Date | null): boolean {
   return (a?.getTime() ?? null) === (b?.getTime() ?? null);
 }
 
+export function todayInTehran(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tehran",
+  }).format(now);
+}
+
 

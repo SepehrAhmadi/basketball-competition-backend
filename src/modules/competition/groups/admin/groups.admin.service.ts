@@ -133,6 +133,12 @@ async function createGroup(
   }
 }
 
+async function assertGroupHasNoGames(groupId: number): Promise<void> {
+  const gameCount = await prisma.game.count({ where: { groupId } });
+  if (gameCount > 0)
+    throw new AppError(409, messages.error.game.hasGames);
+}
+
 async function updateGroup(
   leagueId: number,
   groupId: number,
@@ -141,6 +147,7 @@ async function updateGroup(
   const league = await loadGroupsLeague(leagueId);
   assertGroupsEditable(league);
   await loadGroup(leagueId, groupId);
+  await assertGroupHasNoGames(groupId);
   const data: { name?: string; qualifiersOverride?: number | null } = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.qualifiersOverride !== undefined)
@@ -168,6 +175,7 @@ async function deleteGroup(leagueId: number, groupId: number) {
   const league = await loadGroupsLeague(leagueId);
   assertGroupsEditable(league);
   await loadGroup(leagueId, groupId);
+  await assertGroupHasNoGames(groupId);
   await prisma.$transaction([
     prisma.groupTeam.deleteMany({ where: { groupId } }),
     prisma.group.delete({ where: { id: groupId } }),
@@ -198,9 +206,12 @@ async function assignTeam(
   leagueTeamId: number,
 ) {
   const { league } = await loadAssignmentContext(leagueId, groupId, leagueTeamId);
+  await assertGroupHasNoGames(groupId);
   const existing = await prisma.groupTeam.findUnique({
     where: { leagueTeamId },
   });
+  if (existing && existing.groupId !== groupId)
+    await assertGroupHasNoGames(existing.groupId);
   const movedFrom =
     existing && existing.groupId !== groupId ? existing.groupId : null;
   // Re-assigning to the same group is idempotent: nothing to write.
@@ -230,6 +241,7 @@ async function removeTeam(
   leagueTeamId: number,
 ) {
   const { league } = await loadRemovalContext(leagueId, groupId);
+  await assertGroupHasNoGames(groupId);
   const row = await prisma.groupTeam.findFirst({
     where: { leagueTeamId, groupId },
   });

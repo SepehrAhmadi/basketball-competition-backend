@@ -283,9 +283,13 @@ async function deleteLeague(leagueId: number) {
   });
   if (activeTeams > 0)
     throw new AppError(409, messages.error.league.hasTeams);
+  const gameCount = await prisma.game.count({ where: { leagueId } });
+  if (gameCount > 0)
+    throw new AppError(409, messages.error.game.hasGames);
 
   try {
     await prisma.$transaction([
+      prisma.game.deleteMany({ where: { leagueId } }),
       prisma.groupTeam.deleteMany({
         where: { group: { leagueId } },
       }),
@@ -337,8 +341,14 @@ async function updateLeagueStatus(
     }
   }
 
-  // TODO(Game): block leaving ACTIVE backwards with 409 once games exist.
-  void leagueId;
+  if (
+    existing.status === "ACTIVE" &&
+    (status === "REGISTRATION" || status === "INACTIVE")
+  ) {
+    const gameCount = await prisma.game.count({ where: { leagueId } });
+    if (gameCount > 0)
+      throw new AppError(409, messages.error.game.hasGames);
+  }
 
   try {
     const updated = await prisma.league.update({

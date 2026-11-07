@@ -76,8 +76,9 @@ async function updateFormat(leagueId: number, input: FormatInput) {
         : messages.error.leagueFormat.tooManyGroups,
     );
 
-  // TODO(Game): block with a direct prisma.game.count({ where: { leagueId } })
-  // > 0 → 409 messages.error.leagueFormat.locked once games exist (Stage 3).
+  const gameCount = await prisma.game.count({ where: { leagueId } });
+  if (gameCount > 0)
+    throw new AppError(409, messages.error.leagueFormat.locked);
 
   const data = normalizeFormatInput(input);
 

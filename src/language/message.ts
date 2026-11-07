@@ -156,6 +156,25 @@ export const messages = {
       avatarNotFound: "آواتار یافت نشد",
       avatarRequired: "فایل آواتار الزامی است",
     },
+    game: {
+      notFound: "بازی یافت نشد",
+      formatRequired: "ساختار لیگ هنوز مشخص نشده است",
+      formatNotGrouped: "بازی فقط در ساختار گروهی قابل ساخت است",
+      leagueNotActive: "بازی فقط در لیگ فعال قابل ساخت است",
+      sameTeam: "تیم خانه و میهمان نمی‌توانند یکی باشند",
+      teamNotGrouped: "هر دو تیم باید در یک گروه باشند",
+      teamsNotInSameGroup: "تیم‌های این بازی در یک گروه نیستند",
+      pairLimitReached: "سهمیه‌ی بازی‌های این دو تیم تکمیل شده است",
+      rescheduleSourceInvalid: "بازی مبدأ برای برگزاری مجدد معتبر نیست",
+      scheduleLocked: "زمان‌بندی این بازی دیگر قابل تغییر نیست",
+      statusLocked: "تغییر وضعیت این بازی مجاز نیست",
+      scoreInvalid: "امتیازها باید عدد صحیح و غیرمنفی باشند",
+      tieNotAllowed: "نتیحه مساوری قابل ثبت نیست.",
+      deleteNotAllowed: "فقط بازی برنامه‌ریزی‌شده یا کنسل‌شده قابل حذف است",
+      hasReplacement: "این بازی کنسل‌شده جایگزین دارد و قابل حذف نیست",
+      dateTimeTogether: "تاریخ و ساعت باید همزمان وارد شوند",
+      hasGames: "این لیگ بازی دارد",
+    },
   },
   success: {
     auth: {
@@ -259,6 +278,15 @@ export const messages = {
       teamRemoved: "تیم با موفقیت از گروه حذف شد",
       publicList: "لیست گروه‌ها با موفقیت دریافت شد",
     },
+    game: {
+      list: "لیست بازی‌ها با موفقیت دریافت شد",
+      found: "بازی با موفقیت دریافت شد",
+      created: "بازی با موفقیت ایجاد شد",
+      updated: "بازی با موفقیت به‌روزرسانی شد",
+      statusUpdated: "وضعیت بازی با موفقیت تغییر کرد",
+      resultSaved: "نتیجه‌ی بازی با موفقیت ثبت شد",
+      deleted: "بازی با موفقیت حذف شد",
+    },
     player: {
       found: "اطلاعات بازیکن با موفقیت دریافت شد",
       updated: "اطلاعات بازیکن با موفقیت به‌روزرسانی شد",
@@ -313,6 +341,17 @@ export const messages = {
       qualifiersExceedTeams:
         "تعداد صعودکننده‌های گروه {name} ({qualifiers}) بیشتر یا برابر تعداد تیم‌ها ({teams}) است",
       teamUnassigned: "{count} تیم بدون گروه باقی مانده است",
+    },
+    games: {
+      resultPending: "نتیجه‌ی این بازی هنوز ثبت نشده",
+      unscheduled: "تاریخ بازی مشخص نشده",
+      homeAwayNotSwapped: "میزبانی در بازی رفت و برگشت جابه‌جا نشده",
+      outsideLeaguePeriod: "تاریخ خارج از بازه‌ی لیگ است",
+      leagueNotActive: "لیگ فعال نیست",
+      formatNotSet: "ساختار لیگ تعیین نشده است",
+      formatNotGrouped: "ساختار لیگ گروهی نیست",
+      unfinishedGames: "بازی‌های بدون نتیجه در لیگ وجود دارد",
+      dependentStarted: "بازی وابسته شروع شده است",
     },
     team: {
       inOpenLeague:
