@@ -228,6 +228,13 @@ export function isResultPending(
   return scheduledDay < todayInTehran(now);
 }
 
+export function isUnscheduled(
+  status: GameStatusValue,
+  scheduledDate: Date | null,
+): boolean {
+  return (status === "SCHEDULED" || status === "LIVE") && scheduledDate === null;
+}
+
 export function isOutsideLeaguePeriod(
   scheduledDate: Date | null,
   startDate: Date | null,

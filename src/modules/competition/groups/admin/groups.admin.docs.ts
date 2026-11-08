@@ -395,8 +395,10 @@ registry.registerPath({
     },
     "409": {
       description:
-        "League is FINISHED, the target or source group has games " +
-        "(`group.hasGames`), or concurrent assignment conflict",
+        "League is FINISHED, the placement actually changes and the target " +
+        "or source group has games (`group.hasGames`; an idempotent " +
+        "re-assign to the same group is not blocked), or concurrent " +
+        "assignment conflict",
       content: { "application/json": { schema: conflictError } },
     },
   },

@@ -8,14 +8,14 @@ import {
 import {
   gameIdParamSchema,
   leagueIdParamSchema,
-  publicGamesQuerySchema,
+  gamesListQuerySchema,
 } from "./games.validation.ts";
 
 const publicNote =
   "Public endpoint. A Bearer token is optional. Ordered by `scheduledDate`, " +
   "`scheduledTime`, `id` ascending (unscheduled games first).";
 
-const publicGameTeamSchema = z
+export const publicGameTeamSchema = z
   .object({
     leagueTeamId: z.number().openapi({ example: 11 }),
     team: z.object({
@@ -39,7 +39,7 @@ const publicGameTeamSchema = z
   })
   .openapi("PublicGameTeam");
 
-const publicGameSchema = z
+export const publicGameSchema = z
   .object({
     id: z.number().openapi({ example: 1 }),
     status: z.string().openapi({ example: "SCHEDULED" }),
@@ -93,7 +93,7 @@ registry.registerPath({
     "Group-stage games of a grouped league. Empty when the format is not grouped. " +
     publicNote,
   security: [],
-  request: { params: leagueIdParamSchema, query: publicGamesQuerySchema },
+  request: { params: leagueIdParamSchema, query: gamesListQuerySchema },
   responses: {
     "200": {
       description: "Games fetched",

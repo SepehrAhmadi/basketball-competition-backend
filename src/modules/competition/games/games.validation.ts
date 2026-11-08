@@ -37,7 +37,7 @@ export const gameIdParamSchema = z.object({
   gameId: idField(1),
 });
 
-export const publicGamesQuerySchema = paginationQuerySchema.extend({
+export const gamesListQuerySchema = paginationQuerySchema.extend({
   status: z.enum(GAME_STATUS_VALUES).optional(),
   groupId: z.coerce.number().int().positive().optional().openapi({ example: 3 }),
   leagueTeamId: z.coerce
@@ -53,5 +53,5 @@ export const publicGamesQuerySchema = paginationQuerySchema.extend({
 export default {
   leagueIdParamSchema,
   gameIdParamSchema,
-  publicGamesQuerySchema,
+  gamesListQuerySchema,
 };

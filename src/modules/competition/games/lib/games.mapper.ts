@@ -10,6 +10,7 @@ import {
   evaluateGameActions,
   isOutsideLeaguePeriod,
   isResultPending,
+  isUnscheduled,
 } from "./games.rules.ts";
 
 export interface GameTeamItem {
@@ -105,7 +106,7 @@ export function toAdminGameItem(row: GameRow, ctx: AdminGameContext) {
     ...buildGameLocks(actions),
     issues: buildGameWarnings({
       resultPending: isResultPending(row.status, row.scheduledDate),
-      unscheduled: row.scheduledDate === null,
+      unscheduled: isUnscheduled(row.status, row.scheduledDate),
       homeAwayNotSwapped: ctx.notSwappedIds.has(row.id),
       outsideLeaguePeriod: isOutsideLeaguePeriod(
         row.scheduledDate,

@@ -171,6 +171,8 @@ export const messages = {
       rescheduleSourceInvalid: "بازی مبدأ برای برگزاری مجدد معتبر نیست",
       scheduleLocked: "زمان‌بندی این بازی دیگر قابل تغییر نیست",
       statusLocked: "تغییر وضعیت این بازی مجاز نیست",
+      cancelReasonNotAllowed:
+        "دلیل لغو فقط همراه وضعیت کنسل‌شده قابل ارسال است",
       scoreInvalid: "امتیازها باید عدد صحیح و غیرمنفی باشند",
       tieNotAllowed: "در بسکتبال نتیجه‌ی مساوی ثبت نمی‌شود",
       forfeitTeamInvalid: "تیم فورفیت‌کننده باید یکی از دو تیم این بازی باشد",

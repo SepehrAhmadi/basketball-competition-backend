@@ -6,76 +6,24 @@ import {
   successResponseSchema,
 } from "../../../../swagger/helpers.ts";
 import { advisorySchema } from "../../../../swagger/advisory.docs.ts";
+import { publicGameSchema } from "../games.docs.ts";
 import {
   createGameSchema,
   enterGameResultSchema,
   gameIdParamSchema,
   leagueIdParamSchema,
-  publicGamesQuerySchema,
+  gamesListQuerySchema,
   updateGameScheduleSchema,
   updateGameStatusSchema,
 } from "./games.admin.validation.ts";
 
-const adminGameTeamSchema = z
-  .object({
-    leagueTeamId: z.number().openapi({ example: 11 }),
-    team: z.object({
-      id: z.number().openapi({ example: 5 }),
-      name: z.string().openapi({ example: "عقاب" }),
-      logoUrl: z.string().nullable().openapi({ example: null }),
-    }),
-    organization: z
-      .object({
-        id: z.number().openapi({ example: 2 }),
-        name: z.string().openapi({ example: "باشگاه عقاب" }),
-      })
-      .nullable(),
-    teamStatus: z
-      .enum(["ACTIVE", "INACTIVE", "DELETED"])
-      .optional()
-      .openapi({
-        example: "ACTIVE",
-        description: "Present only for FINISHED leagues.",
-      }),
-  })
-  .openapi("AdminGameTeam");
-
 const lockField = (description: string) =>
   z.union([advisorySchema, z.null()]).openapi({ example: null, description });
 
-const adminGameSchema = z
-  .object({
-    id: z.number().openapi({ example: 1 }),
-    status: z.string().openapi({ example: "SCHEDULED" }),
-    resultType: z.string().nullable().openapi({ example: null }),
-    group: z
-      .object({
-        id: z.number().openapi({ example: 3 }),
-        name: z.string().openapi({ example: "گروه الف" }),
-      })
-      .nullable(),
-    homeTeam: adminGameTeamSchema,
-    awayTeam: adminGameTeamSchema,
-    scheduledDate: z.string().nullable().openapi({ example: "1405/08/16" }),
-    scheduledTime: z.string().nullable().openapi({ example: "17:00" }),
-    homeScore: z.number().nullable().openapi({ example: null }),
-    awayScore: z.number().nullable().openapi({ example: null }),
-    winnerLeagueTeamId: z.number().nullable().openapi({ example: null }),
-    forfeitLeagueTeamId: z.number().nullable().openapi({ example: null }),
+const adminGameSchema = publicGameSchema
+  .extend({
     resultNote: z.string().nullable().openapi({ example: null }),
     cancelReason: z.string().nullable().openapi({ example: null }),
-    rescheduledFrom: z
-      .object({
-        id: z.number().openapi({ example: 7 }),
-        status: z.string().openapi({ example: "CANCELED" }),
-      })
-      .nullable(),
-    rescheduledTo: z
-      .object({
-        id: z.number().openapi({ example: 9 }),
-        status: z.string().openapi({ example: "SCHEDULED" }),
-      })
-      .nullable(),
     scheduleLock: lockField(
       "Null when the schedule can be edited. Codes: `FINISHED`, " +
         "`LEAGUE_NOT_ACTIVE`, `STATUS_LOCKED`.",
@@ -100,7 +48,8 @@ const adminGameSchema = z
     issues: z.array(advisorySchema).openapi({
       description:
         "Warnings for this game; `[]` when none. Codes: `RESULT_PENDING`, " +
-        "`UNSCHEDULED`, `HOME_AWAY_NOT_SWAPPED`, `OUTSIDE_LEAGUE_PERIOD`.",
+        "`UNSCHEDULED` (produced only for `SCHEDULED` and `LIVE` games), " +
+        "`HOME_AWAY_NOT_SWAPPED`, `OUTSIDE_LEAGUE_PERIOD`.",
     }),
   })
   .openapi("AdminGame");
@@ -157,18 +106,20 @@ function jsonError(status: number, message: string) {
   };
 }
 
+type ErrorSpec = { description: string; message: string };
+
 function gameErrors(options: {
   permission: string;
-  notFound: string;
-  badRequest?: string;
-  conflict?: string;
+  notFound: ErrorSpec;
+  badRequest?: ErrorSpec;
+  conflict?: ErrorSpec;
 }) {
   return {
     ...(options.badRequest
       ? {
           "400": {
-            description: options.badRequest,
-            content: jsonError(400, messages.error.game.sameTeam),
+            description: options.badRequest.description,
+            content: jsonError(400, options.badRequest.message),
           },
         }
       : {}),
@@ -181,14 +132,14 @@ function gameErrors(options: {
       content: jsonError(403, "Forbidden"),
     },
     "404": {
-      description: options.notFound,
-      content: jsonError(404, messages.error.game.notFound),
+      description: options.notFound.description,
+      content: jsonError(404, options.notFound.message),
     },
     ...(options.conflict
       ? {
           "409": {
-            description: options.conflict,
-            content: jsonError(409, messages.error.game.statusLocked),
+            description: options.conflict.description,
+            content: jsonError(409, options.conflict.message),
           },
         }
       : {}),
@@ -203,7 +154,7 @@ registry.registerPath({
   description:
     "Filtered list ordered by date, time, id. Each item carries lock fields " +
     "and `issues`; `summary` covers the whole league.",
-  request: { params: leagueIdParamSchema, query: publicGamesQuerySchema },
+  request: { params: leagueIdParamSchema, query: gamesListQuerySchema },
   responses: {
     "200": {
       description: "Games fetched",
@@ -215,7 +166,13 @@ registry.registerPath({
         },
       },
     },
-    ...gameErrors({ permission: "games.view", notFound: "League not found" }),
+    ...gameErrors({
+      permission: "games.view",
+      notFound: {
+        description: "League not found",
+        message: messages.error.league.notFound,
+      },
+    }),
   },
 });
 
@@ -239,7 +196,10 @@ registry.registerPath({
     },
     ...gameErrors({
       permission: "games.view",
-      notFound: "League or game not found",
+      notFound: {
+        description: "League or game not found",
+        message: messages.error.game.notFound,
+      },
     }),
   },
 });
@@ -269,12 +229,21 @@ registry.registerPath({
     },
     ...gameErrors({
       permission: "games.create",
-      badRequest:
-        "Validation error, same team, team without group, or teams in different groups",
-      notFound: "League, league team or reschedule source not found",
-      conflict:
-        "League finished or not active, format not set or not grouped, pair " +
-        "limit reached, invalid reschedule source, or already rescheduled",
+      badRequest: {
+        description:
+          "Validation error, same team, team without group, or teams in different groups",
+        message: messages.error.game.sameTeam,
+      },
+      notFound: {
+        description: "League, league team or reschedule source not found",
+        message: messages.error.leagueTeam.notFound,
+      },
+      conflict: {
+        description:
+          "League finished or not active, format not set or not grouped, pair " +
+          "limit reached, invalid reschedule source, or already rescheduled",
+        message: messages.error.game.pairLimitReached,
+      },
     }),
   },
 });
@@ -302,9 +271,18 @@ registry.registerPath({
     },
     ...gameErrors({
       permission: "games.update",
-      badRequest: "Validation error",
-      notFound: "League or game not found",
-      conflict: "League finished or not active, or schedule locked",
+      badRequest: {
+        description: "Validation error",
+        message: messages.error.game.dateTimeTogether,
+      },
+      notFound: {
+        description: "League or game not found",
+        message: messages.error.game.notFound,
+      },
+      conflict: {
+        description: "League finished or not active, or schedule locked",
+        message: messages.error.game.scheduleLocked,
+      },
     }),
   },
 });
@@ -316,7 +294,9 @@ registry.registerPath({
   summary: "Change game status",
   description:
     "SCHEDULED to LIVE, SCHEDULED/LIVE to CANCELED. FINISHED games can " +
-    "never be canceled and CANCELED games have no transitions.",
+    "never be canceled and CANCELED games have no transitions. " +
+    "`cancelReason` is accepted only together with `status: CANCELED`; " +
+    "`cancelReason: null` is always valid.",
   request: {
     params: gameIdParamSchema,
     body: { content: { "application/json": { schema: updateGameStatusSchema } } },
@@ -334,9 +314,19 @@ registry.registerPath({
     },
     ...gameErrors({
       permission: "games.update",
-      badRequest: "Validation error",
-      notFound: "League or game not found",
-      conflict: "League finished or not active, or status locked",
+      badRequest: {
+        description:
+          "Validation error, or `cancelReason` sent with a status other than CANCELED",
+        message: messages.error.game.cancelReasonNotAllowed,
+      },
+      notFound: {
+        description: "League or game not found",
+        message: messages.error.game.notFound,
+      },
+      conflict: {
+        description: "League finished or not active, or status locked",
+        message: messages.error.game.statusLocked,
+      },
     }),
   },
 });
@@ -365,11 +355,20 @@ registry.registerPath({
     },
     ...gameErrors({
       permission: "games.result",
-      badRequest:
-        "Validation error, invalid score, tie not allowed, or forfeit team " +
-        "is not one of the game's teams",
-      notFound: "League or game not found",
-      conflict: "League finished or not active, or status locked",
+      badRequest: {
+        description:
+          "Validation error, invalid score, tie not allowed, or forfeit team " +
+          "is not one of the game's teams",
+        message: messages.error.game.tieNotAllowed,
+      },
+      notFound: {
+        description: "League or game not found",
+        message: messages.error.game.notFound,
+      },
+      conflict: {
+        description: "League finished or not active, or status locked",
+        message: messages.error.game.statusLocked,
+      },
     }),
   },
 });
@@ -396,9 +395,15 @@ registry.registerPath({
     },
     ...gameErrors({
       permission: "games.result",
-      notFound: "League or game not found",
-      conflict:
-        "League finished or not active, no result to clear, or status locked",
+      notFound: {
+        description: "League or game not found",
+        message: messages.error.game.notFound,
+      },
+      conflict: {
+        description:
+          "League finished or not active, no result to clear, or status locked",
+        message: messages.error.game.noResultToClear,
+      },
     }),
   },
 });
@@ -424,9 +429,15 @@ registry.registerPath({
     },
     ...gameErrors({
       permission: "games.delete",
-      notFound: "League or game not found",
-      conflict:
-        "League finished or not active, delete not allowed, or game has a replacement",
+      notFound: {
+        description: "League or game not found",
+        message: messages.error.game.notFound,
+      },
+      conflict: {
+        description:
+          "League finished or not active, delete not allowed, or game has a replacement",
+        message: messages.error.game.deleteNotAllowed,
+      },
     }),
   },
 });

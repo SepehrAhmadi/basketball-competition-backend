@@ -15,7 +15,7 @@ router.get(
   "/",
   verifyPermission("games.view"),
   validate(gamesAdminValidation.leagueIdParamSchema, "params"),
-  validate(gamesAdminValidation.publicGamesQuerySchema, "query"),
+  validate(gamesAdminValidation.gamesListQuerySchema, "query"),
   gamesAdminController.list,
 );
 

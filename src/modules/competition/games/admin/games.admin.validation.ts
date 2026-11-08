@@ -6,10 +6,10 @@ import {
   idField,
   jalaliDateSchema,
   leagueIdParamSchema,
-  publicGamesQuerySchema,
+  gamesListQuerySchema,
 } from "../games.validation.ts";
 
-export { leagueIdParamSchema, gameIdParamSchema, publicGamesQuerySchema };
+export { leagueIdParamSchema, gameIdParamSchema, gamesListQuerySchema };
 
 const timeField = z
   .string()
@@ -60,7 +60,14 @@ export const updateGameStatusSchema = z
     status: z.enum(["LIVE", "CANCELED"]).openapi({ example: "LIVE" }),
     cancelReason: z.string().max(5000).nullable().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (data) => data.status === "CANCELED" || data.cancelReason == null,
+    {
+      message: messages.error.game.cancelReasonNotAllowed,
+      path: ["cancelReason"],
+    },
+  );
 
 const scoreField = (example: number) =>
   z
@@ -90,7 +97,7 @@ export const enterGameResultSchema = z.discriminatedUnion("resultType", [
 export default {
   leagueIdParamSchema,
   gameIdParamSchema,
-  publicGamesQuerySchema,
+  gamesListQuerySchema,
   createGameSchema,
   updateGameScheduleSchema,
   updateGameStatusSchema,

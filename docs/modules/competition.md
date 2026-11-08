@@ -93,6 +93,8 @@ player stats under the same parent folder.
   `SINGLE_GROUP_KNOCKOUT` with more than one group, returns 409.
 - Group lock: once a group has games, its name and `qualifiersOverride` stay
   editable, but assign, move, remove and delete return 409 `group.hasGames`.
+  Re-assigning a team to the group it already belongs to is idempotent and is
+  not blocked by the group lock.
   Admin group items carry `lock` (`HAS_GAMES` or `null`).
 - Games exist only in `ACTIVE` leagues with a group format. One pure function
   (`evaluateGameActions`) decides `schedule`, `start`, `cancel`, `result` and
@@ -105,8 +107,9 @@ player stats under the same parent folder.
   `DELETE .../result`; a `FINISHED` game is never canceled and a `CANCELED`
   game has no transitions (a replay is a new game with `rescheduledFromGameId`).
 - Results: `NORMAL` (non-negative integer scores, no ties) or `FORFEIT` (stored
-  as 0/20). Admin items carry `issues`: `RESULT_PENDING`, `UNSCHEDULED`,
-  `HOME_AWAY_NOT_SWAPPED` (second game of a `DOUBLE_ROUND` pair with the same
+  as 0/20). Admin items carry `issues`: `RESULT_PENDING`, `UNSCHEDULED`
+  (produced only for `SCHEDULED` and `LIVE` games), `HOME_AWAY_NOT_SWAPPED`
+  (second game of a `DOUBLE_ROUND` pair with the same
   home team), `OUTSIDE_LEAGUE_PERIOD`. The list `summary` has zero-filled
   `byStatus`, `resultPending`, `unfinished` and `issues` (`UNFINISHED_GAMES`).
 - A league with games can only move between `ACTIVE` and `FINISHED` (409

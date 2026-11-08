@@ -12,7 +12,7 @@ router.get(
   optionalJWT,
   optionalActor,
   validate(gamesValidation.leagueIdParamSchema, "params"),
-  validate(gamesValidation.publicGamesQuerySchema, "query"),
+  validate(gamesValidation.gamesListQuerySchema, "query"),
   gamesController.list,
 );
 

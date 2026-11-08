@@ -215,31 +215,34 @@ async function assignTeam(
   leagueTeamId: number,
 ) {
   const { league } = await loadAssignmentContext(leagueId, groupId, leagueTeamId);
-  await assertGroupHasNoGames(groupId);
   const existing = await prisma.groupTeam.findUnique({
     where: { leagueTeamId },
   });
-  if (existing && existing.groupId !== groupId)
-    await assertGroupHasNoGames(existing.groupId);
-  const movedFrom =
-    existing && existing.groupId !== groupId ? existing.groupId : null;
-  // Re-assigning to the same group is idempotent: nothing to write.
-  if (!existing || movedFrom !== null) {
-    try {
-      await prisma.groupTeam.upsert({
-        where: { leagueTeamId },
-        create: { groupId, leagueTeamId },
-        update: { groupId },
-      });
-    } catch (err: unknown) {
-      if ((err as { code?: string })?.code === "P2002")
-        throw new AppError(409, messages.error.group.teamAssignConflict);
-      throw err;
-    }
+
+  // Re-assigning to the same group is a no-op: idempotent, not blocked by the group lock.
+  if (existing && existing.groupId === groupId) {
+    return buildPlacementResult(leagueId, [groupId], league.defaultQualifiersPerGroup);
   }
+
+  // A real placement change: both the target group and the source group (when moving) must be unlocked.
+  await assertGroupHasNoGames(groupId);
+  if (existing) await assertGroupHasNoGames(existing.groupId);
+
+  try {
+    await prisma.groupTeam.upsert({
+      where: { leagueTeamId },
+      create: { groupId, leagueTeamId },
+      update: { groupId },
+    });
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === "P2002")
+      throw new AppError(409, messages.error.group.teamAssignConflict);
+    throw err;
+  }
+
   return buildPlacementResult(
     leagueId,
-    movedFrom !== null ? [groupId, movedFrom] : [groupId],
+    existing ? [groupId, existing.groupId] : [groupId],
     league.defaultQualifiersPerGroup,
   );
 }
