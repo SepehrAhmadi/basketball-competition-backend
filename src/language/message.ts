@@ -264,6 +264,9 @@ export const messages = {
     groupRoundTypes: {
       fetched: "انواع دور مسابقات گروهی با موفقیت دریافت شد",
     },
+    gameStatuses: {
+      fetched: "وضعیت‌های بازی با موفقیت دریافت شد",
+    },
     leagueTeam: {
       list: "لیست تیم‌های لیگ با موفقیت دریافت شد",
       eligibleList: "لیست تیم‌های قابل ثبت‌نام با موفقیت دریافت شد",
