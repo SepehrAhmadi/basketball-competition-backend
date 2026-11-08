@@ -94,6 +94,16 @@ export const PERMISSION_CATALOG = [
       { code: "groups.delete", label: "حذف گروه" },
     ],
   },
+  {
+    title: "بازی‌ها",
+    permissions: [
+      { code: "games.view", label: "مشاهده بازی‌ها" },
+      { code: "games.create", label: "ایجاد بازی" },
+      { code: "games.update", label: "ویرایش بازی" },
+      { code: "games.result", label: "ثبت نتیجه بازی" },
+      { code: "games.delete", label: "حذف بازی" },
+    ],
+  },
 ] as const;
 
 // Union of the exact code literals — derived from the catalog itself (NOT from
@@ -124,6 +134,7 @@ const CROSS_RESOURCE_DEPENDENCIES: Readonly<Record<string, readonly Permission[]
   "league-teams.view": ["leagues.view"],
   "league-roster.view": ["league-teams.view"],
   "groups.view": ["leagues.view", "league-teams.view"],
+  "games.view": ["leagues.view", "league-teams.view", "groups.view"],
 };
 
 const PERMISSION_SET: ReadonlySet<string> = new Set(PERMISSION_CODES);

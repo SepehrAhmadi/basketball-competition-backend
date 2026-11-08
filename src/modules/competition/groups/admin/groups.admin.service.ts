@@ -125,12 +125,21 @@ async function createGroup(
       },
     });
     // A new group has no teams yet.
-    return toGroupItem({ ...created, teams: [] }, league.defaultQualifiersPerGroup);
+    return toGroupItem(
+      { ...created, teams: [], _count: { games: 0 } },
+      league.defaultQualifiersPerGroup,
+    );
   } catch (err: unknown) {
     if ((err as { code?: string })?.code === "P2002")
       throw new AppError(409, messages.error.group.nameExists);
     throw err;
   }
+}
+
+async function assertGroupHasNoGames(groupId: number): Promise<void> {
+  const gameCount = await prisma.game.count({ where: { groupId } });
+  if (gameCount > 0)
+    throw new AppError(409, messages.error.group.hasGames);
 }
 
 async function updateGroup(
@@ -168,10 +177,18 @@ async function deleteGroup(leagueId: number, groupId: number) {
   const league = await loadGroupsLeague(leagueId);
   assertGroupsEditable(league);
   await loadGroup(leagueId, groupId);
-  await prisma.$transaction([
-    prisma.groupTeam.deleteMany({ where: { groupId } }),
-    prisma.group.delete({ where: { id: groupId } }),
-  ]);
+  await assertGroupHasNoGames(groupId);
+  try {
+    await prisma.$transaction([
+      prisma.groupTeam.deleteMany({ where: { groupId } }),
+      prisma.group.delete({ where: { id: groupId } }),
+    ]);
+  } catch (err: unknown) {
+    // Backstop for the Restrict FK from games.group_id (a game created concurrently).
+    if ((err as { code?: string })?.code === "P2003")
+      throw new AppError(409, messages.error.group.hasGames);
+    throw err;
+  }
   const unassignedCount = await countUnassigned(leagueId);
   return { unassignedCount, issues: buildUnassignedIssue(unassignedCount) };
 }
@@ -201,25 +218,31 @@ async function assignTeam(
   const existing = await prisma.groupTeam.findUnique({
     where: { leagueTeamId },
   });
-  const movedFrom =
-    existing && existing.groupId !== groupId ? existing.groupId : null;
-  // Re-assigning to the same group is idempotent: nothing to write.
-  if (!existing || movedFrom !== null) {
-    try {
-      await prisma.groupTeam.upsert({
-        where: { leagueTeamId },
-        create: { groupId, leagueTeamId },
-        update: { groupId },
-      });
-    } catch (err: unknown) {
-      if ((err as { code?: string })?.code === "P2002")
-        throw new AppError(409, messages.error.group.teamAssignConflict);
-      throw err;
-    }
+
+  // Re-assigning to the same group is a no-op: idempotent, not blocked by the group lock.
+  if (existing && existing.groupId === groupId) {
+    return buildPlacementResult(leagueId, [groupId], league.defaultQualifiersPerGroup);
   }
+
+  // A real placement change: both the target group and the source group (when moving) must be unlocked.
+  await assertGroupHasNoGames(groupId);
+  if (existing) await assertGroupHasNoGames(existing.groupId);
+
+  try {
+    await prisma.groupTeam.upsert({
+      where: { leagueTeamId },
+      create: { groupId, leagueTeamId },
+      update: { groupId },
+    });
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === "P2002")
+      throw new AppError(409, messages.error.group.teamAssignConflict);
+    throw err;
+  }
+
   return buildPlacementResult(
     leagueId,
-    movedFrom !== null ? [groupId, movedFrom] : [groupId],
+    existing ? [groupId, existing.groupId] : [groupId],
     league.defaultQualifiersPerGroup,
   );
 }
@@ -230,6 +253,7 @@ async function removeTeam(
   leagueTeamId: number,
 ) {
   const { league } = await loadRemovalContext(leagueId, groupId);
+  await assertGroupHasNoGames(groupId);
   const row = await prisma.groupTeam.findFirst({
     where: { leagueTeamId, groupId },
   });

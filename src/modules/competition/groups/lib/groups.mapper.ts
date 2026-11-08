@@ -1,5 +1,11 @@
 import getPublicFileUrl from "../../../../utils/getFileUrl.ts";
-import { buildGroupIssues, type GroupIssueAdvisory } from "./groups.advisories.ts";
+import type { Advisory } from "../../../../shared/advisory.ts";
+import {
+  buildGroupIssues,
+  buildGroupLock,
+  type GroupIssueAdvisory,
+  type GroupLockCode,
+} from "./groups.advisories.ts";
 import type { GroupWithTeams, LeagueTeamWithTeam } from "./groups.queries.ts";
 import { effectiveQualifiers } from "./groups.rules.ts";
 
@@ -17,6 +23,7 @@ export interface GroupItem {
   qualifiers: number | null;
   teamsCount: number;
   issues: GroupIssueAdvisory[];
+  lock: Advisory<GroupLockCode> | null;
   teams: GroupTeamItem[];
 }
 
@@ -61,6 +68,7 @@ export function toGroupItem(
       teamsCount: leagueTeams.length,
       qualifiers,
     }),
+    lock: buildGroupLock(group._count.games > 0),
     teams: leagueTeams.map((lt) =>
       toGroupTeamItem(lt, { includeStatus: includeDeleted }),
     ),

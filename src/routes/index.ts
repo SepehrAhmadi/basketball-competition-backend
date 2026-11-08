@@ -23,6 +23,8 @@ import leagueTeamsAdminRoutes, {
 import formatAdminRoutes from "../modules/competition/format/admin/format.admin.routes.ts";
 import groupsRoutes from "../modules/competition/groups/groups.routes.ts";
 import groupsAdminRoutes from "../modules/competition/groups/admin/groups.admin.routes.ts";
+import gamesRoutes from "../modules/competition/games/games.routes.ts";
+import gamesAdminRoutes from "../modules/competition/games/admin/games.admin.routes.ts";
 
 const router = Router();
 
@@ -43,11 +45,13 @@ router.use("/seasons", seasonsRoutes);
 router.use("/admin/age-categories", ageCategoriesAdminRoutes);
 router.use("/admin/age-category-cutoffs", ageCategoryCutoffsAdminRoutes);
 router.use("/leagues/:leagueId/groups", groupsRoutes);
+router.use("/leagues/:leagueId/games", gamesRoutes);
 router.use("/leagues", leaguesRoutes);
 router.use("/admin/leagues/:leagueId/teams", leagueTeamsAdminRoutes);
 router.use("/admin/leagues/:leagueId/eligible-teams", eligibleTeamsRouter);
 router.use("/admin/leagues/:leagueId/format", formatAdminRoutes);
 router.use("/admin/leagues/:leagueId/groups", groupsAdminRoutes);
+router.use("/admin/leagues/:leagueId/games", gamesAdminRoutes);
 router.use("/admin/leagues", leaguesAdminRoutes);
 
 export default router;

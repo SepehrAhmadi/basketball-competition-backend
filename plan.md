@@ -1,300 +1,212 @@
-# Backend Plan: League Dropdown Endpoint
+# Stage 3 Follow-up Fixes (v3, small)
 
-## 1. Goal
+Scope: exactly the five items from the second code review. Nothing else is in scope: no new features, no behavior changes outside the items below, no tests, no refactors of other modules. Do not touch `jalaliDateSchema` / `idField` duplication, and do not touch the `groups` validation layout.
 
-Add one read-only endpoint that returns leagues as dropdown items, so the admin panel and the app can let a user pick a league (for example, the league selector on the group-management page).
-
-- **Route:** `GET /api/v1/dropdowns/leagues`
-- **Access:** any authenticated user (`verifyJWT`), like the other dropdowns.
-- **Scope:** read-only. No writes, no new permission, no new table, no migration.
+Items are ordered so that each step leaves the project compiling. Apply them in this order: F5, F3, F2, F1, F4, then the docs step.
 
 ---
 
-## 2. Decisions
+## F5. Rename `publicGamesQuerySchema` to `gamesListQuerySchema`
 
-| # | Topic | Decision |
-|---|---|---|
-| 1 | Who can call it | Every logged-in user. The route sits under `dropdownsRoutes`, which already applies `verifyJWT`. |
-| 2 | Visibility of `INACTIVE` leagues | **Hidden from non-admins, visible to admins.** This matches the public league rules (`leaguePolicy.view`, `loadLeagueContext`). Without this, an `INACTIVE` league (a draft that has not been published) would leak to every user through the dropdown. |
-| 3 | Visibility of other statuses | `REGISTRATION`, `ACTIVE`, `FINISHED` are visible to everyone. |
-| 4 | Admin check | Read `req.adminLevel` from the token (set by `verifyJWT`). No database call is needed. |
-| 5 | Ordering | `id desc` (newest first), same as the league lists. |
-| 6 | Pagination | Standard `page` / `pageSize` (default 20, max 100), same as all dropdowns. |
-| 7 | Label | `"<league name> — <season name> — <age category name>"` (em dash with spaces). |
-| 8 | Search | Case-sensitive `contains` on the league name. The input is trimmed and Arabic `ي` / `ك` are mapped to Persian `ی` / `ک`, the same normalization used when league names are saved. |
-| 9 | Status filter | Optional `status`. It is intersected with the statuses the caller is allowed to see, so a non-admin asking for `status=INACTIVE` gets an empty list (not a 403). |
-| 10 | Cache | None. Same as the other dropdowns. |
+Problem: the admin list uses a schema named "public". The schema is shared by the public and admin lists, so the name is misleading.
+
+Change (pure rename, no behavior change):
+
+- `src/modules/competition/games/games.validation.ts`: rename the export `publicGamesQuerySchema` to `gamesListQuerySchema`, including the entry in the default export object.
+- Update every usage:
+  - `games/games.routes.ts` (`gamesValidation.gamesListQuerySchema`)
+  - `games/games.docs.ts` (import and `request.query`)
+  - `games/admin/games.admin.validation.ts` (re-export list and default export)
+  - `games/admin/games.admin.routes.ts` (`gamesAdminValidation.gamesListQuerySchema`)
+  - `games/admin/games.admin.docs.ts` (import and `request.query`)
+- Do not keep an alias: all consumers are inside the repo, so an alias would only be dead code.
+
+Check: `grep -rn "publicGamesQuerySchema" src docs` returns nothing. The query schema has no registered OpenAPI name, so the generated Swagger does not change.
 
 ---
 
-## 3. API Contract
+## F3. `cancelReason` only together with `status: CANCELED`
 
-### 3.1 Request
+Problem: `PATCH .../status` accepts `cancelReason` together with `status: "LIVE"` and silently ignores it.
 
-`GET /dropdowns/leagues?page=1&pageSize=20&search=...&seasonId=...&ageCategoryId=...&status=...`
+Changes:
 
-| Query param | Type | Required | Notes |
-|---|---|---|---|
-| `page` | int ≥ 1 | no (default 1) | from `paginationQuerySchema` |
-| `pageSize` | int 1–100 | no (default 20) | from `paginationQuerySchema` |
-| `search` | string | no | name contains, normalized (see decision 8) |
-| `seasonId` | positive int | no | filters through `ageCategoryCutoff.seasonId` |
-| `ageCategoryId` | positive int | no | filters through `ageCategoryCutoff.ageCategoryId` |
-| `status` | enum | no | one of `INACTIVE`, `REGISTRATION`, `ACTIVE`, `FINISHED` |
+- `src/language/message.ts`, `error.game`: add
+  - `cancelReasonNotAllowed`: `"دلیل لغو فقط همراه وضعیت کنسل‌شده قابل ارسال است"`
+- `games/admin/games.admin.validation.ts`, `updateGameStatusSchema`: after `.strict()` add
 
-### 3.2 Response (`200`)
+```ts
+.refine(
+  (data) => data.status === "CANCELED" || data.cancelReason == null,
+  {
+    message: messages.error.game.cancelReasonNotAllowed,
+    path: ["cancelReason"],
+  },
+)
+```
 
-Uses the standard envelope `{ statusCode, message, data }` with `data` shaped as `paginatedResponseSchema(leagueDropdownItemSchema)`:
+- `cancelReason: null` stays valid for both statuses (it means "no reason"). Only a non-null value together with `LIVE` is rejected, with a 400 from the `validate` middleware (`cancelReason: <message>`).
+- No service change: `updateStatus` already writes `cancelReason` only for `CANCELED`.
+- `games/admin/games.admin.docs.ts`: mention the rule in the `PATCH .../status` description and in its 400 description (see F4).
 
-```json
-{
-  "statusCode": 200,
-  "message": "فهرست با موفقیت دریافت شد",
-  "data": {
-    "items": [
-      {
-        "value": 3,
-        "label": "لیگ برتر نوجوانان — فصل ۱۴۰۵ — نوجوانان",
-        "status": "REGISTRATION",
-        "seasonId": 2,
-        "ageCategoryId": 1
-      }
-    ],
-    "total": 1,
-    "page": 1,
-    "pageSize": 20
+---
+
+## F2. `UNSCHEDULED` warning only for open games
+
+Problem: canceled games (and finished games) that never had a date get the "date not set" warning.
+
+Decision: the warning applies only to `SCHEDULED` and `LIVE` games. A `FINISHED` game without a date no longer warns.
+
+Changes:
+
+- `games/lib/games.rules.ts`: add a pure helper next to `isResultPending`:
+
+```ts
+export function isUnscheduled(
+  status: GameStatusValue,
+  scheduledDate: Date | null,
+): boolean {
+  return (status === "SCHEDULED" || status === "LIVE") && scheduledDate === null;
+}
+```
+
+- `games/lib/games.mapper.ts`, `toAdminGameItem`: replace `unscheduled: row.scheduledDate === null` with `unscheduled: isUnscheduled(row.status, row.scheduledDate)` (import the helper).
+- `games/admin/games.admin.docs.ts`: in the `issues` description, state that `UNSCHEDULED` is produced only for `SCHEDULED` and `LIVE` games.
+- `docs/modules/competition.md`: same wording in the sentence that lists the admin item `issues`.
+- Do not change `OUTSIDE_LEAGUE_PERIOD` or `RESULT_PENDING`.
+
+---
+
+## F1. `assignTeam` is idempotent even when the group has games
+
+Problem: `groups.admin.service.assignTeam` calls `assertGroupHasNoGames(groupId)` before it reads the existing placement. Re-assigning a team that is already in a group that has games returns 409, although the docs say re-assignment is idempotent and nothing would change.
+
+File: `src/modules/competition/groups/admin/groups.admin.service.ts`, function `assignTeam`.
+
+Change: read the existing placement first and return early on a no-op. Keep `loadAssignmentContext` first (league 404, `FINISHED` 409, group 404, league team 404 keep their order).
+
+```ts
+async function assignTeam(leagueId: number, groupId: number, leagueTeamId: number) {
+  const { league } = await loadAssignmentContext(leagueId, groupId, leagueTeamId);
+  const existing = await prisma.groupTeam.findUnique({ where: { leagueTeamId } });
+
+  // Re-assigning to the same group is a no-op: idempotent, not blocked by the group lock.
+  if (existing && existing.groupId === groupId) {
+    return buildPlacementResult(leagueId, [groupId], league.defaultQualifiersPerGroup);
   }
-}
-```
 
-Item fields:
+  // A real placement change: both the target group and the source group (when moving) must be unlocked.
+  await assertGroupHasNoGames(groupId);
+  if (existing) await assertGroupHasNoGames(existing.groupId);
 
-| Field | Type | Meaning |
-|---|---|---|
-| `value` | number | league id |
-| `label` | string | display text (decision 7) |
-| `status` | enum | league status, so the UI can color or group items |
-| `seasonId` | number | lets the UI filter or group without a second request |
-| `ageCategoryId` | number | same reason as `seasonId` |
+  try {
+    await prisma.groupTeam.upsert({
+      where: { leagueTeamId },
+      create: { groupId, leagueTeamId },
+      update: { groupId },
+    });
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === "P2002")
+      throw new AppError(409, messages.error.group.teamAssignConflict);
+    throw err;
+  }
 
-### 3.3 Errors
-
-| Code | When |
-|---|---|
-| `400` | invalid query (for example `pageSize=500`, `status=DRAFT`), via `validate` |
-| `401` | missing or invalid access token |
-
-No `403` and no `404` on this endpoint.
-
----
-
-## 4. Files to Change
-
-All paths are under `src/modules/shared/dropdowns/`.
-
-| File | Change |
-|---|---|
-| `dropdowns.validation.ts` | Add `leagueDropdownQuerySchema` = `dropdownSearchQuerySchema.extend({ seasonId, ageCategoryId, status })`. Export it in the default object. |
-| `lib/league-dropdown.rules.ts` (new) | Pure helpers, no Prisma and no Express: `allowedLeagueStatuses(isAdmin, requested?)` and `buildLeagueLabel({ name, seasonName, ageCategoryName })`. |
-| `lib/league-dropdown.rules.test.ts` (new) | Unit tests (see section 6). |
-| `dropdowns.service.ts` | Add `getLeaguesDropdown(query, { isAdmin })`. Builds the `where`, runs `findMany` and `count` in one `$transaction`, maps rows to items. |
-| `dropdowns.controller.ts` | Add `getLeagues`. Reads `req.validatedQuery` and `req.adminLevel`, calls the service, responds with `sendDropdown`. |
-| `dropdowns.routes.ts` | Add `router.get("/leagues", validate(leagueDropdownQuerySchema, "query"), dropdownsController.getLeagues)`. |
-| `dropdowns.docs.ts` | Add a `registerPath` for `GET /dropdowns/leagues` with `bearerAuth`, the query schema, and the `200` / `400` / `401` responses. Add `leagueDropdownItemSchema` with `.openapi("LeagueDropdownItem")`. |
-
-No change to `schema.prisma`, no migration, no new permission, no new message key (use `messages.success.dropdown.fetched`).
-
----
-
-## 5. Implementation Details
-
-### 5.1 Pure helpers (`lib/league-dropdown.rules.ts`)
-
-```ts
-import type { LeagueStatus } from "../../../../prisma/generated/prisma/enums.ts";
-
-const ALL_STATUSES: LeagueStatus[] = ["INACTIVE", "REGISTRATION", "ACTIVE", "FINISHED"];
-const PUBLIC_STATUSES: LeagueStatus[] = ["REGISTRATION", "ACTIVE", "FINISHED"];
-
-// Statuses the caller may see, narrowed by the optional requested status.
-// Returns [] when the request asks for a status the caller may not see.
-export function allowedLeagueStatuses(isAdmin: boolean, requested?: LeagueStatus): LeagueStatus[] {
-  const base = isAdmin ? ALL_STATUSES : PUBLIC_STATUSES;
-  if (!requested) return base;
-  return base.includes(requested) ? [requested] : [];
-}
-
-export function buildLeagueLabel(input: {
-  name: string;
-  seasonName: string;
-  ageCategoryName: string;
-}): string {
-  return `${input.name} — ${input.seasonName} — ${input.ageCategoryName}`;
-}
-```
-
-Adjust the import path to the actual depth of the `lib` folder.
-
-### 5.2 Service (`dropdowns.service.ts`)
-
-```ts
-async function getLeaguesDropdown(
-  query: LeagueDropdownQuery,
-  requester: { isAdmin: boolean },
-) {
-  const statuses = allowedLeagueStatuses(requester.isAdmin, query.status);
-  const search = normalizeSearch(query.search); // trim + ي/ك mapping, undefined if empty
-
-  const where: Prisma.LeagueWhereInput = {
-    status: { in: statuses },
-    ...(search ? { name: { contains: search } } : {}),
-    ...(query.seasonId || query.ageCategoryId
-      ? {
-          ageCategoryCutoff: {
-            ...(query.seasonId ? { seasonId: query.seasonId } : {}),
-            ...(query.ageCategoryId ? { ageCategoryId: query.ageCategoryId } : {}),
-          },
-        }
-      : {}),
-  };
-
-  const [items, total] = await prisma.$transaction([
-    prisma.league.findMany({
-      where,
-      orderBy: { id: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        ageCategoryCutoff: {
-          select: {
-            seasonId: true,
-            ageCategoryId: true,
-            season: { select: { name: true } },
-            ageCategory: { select: { name: true } },
-          },
-        },
-      },
-    }),
-    prisma.league.count({ where }),
-  ]);
-
-  return {
-    items: items.map((l) => ({
-      value: l.id,
-      label: buildLeagueLabel({
-        name: l.name,
-        seasonName: l.ageCategoryCutoff.season.name,
-        ageCategoryName: l.ageCategoryCutoff.ageCategory.name,
-      }),
-      status: l.status,
-      seasonId: l.ageCategoryCutoff.seasonId,
-      ageCategoryId: l.ageCategoryCutoff.ageCategoryId,
-    })),
-    total,
-    page: query.page,
-    pageSize: query.pageSize,
-  };
+  return buildPlacementResult(
+    leagueId,
+    existing ? [groupId, existing.groupId] : [groupId],
+    league.defaultQualifiersPerGroup,
+  );
 }
 ```
 
 Notes:
 
-- `status: { in: [] }` returns no rows in Prisma, which gives the empty result for decision 9 without a special branch.
-- Only the fields needed for the label are selected. Do not reuse `leagueInclude`; it also counts teams, which a dropdown does not need.
-- `normalizeSearch` should be the same helper that the league-name normalization uses. If it lives in `age-categories` or `leagues` validation, move it to `src/utils/` so both modules share one function. Do not copy it.
+- Behavior for real changes (first assignment, move) is unchanged, including the lock on both groups and the `P2002` mapping.
+- The `FINISHED` league lock still applies to a no-op re-assign (it is checked inside `loadAssignmentContext`), which is acceptable.
+- `groups/admin/groups.admin.docs.ts`, assign endpoint: keep the "Idempotent" description; in the 409 description say that the lock applies when the placement actually changes (target or source group has games), not to an idempotent re-assign.
+- `docs/modules/competition.md`, group lock paragraph: add one sentence: "Re-assigning a team to the group it already belongs to is idempotent and is not blocked by the group lock."
 
-### 5.3 Controller (`dropdowns.controller.ts`)
+---
+
+## F4. Admin Swagger: realistic error examples and no duplicated game schema
+
+Problem 1: `gameErrors()` in `games.admin.docs.ts` uses fixed example messages (every 400 shows `sameTeam`, every 409 shows `statusLocked`, every 404 shows `game.notFound`).
+
+Problem 2: `adminGameTeamSchema` is an exact copy of `publicGameTeamSchema`, and `adminGameSchema` repeats all public game fields.
+
+Changes in `games/games.docs.ts` (public):
+
+- Export `publicGameTeamSchema` and `publicGameSchema` (they stay registered as `PublicGameTeam` and `PublicGame`).
+
+Changes in `games/admin/games.admin.docs.ts`:
+
+- Delete `adminGameTeamSchema`.
+- Build the admin item from the public one, the same way `league-teams.admin.docs.ts` reuses `leagueTeamItemSchema`:
 
 ```ts
-async function getLeagues(req: Request, res: Response, next: NextFunction) {
-  try {
-    const query = req.validatedQuery as LeagueDropdownQuery;
-    const result = await dropdownsService.getLeaguesDropdown(query, {
-      isAdmin: req.adminLevel != null,
-    });
-    return sendDropdown(res, result);
-  } catch (err) {
-    next(err);
-  }
-}
+import { publicGameSchema } from "../games.docs.ts";
+
+const adminGameSchema = publicGameSchema
+  .extend({
+    resultNote: z.string().nullable().openapi({ example: null }),
+    cancelReason: z.string().nullable().openapi({ example: null }),
+    scheduleLock: lockField("..."),   // keep the existing five lock fields and their descriptions
+    startLock: lockField("..."),
+    cancelLock: lockField("..."),
+    resultLock: lockField("..."),
+    deleteLock: lockField("..."),
+    issues: z.array(advisorySchema).openapi({ description: "..." }),
+  })
+  .openapi("AdminGame");
 ```
 
-Use `req.validatedQuery` directly, because the route always runs `validate`.
-
-### 5.4 Route (`dropdowns.routes.ts`)
+  Keep the existing lock descriptions and the `issues` description (with the F2 wording). The team objects in admin responses now reference the shared `PublicGameTeam` component, which is correct because the shape is identical.
+- Change `gameErrors` so that every documented error carries its own description and example message:
 
 ```ts
-router.get(
-  "/leagues",
-  validate(dropdownsValidation.leagueDropdownQuerySchema, "query"),
-  dropdownsController.getLeagues,
-);
+type ErrorSpec = { description: string; message: string };
+
+function gameErrors(options: {
+  permission: string;
+  notFound: ErrorSpec;
+  badRequest?: ErrorSpec;
+  conflict?: ErrorSpec;
+}) { /* 400 (optional), 401, 403, 404, 409 (optional), each with its own example message */ }
 ```
 
-The router-level `verifyJWT` already covers it. Place it with the other dropdown routes.
+- Per endpoint (description keeps the current wording; the example message changes):
 
-### 5.5 Swagger (`dropdowns.docs.ts`)
+| Endpoint | 400 example | 404 example | 409 example |
+|---|---|---|---|
+| `GET /` | none | `league.notFound` | none |
+| `GET /:gameId` | none | `game.notFound` | none |
+| `POST /` | `game.sameTeam` | `leagueTeam.notFound` | `game.pairLimitReached` |
+| `PUT /:gameId` | `game.dateTimeTogether` | `game.notFound` | `game.scheduleLocked` |
+| `PATCH /:gameId/status` | `game.cancelReasonNotAllowed` | `game.notFound` | `game.statusLocked` |
+| `PUT /:gameId/result` | `game.tieNotAllowed` | `game.notFound` | `game.statusLocked` |
+| `DELETE /:gameId/result` | none | `game.notFound` | `game.noResultToClear` |
+| `DELETE /:gameId` | none | `game.notFound` | `game.deleteNotAllowed` |
 
-- `security: [{ bearerAuth: [] }]`, same as the other dropdowns.
-- Description: "Searchable list of leagues for dropdowns. Non-admin callers never receive `INACTIVE` leagues. Admins receive all statuses."
-- Responses: `200` (paginated `LeagueDropdownItem`), `400`, `401`.
+  All messages come from `messages.error.*` (no inline strings). The set of documented status codes per endpoint does not change.
+- The 403 example stays `"Forbidden"`; the 401 example stays `"Unauthorized"`.
 
----
-
-## 6. Tests
-
-Add `lib/league-dropdown.rules.test.ts` using `node:test`, like the existing rule tests:
-
-- `allowedLeagueStatuses(false)` → `REGISTRATION`, `ACTIVE`, `FINISHED` (no `INACTIVE`).
-- `allowedLeagueStatuses(true)` → all four statuses.
-- `allowedLeagueStatuses(false, "INACTIVE")` → `[]`.
-- `allowedLeagueStatuses(false, "ACTIVE")` → `["ACTIVE"]`.
-- `allowedLeagueStatuses(true, "INACTIVE")` → `["INACTIVE"]`.
-- `buildLeagueLabel` joins with ` — ` in the right order.
-
-Manual checks (Swagger or Postman):
-
-1. Non-admin token: the response has no `INACTIVE` items, even with no status filter.
-2. Non-admin token with `status=INACTIVE`: `items: []`, `total: 0`.
-3. Admin token: `INACTIVE` leagues appear.
-4. `search=برتر` matches a name that contains `برتر`, and a name written with Arabic `ي` still matches after normalization.
-5. `seasonId` and `ageCategoryId` filter correctly, and together they narrow the result.
-6. `pageSize=101` → `400`. No token → `401`.
-7. Order is `id desc`.
+Not in scope: the `groups` docs (`groupTeamSchema` vs `publicGroupTeamSchema` have the same duplication; leave them).
 
 ---
 
-## 7. Documentation Updates
+## Docs step
 
-| File | Change |
-|---|---|
-| `docs/modules/shared.md` | Add `GET /dropdowns/leagues` under `dropdowns`: any authenticated user, `INACTIVE` hidden from non-admins, label format. |
-| `docs/status/current-state.md` | Note that the league dropdown is done (backend). |
-| `docs/status/roadmap.md` | No change needed unless you want to track the frontend selector separately. |
+Only these documentation edits (all small, all mentioned above):
 
----
-
-## 8. Frontend Notes (no backend change)
-
-- Use `search` with a debounce (for example 300 ms) for the autocomplete.
-- Store the chosen league id in the URL (`?leagueId=`), as agreed for the group page.
-- Show `status` as a small badge next to the label if you want to distinguish drafts (admin only sees them) and finished leagues.
-- The same endpoint can feed any other league selector in the admin panel and the app.
+- `docs/modules/competition.md`: `UNSCHEDULED` wording (F2) and the idempotent re-assign sentence (F1).
+- No other doc changes.
 
 ---
 
-## 9. Acceptance Checklist
+## Verification checklist (manual)
 
-- [ ] `GET /dropdowns/leagues` works for any logged-in user and returns `401` without a token.
-- [ ] Non-admins never receive `INACTIVE` leagues, with or without a filter.
-- [ ] Admins receive all statuses.
-- [ ] `label` follows `name — season — age category`.
-- [ ] `search` is trimmed and Arabic/Persian letters are normalized.
-- [ ] `seasonId`, `ageCategoryId`, and `status` filters work, alone and combined.
-- [ ] Results are ordered by `id desc` and paginated.
-- [ ] Swagger documents the endpoint and its responses.
-- [ ] Unit tests for the pure helpers pass.
-- [ ] Shared module docs and current-state are updated.
+- [ ] `grep -rn "publicGamesQuerySchema" src docs` returns no result; the project starts and `/docs` (Swagger) loads.
+- [ ] `PATCH .../status` with `{ "status": "LIVE", "cancelReason": "x" }` returns 400 with `cancelReason: ...`; with `{ "status": "LIVE", "cancelReason": null }` or `{ "status": "CANCELED", "cancelReason": "x" }` it succeeds.
+- [ ] A canceled game that has no date has no `UNSCHEDULED` issue; a `SCHEDULED` game without a date still has it; a `FINISHED` game without a date has none.
+- [ ] `PUT .../groups/:groupId/teams/:leagueTeamId` for a team already in a group that has games returns 200 with the placement summary; moving that team to another group (or moving another team into that group) still returns 409 `group.hasGames`; a first assignment into a group that has games still returns 409.
+- [ ] In Swagger, each admin games endpoint shows its own example error messages, and `AdminGame` no longer contains a separate `AdminGameTeam` component.

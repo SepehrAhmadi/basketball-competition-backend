@@ -12,6 +12,8 @@ League management: leagues linked to an age-category cutoff (season + category d
   `competition.md`): one group per league team; unregister hard-deletes the
   `GroupTeam` row (re-registration starts unassigned); deleting a group
   unassigns its teams; deleting a league deletes groups first.
+    `Game` (`competition/games`) references `LeagueTeam` (home, away, forfeit)
+    and `Group` with `Restrict` FKs.
 - `LeagueTeamMember` — selection of a `TeamSeasonMember` into a league roster (soft-delete).
 
 ## Sub-modules
@@ -30,6 +32,7 @@ League management: leagues linked to an age-category cutoff (season + category d
 
 ## Responsibilities
 
+- Games guards: a league with games can only move between `ACTIVE` and `FINISHED` (→ `INACTIVE`/`REGISTRATION` returns 409 `league.hasGames` from any status, including the SUPER_ADMIN reopen path) and cannot be deleted (409 `league.hasGames`).
 - Status machine: free transitions except → `ACTIVE` needs ≥ 2 teams each with ≥ 1 player (`checkActiveRequirements`); leaving `FINISHED` needs `SUPER_ADMIN`. `REGISTRATION` requires a today-or-future deadline; clearing the deadline moves `REGISTRATION` back to `INACTIVE`.
 - Lifecycle: `startLeagueLifecycleJob` (startup + every ~90s) owns `REGISTRATION` → `ACTIVE` promotion in one batched pass (SQL date filter, grouped counts, conditional `updateMany`); reads never write. Write paths that move the deadline call `advanceLeagueIfExpired` once after the update.
 - Unregistering a team and removing the last player of a team are forbidden (409) in an `ACTIVE` league (`evaluateUnregister` returns `UNREGISTER_IN_ACTIVE`; `leagueTeamPolicy` mirrors it for the ADMIN `unregister` flag).
@@ -49,4 +52,4 @@ League management: leagues linked to an age-category cutoff (season + category d
 - → seasons: via cutoff (`cutoff.season`); never a direct `seasonId` on League.
 - → teams: roster is a selection of `TeamSeasonMember`; team guards block remove/role-change in `ACTIVE`/`FINISHED` leagues. Reverse: `teams.service` imports `lib/league.head-coach-sync.ts` (same-transaction batch sync; one-directional, no cycle).
 - → organizations: scoping via `managedOrgIds`.
-- Planned → games/groups/series: will reference `LeagueTeam`; stats will reference `LeagueTeamMember`.
+- ← games/groups: reference `LeagueTeam`; planned series and stats will reference `LeagueTeam`/`LeagueTeamMember`.

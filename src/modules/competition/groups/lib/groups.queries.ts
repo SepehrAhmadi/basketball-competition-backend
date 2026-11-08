@@ -25,6 +25,7 @@ export const groupWithTeamsInclude = {
     orderBy: { id: "asc" },
     include: { leagueTeam: { include: leagueTeamWithTeamInclude } },
   },
+  _count: { select: { games: true } },
 } satisfies Prisma.GroupInclude;
 
 export type GroupWithTeams = Prisma.GroupGetPayload<{
