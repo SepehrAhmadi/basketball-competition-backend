@@ -11,6 +11,8 @@ import {
   teamsDropdownQuerySchema,
   usersDropdownQuerySchema,
   adminLeagueDropdownQuerySchema,
+  adminLeagueGroupsDropdownQuerySchema,
+  adminLeagueTeamsDropdownQuerySchema,
 } from "./dropdowns.validation.ts";
 
 const valueLabelItemSchema = z
@@ -56,6 +58,15 @@ const leagueDropdownItemSchema = z
     ageCategoryId: z.number().openapi({ example: 1 }),
   })
   .openapi("LeagueDropdownItem");
+
+const leagueGroupDropdownItemSchema = idLabelItemSchema.openapi("LeagueGroupDropdownItem");
+
+const leagueTeamDropdownItemSchema = idLabelItemSchema
+  .extend({
+    organizationName: z.string().nullable().openapi({ example: "باشگاه عقاب" }),
+    groupId: z.number().nullable().openapi({ example: 1 }),
+  })
+  .openapi("LeagueTeamDropdownItem");
 
 const unauthorizedError = errorResponseSchema(401, "Unauthorized");
 const forbiddenError = errorResponseSchema(403, "Forbidden");
@@ -241,6 +252,100 @@ registry.registerPath({
     "403": {
       description: "Caller is not an admin",
       content: { "application/json": { schema: forbiddenError } },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/dropdowns/admin/league-groups",
+  tags: ["Dropdowns"],
+  summary: "League group options (admin)",
+  description: "Searchable id/label list of groups in a league, for admin games filters and forms. Admin or super admin only.",
+  security: [{ bearerAuth: [] }],
+  request: { query: adminLeagueGroupsDropdownQuerySchema },
+  responses: {
+    "200": {
+      description: "League group options",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(
+            paginatedResponseSchema(leagueGroupDropdownItemSchema),
+            { messageExample: messages.success.dropdown.fetched },
+          ),
+        },
+      },
+    },
+    "400": {
+      description: "Invalid query",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(400, "pageSize: Too big"),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: { "application/json": { schema: unauthorizedError } },
+    },
+    "403": {
+      description: "Caller is not an admin",
+      content: { "application/json": { schema: forbiddenError } },
+    },
+    "404": {
+      description: "League not found",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(404, messages.error.league.notFound),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/dropdowns/admin/league-teams",
+  tags: ["Dropdowns"],
+  summary: "League team options (admin)",
+  description: "Searchable list of teams registered in a league, for admin games filters and forms. Value is the league team id. Optionally scoped by groupId. Admin or super admin only.",
+  security: [{ bearerAuth: [] }],
+  request: { query: adminLeagueTeamsDropdownQuerySchema },
+  responses: {
+    "200": {
+      description: "League team options",
+      content: {
+        "application/json": {
+          schema: successResponseSchema(
+            paginatedResponseSchema(leagueTeamDropdownItemSchema),
+            { messageExample: messages.success.dropdown.fetched },
+          ),
+        },
+      },
+    },
+    "400": {
+      description: "Invalid query",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(400, "pageSize: Too big"),
+        },
+      },
+    },
+    "401": {
+      description: "Missing or invalid access token",
+      content: { "application/json": { schema: unauthorizedError } },
+    },
+    "403": {
+      description: "Caller is not an admin",
+      content: { "application/json": { schema: forbiddenError } },
+    },
+    "404": {
+      description: "League not found",
+      content: {
+        "application/json": {
+          schema: errorResponseSchema(404, messages.error.league.notFound),
+        },
+      },
     },
   },
 });

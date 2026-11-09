@@ -22,6 +22,8 @@ export interface GroupItem {
   qualifiersOverride: number | null;
   qualifiers: number | null;
   teamsCount: number;
+  gamesCount: number;
+  finishedGamesCount: number;
   issues: GroupIssueAdvisory[];
   lock: Advisory<GroupLockCode> | null;
   teams: GroupTeamItem[];
@@ -46,7 +48,7 @@ export function toGroupTeamItem(
 export function toGroupItem(
   group: GroupWithTeams,
   leagueDefault: number | null,
-  options?: { includeDeleted?: boolean },
+  options?: { includeDeleted?: boolean; gameCounts?: { gamesCount: number; finishedGamesCount: number } },
 ): GroupItem {
   const includeDeleted = options?.includeDeleted ?? false;
   const leagueTeams = group.teams
@@ -62,6 +64,8 @@ export function toGroupItem(
     qualifiersOverride: group.qualifiersOverride,
     qualifiers,
     teamsCount: leagueTeams.length,
+    gamesCount: options?.gameCounts?.gamesCount ?? 0,
+    finishedGamesCount: options?.gameCounts?.finishedGamesCount ?? 0,
     issues: buildGroupIssues({
       id: group.id,
       name: group.name,

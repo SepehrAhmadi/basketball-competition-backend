@@ -1,6 +1,6 @@
 import "../../../swagger/zod-extend.ts";
 import { z } from "zod";
-import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
+import { optionalSearchSchema, paginationQuerySchema } from "../../../shared/schemas.validation.ts";
 import { jalaliToGregorian } from "../../../utils/date.util.ts";
 import { leagueIdParamSchema } from "../../leagues/leagues.validation.ts";
 import { GAME_STATUS_VALUES } from "./lib/games.rules.ts";
@@ -46,6 +46,7 @@ export const gamesListQuerySchema = paginationQuerySchema.extend({
     .positive()
     .optional()
     .openapi({ example: 11 }),
+  search: optionalSearchSchema.openapi({ example: "عقاب", description: "Team name contains (home or away)" }),
   dateFrom: jalaliDateSchema.optional(),
   dateTo: jalaliDateSchema.optional(),
 });

@@ -8,11 +8,11 @@ import {
 import { advisorySchema } from "../../../../swagger/advisory.docs.ts";
 import { publicGameSchema } from "../games.docs.ts";
 import {
+  adminGamesListQuerySchema,
   createGameSchema,
   enterGameResultSchema,
   gameIdParamSchema,
   leagueIdParamSchema,
-  gamesListQuerySchema,
   updateGameScheduleSchema,
   updateGameStatusSchema,
 } from "./games.admin.validation.ts";
@@ -153,8 +153,10 @@ registry.registerPath({
   summary: "List games of a league (admin)",
   description:
     "Filtered list ordered by date, time, id. Each item carries lock fields " +
-    "and `issues`; `summary` covers the whole league.",
-  request: { params: leagueIdParamSchema, query: gamesListQuerySchema },
+    "and `issues`; `summary` covers the whole league. Supports `search` " +
+    "(home or away team name) and `resultPending` (admin only: open games " +
+    "dated before today in Tehran).",
+  request: { params: leagueIdParamSchema, query: adminGamesListQuerySchema },
   responses: {
     "200": {
       description: "Games fetched",

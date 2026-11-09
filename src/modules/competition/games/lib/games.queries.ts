@@ -38,26 +38,35 @@ export interface GamesListQuery {
   status?: GameStatus;
   groupId?: number;
   leagueTeamId?: number;
+  search?: string;
+  resultPending?: boolean;
   dateFrom?: string;
   dateTo?: string;
+}
+
+export function resultPendingWhere(now: Date = new Date()): Prisma.GameWhereInput {
+  return {
+    status: { in: ["SCHEDULED", "LIVE"] },
+    scheduledDate: { lt: tehranDayStart(now) },
+  };
 }
 
 export function buildGamesWhere(
   leagueId: number,
   query: GamesListQuery,
+  now: Date = new Date(),
 ): Prisma.GameWhereInput {
+  const and: Prisma.GameWhereInput[] = [];
+  if (query.leagueTeamId) and.push({ OR: [{ homeLeagueTeamId: query.leagueTeamId }, { awayLeagueTeamId: query.leagueTeamId }] });
+  if (query.search) and.push({ OR: [
+    { homeTeam: { team: { name: { contains: query.search } } } },
+    { awayTeam: { team: { name: { contains: query.search } } } },
+  ] });
+  if (query.resultPending) and.push(resultPendingWhere(now));
   return {
     leagueId,
     ...(query.status ? { status: query.status } : {}),
     ...(query.groupId ? { groupId: query.groupId } : {}),
-    ...(query.leagueTeamId
-      ? {
-          OR: [
-            { homeLeagueTeamId: query.leagueTeamId },
-            { awayLeagueTeamId: query.leagueTeamId },
-          ],
-        }
-      : {}),
     ...(query.dateFrom || query.dateTo
       ? {
           scheduledDate: {
@@ -70,6 +79,7 @@ export function buildGamesWhere(
           },
         }
       : {}),
+    ...(and.length ? { AND: and } : {}),
   };
 }
 
@@ -122,8 +132,7 @@ export function countResultPending(leagueId: number, now: Date = new Date()) {
   return prisma.game.count({
     where: {
       leagueId,
-      status: { in: ["SCHEDULED", "LIVE"] },
-      scheduledDate: { lt: tehranDayStart(now) },
+      ...resultPendingWhere(now),
     },
   });
 }

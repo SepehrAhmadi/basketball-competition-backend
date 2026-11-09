@@ -50,6 +50,8 @@ const groupItemSchema = z
     qualifiersOverride: z.number().nullable().openapi({ example: null }),
     qualifiers: z.number().nullable().openapi({ example: 2 }),
     teamsCount: z.number().openapi({ example: 1 }),
+    gamesCount: z.number().openapi({ example: 3, description: "Games of the group that are not CANCELED (SCHEDULED + LIVE + FINISHED)." }),
+    finishedGamesCount: z.number().openapi({ example: 2, description: "Games of the group with status FINISHED." }),
     issues: z.array(advisorySchema).openapi({
       description:
         "`issues` is always present; an empty array means no issues. " +

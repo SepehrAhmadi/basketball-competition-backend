@@ -17,4 +17,16 @@ router.get(
   dropdownsController.getLeagues,
 );
 
+router.get(
+  "/league-groups",
+  validate(dropdownsValidation.adminLeagueGroupsDropdownQuerySchema, "query"),
+  dropdownsController.getLeagueGroups,
+);
+
+router.get(
+  "/league-teams",
+  validate(dropdownsValidation.adminLeagueTeamsDropdownQuerySchema, "query"),
+  dropdownsController.getLeagueTeams,
+);
+
 export default router;
