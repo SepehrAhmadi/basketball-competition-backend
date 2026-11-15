@@ -22,6 +22,8 @@
 
 `can` flags answer "may I?"; advisories answer "why not / what is wrong?".
 
+Admin responses carry no `can` flags; restrictions are expressed as lock advisories.
+
 ```ts
 type AdvisorySeverity = "INFO" | "WARNING" | "BLOCKER";
 interface Advisory<C extends string = string> {

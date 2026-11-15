@@ -283,6 +283,9 @@ async function deleteLeague(leagueId: number) {
   });
   if (activeTeams > 0)
     throw new AppError(409, messages.error.league.hasTeams);
+  const gameCount = await prisma.game.count({ where: { leagueId } });
+  if (gameCount > 0)
+    throw new AppError(409, messages.error.league.hasGames);
 
   try {
     await prisma.$transaction([
@@ -320,6 +323,13 @@ async function updateLeagueStatus(
   if (existing.status === "FINISHED" && !canReopenFinished)
     throw new AppError(403, messages.error.league.statusChangeForbidden);
 
+  // A league with games can only move between ACTIVE and FINISHED.
+  if (status === "REGISTRATION" || status === "INACTIVE") {
+    const gameCount = await prisma.game.count({ where: { leagueId } });
+    if (gameCount > 0)
+      throw new AppError(409, messages.error.league.hasGames);
+  }
+
   // REGISTRATION requires a today-or-future deadline.
   if (status === "REGISTRATION") {
     assertRegistrationAllowed(existing.rosterDeadline);
@@ -337,8 +347,6 @@ async function updateLeagueStatus(
     }
   }
 
-  // TODO(Game): block leaving ACTIVE backwards with 409 once games exist.
-  void leagueId;
 
   try {
     const updated = await prisma.league.update({

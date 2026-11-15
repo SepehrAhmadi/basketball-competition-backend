@@ -1,4 +1,6 @@
 import prisma from "../../../config/db.config.ts";
+import AppError from "../../../utils/appError.ts";
+import { messages } from "../../../language/message.ts";
 import {
   OrganizationStatus,
   Role,
@@ -7,6 +9,7 @@ import {
   type LeagueStatus,
 } from "../../../prisma/generated/prisma/enums.ts";
 import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
+import { visibleLeagueTeamWhere } from "../../leagues/lib/league.mapper.ts";
 import { resolveLeagueStatuses, buildLeagueLabel } from "./lib/league-dropdown.rules.ts";
 
 const ORGANIZATION_STATUS_LABELS_FA: Record<OrganizationStatus, string> = {
@@ -246,6 +249,81 @@ async function getLeaguesDropdown(query: AdminLeagueDropdownQuery) {
   };
 }
 
+interface AdminLeagueGroupsDropdownQuery {
+  leagueId: number;
+  search?: string;
+  page: number;
+  pageSize: number;
+}
+
+async function getLeagueGroupsDropdown(query: AdminLeagueGroupsDropdownQuery) {
+  const league = await prisma.league.findUnique({
+    where: { id: query.leagueId },
+    select: { status: true },
+  });
+  if (!league) throw new AppError(404, messages.error.league.notFound);
+  const where: Prisma.GroupWhereInput = {
+    leagueId: query.leagueId,
+    ...(query.search ? { name: { contains: query.search } } : {}),
+  };
+  const [items, total] = await prisma.$transaction([
+    prisma.group.findMany({
+      where,
+      orderBy: { id: "asc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: { id: true, name: true },
+    }),
+    prisma.group.count({ where }),
+  ]);
+  return {
+    items: items.map((g) => ({ value: g.id, label: g.name })),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
+  };
+}
+
+interface AdminLeagueTeamsDropdownQuery extends AdminLeagueGroupsDropdownQuery {
+  groupId?: number;
+}
+
+async function getLeagueTeamsDropdown(query: AdminLeagueTeamsDropdownQuery) {
+  const league = await prisma.league.findUnique({
+    where: { id: query.leagueId },
+    select: { status: true },
+  });
+  if (!league) throw new AppError(404, messages.error.league.notFound);
+  const where: Prisma.LeagueTeamWhereInput = {
+    ...visibleLeagueTeamWhere(query.leagueId, league.status, query.search),
+    ...(query.groupId ? { groupTeam: { groupId: query.groupId } } : {}),
+  };
+  const [items, total] = await prisma.$transaction([
+    prisma.leagueTeam.findMany({
+      where,
+      orderBy: { id: "asc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      include: {
+        team: { select: { name: true, organization: { select: { name: true } } } },
+        groupTeam: { select: { groupId: true } },
+      },
+    }),
+    prisma.leagueTeam.count({ where }),
+  ]);
+  return {
+    items: items.map((lt) => ({
+      value: lt.id,
+      label: lt.team.name,
+      organizationName: lt.team.organization?.name ?? null,
+      groupId: lt.groupTeam?.groupId ?? null,
+    })),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
+  };
+}
+
 export default {
   getOrganizationStatuses,
   getTeamStatuses,
@@ -256,4 +334,6 @@ export default {
   getUsersDropdown,
   getAgeCategoriesDropdown,
   getLeaguesDropdown,
+  getLeagueGroupsDropdown,
+  getLeagueTeamsDropdown,
 };

@@ -44,9 +44,7 @@ const leagueFormatSchema = z
         example: null,
         description:
           "Null when the format is editable. Codes: `FINISHED` (league is " +
-          "finished) and `HAS_GAMES` (reserved for Stage 3; not emitted yet). " +
-          "`HAS_GAMES` is documented so clients can ship against the final " +
-          "contract.",
+          "finished) and `HAS_GAMES` (the league already has games).",
       }),
   })
   .openapi("LeagueFormat");

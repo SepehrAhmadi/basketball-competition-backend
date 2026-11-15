@@ -84,6 +84,20 @@ const GROUPS_LOCK_MESSAGES: Record<GroupsLockCode, string> = {
   FINISHED: messages.advisory.leagueFinished,
 };
 
+export type GroupLockCode = "HAS_GAMES";
+
+export function buildGroupLock(
+  hasGames: boolean,
+): Advisory<GroupLockCode> | null {
+  if (!hasGames) return null;
+  return makeAdvisory(
+    "HAS_GAMES",
+    "BLOCKER",
+    messages.advisory.groups.hasGames,
+    {},
+  );
+}
+
 export function buildGroupsLock(
   reason: GroupsLockReason,
 ): Advisory<GroupsLockCode> | null {

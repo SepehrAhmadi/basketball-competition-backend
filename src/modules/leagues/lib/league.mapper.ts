@@ -75,6 +75,25 @@ export function activeLeagueTeamWhere(
   };
 }
 
+export function visibleLeagueTeamWhere(
+  leagueId: number,
+  leagueStatus: LeagueStatus,
+  search?: string,
+): Prisma.LeagueTeamWhereInput {
+  const finished = leagueStatus === "FINISHED";
+  const base: Prisma.LeagueTeamWhereInput = finished
+    ? { leagueId, status: "ACTIVE" }
+    : activeLeagueTeamWhere(leagueId);
+  if (!search) return base;
+  return {
+    ...base,
+    team: {
+      ...(finished ? {} : { status: { not: "DELETED" } }),
+      name: { contains: search },
+    },
+  };
+}
+
 type LeagueRow = {
   id: number;
   name: string;

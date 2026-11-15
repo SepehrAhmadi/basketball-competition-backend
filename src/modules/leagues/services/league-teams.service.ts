@@ -5,9 +5,9 @@ import type { Actor } from "../../../authz/actor.ts";
 import type { Prisma } from "../../../prisma/generated/prisma/client.ts";
 import getPublicFileUrl from "../../../utils/getFileUrl.ts";
 import {
-  activeLeagueTeamWhere,
   leagueTeamListInclude,
   toLeagueTeamListItem,
+  visibleLeagueTeamWhere,
 } from "../lib/league.mapper.ts";
 import {
   loadLeagueContext,
@@ -49,18 +49,7 @@ async function listLeagueTeams(
   actor: Actor,
 ) {
   const league = await loadLeagueContext(leagueId, actor);
-  const search = query.search?.trim();
-  const where: Prisma.LeagueTeamWhereInput =
-    league.status === "FINISHED"
-      ? { leagueId, status: "ACTIVE" }
-      : activeLeagueTeamWhere(leagueId);
-  if (search)
-    where.team = {
-      ...(league.status === "FINISHED"
-        ? {}
-        : { status: { not: "DELETED" } }),
-      name: { contains: search },
-    };
+  const where = visibleLeagueTeamWhere(leagueId, league.status, query.search?.trim() || undefined);
 
   const [items, total] = await prisma.$transaction([
     prisma.leagueTeam.findMany({

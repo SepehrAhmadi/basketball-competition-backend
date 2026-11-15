@@ -1,8 +1,7 @@
 // Must run before any schema below calls .openapi().
 import "../../../swagger/zod-extend.ts";
 import { z } from "zod";
-import { paginationQuerySchema } from "../../../shared/schemas.validation.ts";
-import { normalizePersianText } from "../../../utils/persian.util.ts";
+import { optionalSearchSchema, paginationQuerySchema } from "../../../shared/schemas.validation.ts";
 import { LEAGUE_STATUS_VALUES } from "../../leagues/lib/league.rules.ts";
 
 export const dropdownSearchQuerySchema = paginationQuerySchema.extend({
@@ -36,23 +35,31 @@ const optionalIdField = (example: number) =>
     .optional()
     .openapi({ example });
 
+const requiredIdField = (example: number) =>
+  z.coerce
+    .number({ invalid_type_error: "The value must be a number" })
+    .int()
+    .positive()
+    .openapi({ example });
+
 export const adminLeagueDropdownQuerySchema = dropdownSearchQuerySchema.extend({
-  search: z
-    .string()
-    .optional()
-    .transform((value) => {
-      if (value === undefined) return undefined;
-      const normalized = normalizePersianText(value);
-      return normalized.length ? normalized : undefined;
-    })
-    .openapi({
-      example: "برتر",
-      description:
-        "League name contains. Trimmed, with Arabic ي/ك mapped to Persian ی/ک.",
-    }),
+  search: optionalSearchSchema.openapi({
+    example: "برتر",
+    description:
+      "League name contains. Trimmed, with Arabic ي/ك mapped to Persian ی/ک.",
+  }),
   seasonId: optionalIdField(1),
   ageCategoryId: optionalIdField(1),
   status: z.enum(LEAGUE_STATUS_VALUES).optional().openapi({ example: "ACTIVE" }),
+});
+
+export const adminLeagueGroupsDropdownQuerySchema = paginationQuerySchema.extend({
+  leagueId: requiredIdField(1),
+  search: optionalSearchSchema.openapi({ example: "گروه" }),
+});
+
+export const adminLeagueTeamsDropdownQuerySchema = adminLeagueGroupsDropdownQuerySchema.extend({
+  groupId: optionalIdField(1),
 });
 
 export default {
@@ -60,4 +67,6 @@ export default {
   teamsDropdownQuerySchema,
   usersDropdownQuerySchema,
   adminLeagueDropdownQuerySchema,
+  adminLeagueGroupsDropdownQuerySchema,
+  adminLeagueTeamsDropdownQuerySchema,
 };

@@ -1,6 +1,7 @@
 import prisma from "../../../config/db.config.ts";
 import AppError from "../../../utils/appError.ts";
 import { messages } from "../../../language/message.ts";
+import { tehranDayStart } from "../../../utils/date.util.ts";
 import { isRosterWindowOpen } from "./league.rules.ts";
 
 /**
@@ -84,12 +85,9 @@ export function assertRegistrationAllowed(
 export async function advanceExpiredRegistrations(
   now = new Date(),
 ): Promise<number> {
-  // "Today in Tehran" as a UTC-midnight boundary: a deadline stored at UTC
-  // noon compares exactly like the JS `isRosterWindowOpen` day comparison.
-  const todayTehran = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tehran",
-  }).format(now);
-  const expiredBefore = new Date(`${todayTehran}T00:00:00Z`);
+  // A deadline stored at UTC noon compares exactly like the JS
+  // `isRosterWindowOpen` day comparison.
+  const expiredBefore = tehranDayStart(now);
 
   const expired = await prisma.league.findMany({
     where: {

@@ -93,6 +93,18 @@ enum GroupRoundType {
   DOUBLE_ROUND
 }
 
+enum GameStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  CANCELED
+}
+
+enum GameResultType {
+  NORMAL
+  FORFEIT
+}
+
 model User {
   id           Int        @id @default(autoincrement())
   fullName     String     @map("full_name")
@@ -321,6 +333,7 @@ model League {
   ageCategoryCutoff AgeCategoryCutoff @relation(fields: [ageCategoryCutoffId], references: [id])
   teams             LeagueTeam[]
   groups            Group[]
+  games             Game[]
 
   @@unique([ageCategoryCutoffId, name])
   @@map("leagues")
@@ -336,6 +349,7 @@ model Group {
 
   league League      @relation(fields: [leagueId], references: [id])
   teams  GroupTeam[]
+  games  Game[]
 
   @@unique([leagueId, name])
   @@map("league_groups")
@@ -365,6 +379,9 @@ model LeagueTeam {
   team      Team               @relation(fields: [teamId], references: [id])
   members   LeagueTeamMember[]
   groupTeam GroupTeam?
+  homeGames    Game[] @relation("GameHome")
+  awayGames    Game[] @relation("GameAway")
+  forfeitGames Game[] @relation("GameForfeit")
 
   @@unique([leagueId, teamId])
   @@map("league_teams")
@@ -383,4 +400,38 @@ model LeagueTeamMember {
   @@unique([leagueTeamId, teamSeasonMemberId])
   @@index([teamSeasonMemberId])
   @@map("league_team_members")
+}
+
+model Game {
+  id                  Int             @id @default(autoincrement())
+  leagueId            Int             @map("league_id")
+  groupId             Int?            @map("group_id")
+  homeLeagueTeamId    Int             @map("home_league_team_id")
+  awayLeagueTeamId    Int             @map("away_league_team_id")
+  status              GameStatus      @default(SCHEDULED)
+  scheduledDate       DateTime?       @map("scheduled_date") @db.Date
+  scheduledTime       String?         @map("scheduled_time") @db.VarChar(5)
+  homeScore           Int?            @map("home_score")
+  awayScore           Int?            @map("away_score")
+  resultType          GameResultType? @map("result_type")
+  forfeitLeagueTeamId Int?            @map("forfeit_league_team_id")
+  resultNote          String?         @map("result_note") @db.Text
+  cancelReason        String?         @map("cancel_reason") @db.Text
+  rescheduledFromGameId Int?          @unique @map("rescheduled_from_game_id")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  league      League     @relation(fields: [leagueId], references: [id])
+  group       Group?     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  homeTeam    LeagueTeam @relation("GameHome", fields: [homeLeagueTeamId], references: [id])
+  awayTeam    LeagueTeam @relation("GameAway", fields: [awayLeagueTeamId], references: [id])
+  forfeitTeam LeagueTeam? @relation("GameForfeit", fields: [forfeitLeagueTeamId], references: [id], onDelete: Restrict)
+  rescheduledFrom Game? @relation("Reschedule", fields: [rescheduledFromGameId], references: [id], onDelete: Restrict)
+  rescheduledTo   Game? @relation("Reschedule")
+
+  @@index([leagueId])
+  @@index([groupId])
+  @@index([homeLeagueTeamId])
+  @@index([awayLeagueTeamId])
+  @@map("games")
 }

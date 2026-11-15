@@ -50,11 +50,20 @@ const groupItemSchema = z
     qualifiersOverride: z.number().nullable().openapi({ example: null }),
     qualifiers: z.number().nullable().openapi({ example: 2 }),
     teamsCount: z.number().openapi({ example: 1 }),
+    gamesCount: z.number().openapi({ example: 3, description: "Games of the group that are not CANCELED (SCHEDULED + LIVE + FINISHED)." }),
+    finishedGamesCount: z.number().openapi({ example: 2, description: "Games of the group with status FINISHED." }),
     issues: z.array(advisorySchema).openapi({
       description:
         "`issues` is always present; an empty array means no issues. " +
         "All group issues are warnings and never block saving. Codes: " +
         "`GROUP_TOO_SMALL`, `QUALIFIERS_EXCEED_TEAMS`.",
+    }),
+    lock: z.union([advisorySchema, z.null()]).openapi({
+      example: null,
+      description:
+        "Null when the team composition is editable. Code `HAS_GAMES` " +
+        "(BLOCKER) when the group has games: assign, move, remove and delete " +
+        "are locked; name and `qualifiersOverride` stay editable.",
     }),
     teams: z.array(groupTeamSchema),
   })
@@ -313,7 +322,8 @@ registry.registerPath({
   path: "/admin/leagues/{leagueId}/groups/{groupId}",
   tags: ["Admin - League Groups"],
   summary: "Delete a group (admin)",
-  description: "Teams of the deleted group become unassigned.",
+  description:
+    "Teams of the deleted group become unassigned. Blocked when the group has games.",
   request: { params: groupParamSchema },
   responses: {
     "200": {
@@ -343,7 +353,7 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "League is FINISHED",
+      description: "League is FINISHED or the group has games (`group.hasGames`)",
       content: { "application/json": { schema: conflictError } },
     },
   },
@@ -386,7 +396,11 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "League is FINISHED or concurrent assignment conflict",
+      description:
+        "League is FINISHED, the placement actually changes and the target " +
+        "or source group has games (`group.hasGames`; an idempotent " +
+        "re-assign to the same group is not blocked), or concurrent " +
+        "assignment conflict",
       content: { "application/json": { schema: conflictError } },
     },
   },
@@ -426,7 +440,7 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "League is FINISHED",
+      description: "League is FINISHED or the group has games (`group.hasGames`)",
       content: { "application/json": { schema: conflictError } },
     },
   },

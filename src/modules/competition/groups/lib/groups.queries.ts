@@ -25,6 +25,7 @@ export const groupWithTeamsInclude = {
     orderBy: { id: "asc" },
     include: { leagueTeam: { include: leagueTeamWithTeamInclude } },
   },
+  _count: { select: { games: true } },
 } satisfies Prisma.GroupInclude;
 
 export type GroupWithTeams = Prisma.GroupGetPayload<{
@@ -35,6 +36,31 @@ export function countUnassigned(leagueId: number): Promise<number> {
   return prisma.leagueTeam.count({
     where: { ...activeLeagueTeamWhere(leagueId), groupTeam: null },
   });
+}
+
+export async function loadGroupGameCounts(
+  leagueId: number,
+  groupIds?: number[],
+): Promise<Map<number, { gamesCount: number; finishedGamesCount: number }>> {
+  const rows = await prisma.game.groupBy({
+    by: ["groupId", "status"],
+    where: {
+      leagueId,
+      groupId: groupIds ? { in: groupIds } : { not: null },
+      status: { not: "CANCELED" },
+    },
+    _count: { _all: true },
+    orderBy: [{ groupId: "asc" }, { status: "asc" }],
+  });
+  const map = new Map<number, { gamesCount: number; finishedGamesCount: number }>();
+  for (const row of rows) {
+    if (row.groupId == null) continue;
+    const entry = map.get(row.groupId) ?? { gamesCount: 0, finishedGamesCount: 0 };
+    entry.gamesCount += row._count._all;
+    if (row.status === "FINISHED") entry.finishedGamesCount += row._count._all;
+    map.set(row.groupId, entry);
+  }
+  return map;
 }
 
 /**

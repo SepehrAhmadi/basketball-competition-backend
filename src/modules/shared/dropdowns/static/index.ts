@@ -5,6 +5,7 @@ import refereeLevelsRoutes from "./referee-levels/referee-levels.routes.ts";
 import leagueStatusesRoutes from "./league-statuses/league-statuses.routes.ts";
 import leagueFormatsRoutes from "./league-formats/league-formats.routes.ts";
 import groupRoundTypesRoutes from "./group-round-types/group-round-types.routes.ts";
+import gameStatusesRoutes from "./game-statuses/game-statuses.routes.ts";
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use("/referee-levels", refereeLevelsRoutes);
 router.use("/league-statuses", leagueStatusesRoutes);
 router.use("/league-formats", leagueFormatsRoutes);
 router.use("/group-round-types", groupRoundTypesRoutes);
+router.use("/game-statuses", gameStatusesRoutes);
 
 export default router;

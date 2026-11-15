@@ -234,7 +234,11 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "Minimum teams or players requirement not met",
+      description:
+        "Minimum teams or players requirement not met, or the league has " +
+        "games and the target status is INACTIVE or REGISTRATION " +
+        "(`league.hasGames`; a league with games only moves between " +
+        "ACTIVE and FINISHED)",
       content: { "application/json": { schema: conflictError } },
     },
   },
@@ -274,7 +278,8 @@ registry.registerPath({
       },
     },
     "409": {
-      description: "League has teams or dependents",
+      description:
+        "League has teams, games (`league.hasGames`) or other dependents",
       content: { "application/json": { schema: conflictError } },
     },
   },

@@ -7,7 +7,7 @@ import { jalaliToGregorian } from "../../../../utils/date.util.ts";
 import type { AdminLevel, Role } from "../../../../prisma/generated/prisma/enums.ts";
 import type { ListUsersQuery } from "../user.types.ts";
 import { toUserProfile } from "../user.service.ts";
-import { PERMISSION_CATALOG, type Permission } from "../../../../shared/permissions.ts";
+import { PERMISSION_CATALOG, expandPermissions, getDirectRequirements, type Permission } from "../../../../shared/permissions.ts";
 
 interface AdminCreateUserInput {
   fullName: string;
@@ -172,7 +172,14 @@ async function setAdminStatus(targetUserId: number, isAdmin: boolean) {
 }
 
 function listPermissionCatalog() {
-  return PERMISSION_CATALOG;
+  return PERMISSION_CATALOG.map((group) => ({
+    title: group.title,
+    permissions: group.permissions.map((p) => ({
+      code: p.code,
+      label: p.label,
+      requires: getDirectRequirements(p.code),
+    })),
+  }));
 }
 
 async function getUserPermissions(targetUserId: number) {
@@ -198,14 +205,15 @@ async function replaceUserPermissions(targetUserId: number, permissions: Permiss
     throw new AppError(400, messages.error.auth.userNotAdmin);
   }
 
-  const uniquePermissions = [...new Set(permissions)];
+  const uniquePermissions = expandPermissions(permissions);
 
   return prisma.$transaction(async (tx) => {
     await tx.adminPermission.deleteMany({ where: { userAdminId: userAdmin.id } });
     await tx.adminPermission.createMany({
       data: uniquePermissions.map((permission) => ({ userAdminId: userAdmin.id, permission })),
     });
-    return tx.adminPermission.findMany({ where: { userAdminId: userAdmin.id } });
+    const rows = await tx.adminPermission.findMany({ where: { userAdminId: userAdmin.id } });
+    return rows.map((r) => r.permission);
   });
 }
 
