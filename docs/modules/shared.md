@@ -11,7 +11,7 @@ Serves static enum lookups for dropdowns and validation.
 ## Sub-modules
 
 - `dropdowns` — authenticated (`verifyJWT`, no admin gate) reference data: static `organization-statuses`/`team-statuses`/`team-member-roles` (Persian labels) + paginated `organizations`/`teams`/`seasons`/`users`/`age-categories` lookups under `/dropdowns`.
-- `dropdowns/admin` — admin-only (`verifyAdminLevel(ADMIN, SUPER_ADMIN)`, no permission gate) `GET /dropdowns/admin/leagues` league selector; returns every status including `INACTIVE`, label `"<league> — <season> — <age category>"`.
+- `dropdowns/admin` — admin-only (`verifyAdminLevel(ADMIN, SUPER_ADMIN)`, no permission gate) `GET /dropdowns/admin/leagues` league selector (returns every status including `INACTIVE`, label `"<league> — <season> — <age category>"`), `GET /dropdowns/admin/league-groups?leagueId=` (`{ value: groupId, label }`, optional `search`, group-id order) and `GET /dropdowns/admin/league-teams?leagueId=` (`{ value: leagueTeamId, label, organizationName, groupId }`, optional `groupId` + `search`). Unknown `leagueId` returns 404 `league.notFound` on both; the teams dropdown reuses `visibleLeagueTeamWhere` (non-`FINISHED` leagues hide soft-deleted teams, `FINISHED` leagues keep them).
 - `dropdowns/static/roles` — public `GET /dropdown/roles` listing `Role` values with labels.
 - `dropdowns/static/coach-degrees` — public `GET /dropdown/coach-degrees` listing `CoachDegree` values with labels.
 - `dropdowns/static/referee-levels` — public `GET /dropdown/referee-levels` listing `RefreeLevel` values with labels.

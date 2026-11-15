@@ -312,6 +312,7 @@ const permissionGroupSchema = z.object({
     z.object({
       code: permissionEnum,
       label: z.string().openapi({ example: "ایجاد تیم" }),
+      requires: z.array(permissionEnum).openapi({ description: "Direct prerequisites. Granting this permission implicitly grants them (transitively)." }),
     }),
   ),
 });
@@ -514,7 +515,7 @@ registry.registerPath({
   tags: ["Admin Users"],
   summary: "Replace a user's permissions",
   description:
-    "SUPER_ADMIN-only endpoint that replaces the complete set of fine-grained permissions for an ADMIN user. The target user must already hold the ADMIN role.",
+    "SUPER_ADMIN-only endpoint that replaces the complete set of fine-grained permissions for an ADMIN user. The target user must already hold the ADMIN role. The stored set is expanded with dependencies and the response contains the stored (expanded) codes.",
   request: {
     params: idParamSchema,
     body: {

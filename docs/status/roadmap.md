@@ -6,4 +6,4 @@
 - Stats: add atomic per-player-per-game table plus report aggregations.
 - Media: decide dedicated module vs current inline uploader + URL-string approach.
 - Seasons: schedule `deactivateExpiredSeasons()` via cron.
-- Permissions: `leagues.*`, `league-teams.*`, `league-roster.*`, `groups.*`, `games.*` added; expand further as games/stats land.
+- Permissions: `leagues.*`, `league-teams.*`, `league-roster.*`, `competition.*`, `groups.*`, `games.*` added; expand further as games/stats land.

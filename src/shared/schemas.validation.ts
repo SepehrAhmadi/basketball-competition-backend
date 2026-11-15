@@ -2,6 +2,16 @@
 // is imported by route files that may bypass server.ts (e.g. tests).
 import "../swagger/zod-extend.ts";
 import { z } from "zod";
+import { normalizePersianText } from "../utils/persian.util.ts";
+
+export const optionalSearchSchema = z
+  .string()
+  .optional()
+  .transform((value) => {
+    if (value === undefined) return undefined;
+    const normalized = normalizePersianText(value);
+    return normalized.length ? normalized : undefined;
+  });
 
 // Reused by every module's GET /:id / PUT /:id / DELETE /:id routes.
 export const idParamSchema = z.object({

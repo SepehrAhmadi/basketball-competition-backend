@@ -48,7 +48,7 @@ player stats under the same parent folder.
   - `games/games.*` + `games.validation.ts` — public read
     `GET /leagues/:leagueId/games[/:gameId]` (no `resultNote`/`cancelReason`;
     `teamStatus` only in `FINISHED` leagues).
-  - `games/admin/` — `GET`, `GET /:gameId`, `POST`, `PUT /:gameId` (schedule),
+  - `games/admin/` — `GET` (admin `adminGamesListQuerySchema`: shared filters plus `resultPending`), `GET /:gameId`, `POST`, `PUT /:gameId` (schedule),
     `PATCH /:gameId/status`, `PUT` and `DELETE /:gameId/result`,
     `DELETE /:gameId` under `/admin/leagues/:leagueId/games`. Permissions:
     `games.view`, `games.create`, `games.update` (schedule, status),
@@ -80,7 +80,8 @@ player stats under the same parent folder.
   App-facing league responses keep their `can` flags.
 - Permissions reuse `leagues.view` for `GET` and `leagues.update` for `PUT`; no
   new permission in Stage 1.
-- Groups use `groups.view` (implies `leagues.view` + `league-teams.view`),
+- `competition.view` is the page-level permission (frontend-enforced; no route requires it): it implies `leagues.view`, and `groups.view` and `games.view` depend on it.
+- Groups use `groups.view` (implies `competition.view` + `leagues.view` + `league-teams.view`),
   `groups.create`, `groups.update` (assign/move/remove), `groups.delete`.
   Creation needs a group format (`GROUPS_KNOCKOUT` / `SINGLE_GROUP_KNOCKOUT`;
   409 otherwise, single-group limit for `SINGLE_GROUP_KNOCKOUT`). Editing is
@@ -95,7 +96,7 @@ player stats under the same parent folder.
   editable, but assign, move, remove and delete return 409 `group.hasGames`.
   Re-assigning a team to the group it already belongs to is idempotent and is
   not blocked by the group lock.
-  Admin group items carry `lock` (`HAS_GAMES` or `null`).
+  Admin group items carry `lock` (`HAS_GAMES` or `null`) plus `gamesCount` (non-`CANCELED` games) and `finishedGamesCount` (status `FINISHED`), from one `game.groupBy` query (`loadGroupGameCounts`); the lock still counts all games including canceled.
 - Games exist only in `ACTIVE` leagues with a group format. One pure function
   (`evaluateGameActions`) decides `schedule`, `start`, `cancel`, `result` and
   `delete`; its output feeds both the admin lock fields (`scheduleLock`,
@@ -112,6 +113,10 @@ player stats under the same parent folder.
   (second game of a `DOUBLE_ROUND` pair with the same
   home team), `OUTSIDE_LEAGUE_PERIOD`. The list `summary` has zero-filled
   `byStatus`, `resultPending`, `unfinished` and `issues` (`UNFINISHED_GAMES`).
+  The games list supports `search` (home or away team name, shared by public
+  and admin, Persian-normalized) and admin-only `resultPending=true` (open
+  `SCHEDULED`/`LIVE` games dated before today in Tehran, via
+  `resultPendingWhere`, shared with the summary count).
 - A league with games can only move between `ACTIVE` and `FINISHED` (409
   `league.hasGames` otherwise) and cannot be deleted.
 

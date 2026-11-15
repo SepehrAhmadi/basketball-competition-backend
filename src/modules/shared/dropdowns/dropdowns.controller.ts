@@ -120,6 +120,37 @@ async function getLeagues(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+async function getLeagueGroups(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = (req.validatedQuery ?? req.query) as {
+      leagueId: number;
+      search?: string;
+      page: number;
+      pageSize: number;
+    };
+    const result = await dropdownsService.getLeagueGroupsDropdown(query);
+    return sendDropdown(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getLeagueTeams(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = (req.validatedQuery ?? req.query) as {
+      leagueId: number;
+      groupId?: number;
+      search?: string;
+      page: number;
+      pageSize: number;
+    };
+    const result = await dropdownsService.getLeagueTeamsDropdown(query);
+    return sendDropdown(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   getOrganizationStatuses,
   getTeamStatuses,
@@ -130,4 +161,6 @@ export default {
   getUsers,
   getAgeCategories,
   getLeagues,
+  getLeagueGroups,
+  getLeagueTeams,
 };

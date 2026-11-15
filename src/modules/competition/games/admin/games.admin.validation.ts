@@ -76,6 +76,18 @@ const scoreField = (example: number) =>
     .min(0, messages.error.game.scoreInvalid)
     .openapi({ example });
 
+export const adminGamesListQuerySchema = gamesListQuerySchema.extend({
+  resultPending: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true"))
+    .openapi({
+      example: "true",
+      description:
+        "true = only open games (SCHEDULED or LIVE) dated before today in Tehran",
+    }),
+});
+
 export const enterGameResultSchema = z.discriminatedUnion("resultType", [
   z
     .object({
@@ -98,6 +110,7 @@ export default {
   leagueIdParamSchema,
   gameIdParamSchema,
   gamesListQuerySchema,
+  adminGamesListQuerySchema,
   createGameSchema,
   updateGameScheduleSchema,
   updateGameStatusSchema,

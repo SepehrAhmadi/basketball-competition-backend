@@ -24,6 +24,7 @@ import {
   countUnassigned,
   groupWithTeamsInclude,
   leagueTeamWithTeamInclude,
+  loadGroupGameCounts,
   loadGroupSummaries,
 } from "../lib/groups.queries.ts";
 
@@ -46,16 +47,17 @@ async function listGroups(leagueId: number) {
     };
   }
 
-  const [groups, unassignedCount] = await Promise.all([
+  const [groups, unassignedCount, gameCounts] = await Promise.all([
     prisma.group.findMany({
       where: { leagueId },
       orderBy: { id: "asc" },
       include: groupWithTeamsInclude,
     }),
     countUnassigned(leagueId),
+    loadGroupGameCounts(leagueId),
   ]);
   const items = groups.map((g) =>
-    toGroupItem(g, league.defaultQualifiersPerGroup, { includeDeleted }),
+    toGroupItem(g, league.defaultQualifiersPerGroup, { includeDeleted, gameCounts: gameCounts.get(g.id) }),
   );
 
   return {
@@ -128,6 +130,7 @@ async function createGroup(
     return toGroupItem(
       { ...created, teams: [], _count: { games: 0 } },
       league.defaultQualifiersPerGroup,
+      { gameCounts: { gamesCount: 0, finishedGamesCount: 0 } },
     );
   } catch (err: unknown) {
     if ((err as { code?: string })?.code === "P2002")
@@ -155,13 +158,17 @@ async function updateGroup(
   if (input.qualifiersOverride !== undefined)
     data.qualifiersOverride = input.qualifiersOverride;
   try {
-    const updated = await prisma.group.update({
-      where: { id: groupId },
-      data,
-      include: groupWithTeamsInclude,
-    });
+    const [updated, gameCounts] = await Promise.all([
+      prisma.group.update({
+        where: { id: groupId },
+        data,
+        include: groupWithTeamsInclude,
+      }),
+      loadGroupGameCounts(leagueId, [groupId]),
+    ]);
     return toGroupItem(updated, league.defaultQualifiersPerGroup, {
       includeDeleted: isLeagueFinished(league.status),
+      gameCounts: gameCounts.get(groupId),
     });
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code;

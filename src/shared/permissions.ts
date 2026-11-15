@@ -86,6 +86,12 @@ export const PERMISSION_CATALOG = [
     ],
   },
   {
+    title: "مسابقات",
+    permissions: [
+      { code: "competition.view", label: "مشاهده صفحه‌ی مسابقات" },
+    ],
+  },
+  {
     title: "گروه‌ها",
     permissions: [
       { code: "groups.view", label: "مشاهده گروه‌ها" },
@@ -133,11 +139,20 @@ const CROSS_RESOURCE_DEPENDENCIES: Readonly<Record<string, readonly Permission[]
   "roster.view": ["teams.view"],
   "league-teams.view": ["leagues.view"],
   "league-roster.view": ["league-teams.view"],
-  "groups.view": ["leagues.view", "league-teams.view"],
-  "games.view": ["leagues.view", "league-teams.view", "groups.view"],
+  "competition.view": ["leagues.view"],
+  "groups.view": ["competition.view", "leagues.view", "league-teams.view"],
+  "games.view": ["competition.view", "leagues.view", "league-teams.view", "groups.view"],
 };
 
 const PERMISSION_SET: ReadonlySet<string> = new Set(PERMISSION_CODES);
+
+export function getDirectRequirements(code: string): Permission[] {
+  const dot = code.lastIndexOf(".");
+  const resource = code.slice(0, dot);
+  const implied = code.slice(dot + 1) !== "view" ? [`${resource}.view`] : [];
+  const all = [...implied, ...(CROSS_RESOURCE_DEPENDENCIES[code] ?? [])];
+  return [...new Set(all)].filter((c) => PERMISSION_SET.has(c)) as Permission[];
+}
 
 /**
  * Expands a raw permission list with the read permissions it implies:
@@ -154,10 +169,7 @@ export function expandPermissions(granted: readonly string[]): Permission[] {
     if (result.has(code) || !PERMISSION_SET.has(code)) continue;
     result.add(code);
 
-    const dot = code.lastIndexOf(".");
-    const resource = code.slice(0, dot);
-    if (code.slice(dot + 1) !== "view") queue.push(`${resource}.view`);
-    queue.push(...(CROSS_RESOURCE_DEPENDENCIES[code] ?? []));
+    queue.push(...getDirectRequirements(code));
   }
   return [...result] as Permission[];
 }
