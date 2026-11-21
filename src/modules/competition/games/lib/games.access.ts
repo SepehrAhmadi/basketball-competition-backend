@@ -8,6 +8,7 @@ import {
 } from "../../lib/competition.access.ts";
 import { isLeagueFinished } from "../../../leagues/lib/league.rules.ts";
 import { gameInclude } from "./games.queries.ts";
+import type { CompetitionTransactionClient } from "../../lib/competition.tx.ts";
 import {
   getGamesLockReason,
   type GameAction,
@@ -71,8 +72,9 @@ export async function loadRescheduleSource(
   rescheduledFromGameId: number,
   homeLeagueTeamId: number,
   awayLeagueTeamId: number,
+  client: typeof prisma | CompetitionTransactionClient = prisma,
 ) {
-  const source = await prisma.game.findFirst({
+  const source = await client.game.findFirst({
     where: { id: rescheduledFromGameId, leagueId },
     select: {
       id: true,

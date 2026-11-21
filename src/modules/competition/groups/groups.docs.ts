@@ -6,6 +6,7 @@ import {
   successResponseSchema,
 } from "../../../swagger/helpers.ts";
 import { leagueIdParamSchema } from "./admin/groups.admin.validation.ts";
+import { standingRowSchema } from "../standings/standings.docs.ts";
 
 const publicGroupTeamSchema = z
   .object({
@@ -39,6 +40,13 @@ const publicGroupSchema = z
     name: z.string().openapi({ example: "گروه الف" }),
     qualifiers: z.number().nullable().openapi({ example: 2 }),
     teams: z.array(publicGroupTeamSchema),
+    standings: z.array(standingRowSchema).openapi({
+      description:
+        "Computed table ordered by rank, never stored. Table points come from " +
+        "the league row; only FINISHED games count. Tiebreak chain: table points, " +
+        "head-to-head points, head-to-head difference, overall difference, " +
+        "pointsFor, then lower leagueTeamId.",
+    }),
   })
   .openapi("PublicGroup");
 
@@ -56,7 +64,8 @@ registry.registerPath({
   summary: "List groups of a league (public)",
   description:
     "Shown only when the format is a group format and at least one group " +
-    "exists; otherwise `groups` is `[]`. No admin-only data is exposed. " +
+    "exists; otherwise `groups` is `[]`. Each group carries its computed " +
+    "standings table ordered by rank. No admin-only data is exposed. " +
     "Public endpoint. A Bearer token is optional.",
   security: [],
   request: { params: leagueIdParamSchema },
