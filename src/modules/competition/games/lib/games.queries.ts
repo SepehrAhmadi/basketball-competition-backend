@@ -1,4 +1,5 @@
 import prisma from "../../../../config/db.config.ts";
+import type { CompetitionTransactionClient } from "../../lib/competition.tx.ts";
 import type { Prisma } from "../../../../prisma/generated/prisma/client.ts";
 import type { GameStatus } from "../../../../prisma/generated/prisma/enums.ts";
 import {
@@ -102,12 +103,13 @@ const pairGameSelect = {
 export function loadPairGames(
   leagueId: number,
   rows: { homeLeagueTeamId: number; awayLeagueTeamId: number }[],
+  client: typeof prisma | CompetitionTransactionClient = prisma,
 ) {
   if (rows.length === 0) return Promise.resolve([]);
   const ids = [
     ...new Set(rows.flatMap((r) => [r.homeLeagueTeamId, r.awayLeagueTeamId])),
   ];
-  return prisma.game.findMany({
+  return client.game.findMany({
     where: {
       leagueId,
       status: { not: "CANCELED" },

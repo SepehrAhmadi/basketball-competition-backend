@@ -19,6 +19,10 @@ import {
   loadGroupsLeague,
   loadRemovalContext,
 } from "../lib/groups.access.ts";
+import {
+  runSerializable,
+  type CompetitionTransactionClient,
+} from "../../lib/competition.tx.ts";
 import { toGroupItem, toGroupTeamItem } from "../lib/groups.mapper.ts";
 import {
   countUnassigned,
@@ -139,8 +143,11 @@ async function createGroup(
   }
 }
 
-async function assertGroupHasNoGames(groupId: number): Promise<void> {
-  const gameCount = await prisma.game.count({ where: { groupId } });
+async function assertGroupHasNoGames(
+  groupId: number,
+  client: typeof prisma | CompetitionTransactionClient = prisma,
+): Promise<void> {
+  const gameCount = await client.game.count({ where: { groupId } });
   if (gameCount > 0)
     throw new AppError(409, messages.error.group.hasGames);
 }
@@ -222,34 +229,43 @@ async function assignTeam(
   leagueTeamId: number,
 ) {
   const { league } = await loadAssignmentContext(leagueId, groupId, leagueTeamId);
-  const existing = await prisma.groupTeam.findUnique({
-    where: { leagueTeamId },
-  });
-
-  // Re-assigning to the same group is a no-op: idempotent, not blocked by the group lock.
-  if (existing && existing.groupId === groupId) {
-    return buildPlacementResult(leagueId, [groupId], league.defaultQualifiersPerGroup);
-  }
-
-  // A real placement change: both the target group and the source group (when moving) must be unlocked.
-  await assertGroupHasNoGames(groupId);
-  if (existing) await assertGroupHasNoGames(existing.groupId);
-
+  let assignment: { changed: boolean; previousGroupId: number | null };
   try {
-    await prisma.groupTeam.upsert({
-      where: { leagueTeamId },
-      create: { groupId, leagueTeamId },
-      update: { groupId },
+    assignment = await runSerializable(async (tx) => {
+      const existing = await tx.groupTeam.findUnique({
+        where: { leagueTeamId },
+      });
+
+      if (existing && existing.groupId === groupId)
+        return { changed: false, previousGroupId: existing.groupId };
+
+      await assertGroupHasNoGames(groupId, tx);
+      if (existing) await assertGroupHasNoGames(existing.groupId, tx);
+
+      await tx.groupTeam.upsert({
+        where: { leagueTeamId },
+        create: { groupId, leagueTeamId },
+        update: { groupId },
+      });
+      return { changed: true, previousGroupId: existing?.groupId ?? null };
     });
   } catch (err: unknown) {
-    if ((err as { code?: string })?.code === "P2002")
+    const code = (err as { code?: string })?.code;
+    if (code === "P2002" || code === "P2034")
       throw new AppError(409, messages.error.group.teamAssignConflict);
     throw err;
   }
 
+  // Re-assigning to the same group is a no-op: idempotent, not blocked by the group lock.
+  if (!assignment.changed) {
+    return buildPlacementResult(leagueId, [groupId], league.defaultQualifiersPerGroup);
+  }
+
   return buildPlacementResult(
     leagueId,
-    existing ? [groupId, existing.groupId] : [groupId],
+    assignment.previousGroupId !== null
+      ? [groupId, assignment.previousGroupId]
+      : [groupId],
     league.defaultQualifiersPerGroup,
   );
 }

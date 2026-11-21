@@ -8,6 +8,7 @@ import {
   unwrap,
   type CompetitionLeague,
 } from "../../lib/competition.access.ts";
+import { runSerializable } from "../../lib/competition.tx.ts";
 import {
   buildResultData,
   evaluateGameActions,
@@ -176,73 +177,82 @@ async function createGame(leagueId: number, input: CreateGameInput) {
   if (input.homeLeagueTeamId === input.awayLeagueTeamId)
     throw new AppError(400, messages.error.game.sameTeam);
 
-  const memberships = await prisma.groupTeam.findMany({
-    where: {
-      leagueTeamId: {
-        in: [input.homeLeagueTeamId, input.awayLeagueTeamId],
-      },
-      group: { leagueId },
-    },
-    select: { groupId: true, leagueTeamId: true },
-  });
-  const homeMembership = memberships.find(
-    (m) => m.leagueTeamId === input.homeLeagueTeamId,
-  );
-  const awayMembership = memberships.find(
-    (m) => m.leagueTeamId === input.awayLeagueTeamId,
-  );
-  if (!homeMembership || !awayMembership)
-    throw new AppError(400, messages.error.game.teamNotGrouped);
-  if (homeMembership.groupId !== awayMembership.groupId)
-    throw new AppError(400, messages.error.game.teamsNotInSameGroup);
-  const groupId = homeMembership.groupId;
-
-  const existingPair: PairGame[] = await loadPairGames(leagueId, [
-    {
-      homeLeagueTeamId: input.homeLeagueTeamId,
-      awayLeagueTeamId: input.awayLeagueTeamId,
-    },
-  ]);
-  const quota = evaluatePairQuota(
-    existingPair.length,
-    (league.groupRoundType ?? "ONE_ROUND") as GroupRoundType,
-  );
-  if (!quota.allowed)
-    throw new AppError(409, messages.error.game.pairLimitReached);
-
-  if (input.rescheduledFromGameId != null) {
-    await loadRescheduleSource(
-      leagueId,
-      input.rescheduledFromGameId,
-      input.homeLeagueTeamId,
-      input.awayLeagueTeamId,
-    );
-  }
-
-  let created: GameRow;
+  let result: { created: GameRow; existingPair: PairGame[] };
   try {
-    created = await prisma.game.create({
-      data: {
+    result = await runSerializable(async (tx) => {
+      const memberships = await tx.groupTeam.findMany({
+        where: {
+          leagueTeamId: {
+            in: [input.homeLeagueTeamId, input.awayLeagueTeamId],
+          },
+          group: { leagueId },
+        },
+        select: { groupId: true, leagueTeamId: true },
+      });
+      const homeMembership = memberships.find(
+        (m) => m.leagueTeamId === input.homeLeagueTeamId,
+      );
+      const awayMembership = memberships.find(
+        (m) => m.leagueTeamId === input.awayLeagueTeamId,
+      );
+      if (!homeMembership || !awayMembership)
+        throw new AppError(400, messages.error.game.teamNotGrouped);
+      if (homeMembership.groupId !== awayMembership.groupId)
+        throw new AppError(400, messages.error.game.teamsNotInSameGroup);
+
+      const existingPair = await loadPairGames(
         leagueId,
-        groupId,
-        homeLeagueTeamId: input.homeLeagueTeamId,
-        awayLeagueTeamId: input.awayLeagueTeamId,
-        scheduledDate: jalaliToGregorianOrNull(input.scheduledDate),
-        scheduledTime: input.scheduledTime ?? null,
-        rescheduledFromGameId: input.rescheduledFromGameId ?? null,
-      },
-      include: gameInclude,
+        [
+          {
+            homeLeagueTeamId: input.homeLeagueTeamId,
+            awayLeagueTeamId: input.awayLeagueTeamId,
+          },
+        ],
+        tx,
+      );
+      const quota = evaluatePairQuota(
+        existingPair.length,
+        (league.groupRoundType ?? "ONE_ROUND") as GroupRoundType,
+      );
+      if (!quota.allowed)
+        throw new AppError(409, messages.error.game.pairLimitReached);
+
+      if (input.rescheduledFromGameId != null) {
+        await loadRescheduleSource(
+          leagueId,
+          input.rescheduledFromGameId,
+          input.homeLeagueTeamId,
+          input.awayLeagueTeamId,
+          tx,
+        );
+      }
+      const created = await tx.game.create({
+        data: {
+          leagueId,
+          groupId: homeMembership.groupId,
+          homeLeagueTeamId: input.homeLeagueTeamId,
+          awayLeagueTeamId: input.awayLeagueTeamId,
+          scheduledDate: jalaliToGregorianOrNull(input.scheduledDate),
+          scheduledTime: input.scheduledTime ?? null,
+          rescheduledFromGameId: input.rescheduledFromGameId ?? null,
+        },
+        include: gameInclude,
+      });
+      return { created, existingPair };
     });
   } catch (err: unknown) {
-    if ((err as { code?: string })?.code === "P2002")
+    const code = (err as { code?: string })?.code;
+    if (code === "P2002")
       throw new AppError(409, messages.error.game.alreadyRescheduled);
+    if (code === "P2034")
+      throw new AppError(409, messages.error.game.pairLimitReached);
     throw err;
   }
   const notSwappedIds = notSwappedGameIds(
-    [...existingPair, created],
+    [...result.existingPair, result.created],
     league.groupRoundType,
   );
-  return toItem(league, created, notSwappedIds);
+  return toItem(league, result.created, notSwappedIds);
 }
 
 async function updateSchedule(
