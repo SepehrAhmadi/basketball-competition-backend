@@ -15,6 +15,8 @@ export interface CompetitionLeague {
   format: LeagueFormat | null;
   groupRoundType: GroupRoundType | null;
   defaultQualifiersPerGroup: number | null;
+  winPoints: number;
+  lossPoints: number;
   startDate: Date | null;
   endDate: Date | null;
 }
@@ -31,6 +33,8 @@ export async function loadCompetitionLeague(
       format: true,
       groupRoundType: true,
       defaultQualifiersPerGroup: true,
+      winPoints: true,
+      lossPoints: true,
       startDate: true,
       endDate: true,
     },

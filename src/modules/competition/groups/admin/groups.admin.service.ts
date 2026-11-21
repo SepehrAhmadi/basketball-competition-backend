@@ -24,6 +24,7 @@ import {
   type CompetitionTransactionClient,
 } from "../../lib/competition.tx.ts";
 import { toGroupItem, toGroupTeamItem } from "../lib/groups.mapper.ts";
+import { buildGroupsStandings } from "../../standings/lib/standings.build.ts";
 import {
   countUnassigned,
   groupWithTeamsInclude,
@@ -60,9 +61,41 @@ async function listGroups(leagueId: number) {
     countUnassigned(leagueId),
     loadGroupGameCounts(leagueId),
   ]);
-  const items = groups.map((g) =>
-    toGroupItem(g, league.defaultQualifiersPerGroup, { includeDeleted, gameCounts: gameCounts.get(g.id) }),
-  );
+  const prepared = groups.map((g) => {
+    const teams = g.teams
+      .map((t) => t.leagueTeam)
+      .filter((lt) => includeDeleted || lt.team.status !== "DELETED")
+      .map((lt) => toGroupTeamItem(lt, { includeStatus: includeDeleted }));
+    return {
+      group: g,
+      teams,
+      qualifiers:
+        g.qualifiersOverride ?? league.defaultQualifiersPerGroup,
+    };
+  });
+  const standingsByGroup = await buildGroupsStandings({
+    league: {
+      id: league.id,
+      winPoints: league.winPoints,
+      lossPoints: league.lossPoints,
+      groupRoundType: league.groupRoundType,
+    },
+    groups: prepared.map((p) => ({
+      id: p.group.id,
+      name: p.group.name,
+      qualifiers: p.qualifiers,
+      teams: p.teams,
+    })),
+  });
+  const items = prepared.map((p) => {
+    const entry = standingsByGroup.get(p.group.id);
+    return toGroupItem(p.group, league.defaultQualifiersPerGroup, {
+      includeDeleted,
+      gameCounts: gameCounts.get(p.group.id),
+      standings: entry?.standings ?? [],
+      tieIssues: entry?.tieIssues ?? [],
+    });
+  });
 
   return {
     league: {
@@ -173,9 +206,35 @@ async function updateGroup(
       }),
       loadGroupGameCounts(leagueId, [groupId]),
     ]);
+    const includeDeleted = isLeagueFinished(league.status);
+    const teams = updated.teams
+      .map((t) => t.leagueTeam)
+      .filter((lt) => includeDeleted || lt.team.status !== "DELETED")
+      .map((lt) => toGroupTeamItem(lt, { includeStatus: includeDeleted }));
+    const entry = (
+      await buildGroupsStandings({
+        league: {
+          id: league.id,
+          winPoints: league.winPoints,
+          lossPoints: league.lossPoints,
+          groupRoundType: league.groupRoundType,
+        },
+        groups: [
+          {
+            id: updated.id,
+            name: updated.name,
+            qualifiers:
+              updated.qualifiersOverride ?? league.defaultQualifiersPerGroup,
+            teams,
+          },
+        ],
+      })
+    ).get(updated.id);
     return toGroupItem(updated, league.defaultQualifiersPerGroup, {
-      includeDeleted: isLeagueFinished(league.status),
+      includeDeleted,
       gameCounts: gameCounts.get(groupId),
+      standings: entry?.standings ?? [],
+      tieIssues: entry?.tieIssues ?? [],
     });
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code;

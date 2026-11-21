@@ -21,8 +21,8 @@ player stats under the same parent folder.
   `resultType` `NORMAL`/`FORFEIT`, `forfeitLeagueTeamId`, `resultNote`,
   `cancelReason`, unique `rescheduledFromGameId`). FKs to `group` and
   `forfeitTeam` are `Restrict`: a game's group is permanent history.
-- Planned: standings/brackets computed (not stored) and player game stats
-  (Stage 6).
+- Standings are computed on every read (never stored) from `FINISHED` games;
+  brackets stay planned. Player game stats are Stage 6.
 
 ## Sub-modules
 
@@ -59,7 +59,25 @@ player stats under the same parent folder.
     `assertGamesCreatable`, `throwGameDenial`), `games.queries.ts` (single
     include, `buildGamesWhere`, order, pair/summary queries),
     `games.mapper.ts` (`toPublicGameItem`, `toAdminGameItem`).
-- Planned (not implemented): `standings/`, `brackets/`, `player-stats/`.
+- `standings/` — done (Stage 4, leaf library, no routes of its own).
+  - `standings/lib/standings.rules.ts` — pure `computeGroupStandings`
+    (zeroed stats per team, only `FINISHED` group games, forfeits count as
+    0/20, ties impossible so equal scores are ignored), fixed five-step
+    tiebreak (table points, head-to-head points, head-to-head difference,
+    overall difference, `pointsFor`, then lower `leagueTeamId`),
+    single-level head-to-head over the whole tied block, gapless ranks,
+    `TiedRun` detection, plus `expectedGroupGames` and `isGroupComplete`.
+  - `standings/lib/standings.queries.ts` — one `loadFinishedGroupGames`
+    query grouped in memory by `groupId`.
+  - `standings/lib/standings.advisories.ts` — `UNRESOLVED_TIE` (`WARNING`)
+    builder, one advisory per tied run.
+  - `standings/lib/standings.build.ts` — `buildGroupsStandings` merges
+    ranked rows with team items (`qualified = qualifiers !== null &&
+    rank <= qualifiers`); tie issues only for complete groups.
+  - `standings/standings.docs.ts` — `StandingRow` schema only.
+  - Surfaced inside the existing group-list responses (public and admin);
+    admin additionally carries `UNRESOLVED_TIE` in `issues`.
+- Planned (not implemented): `brackets/`, `player-stats/`.
 
 ## Responsibilities
 
@@ -129,6 +147,8 @@ player stats under the same parent folder.
 - Chain (one-way): `format ← groups ← games ← standings ← brackets`.
   Game/group-existence checks use direct Prisma queries so `format` never
   imports from `games` or `groups`; `groups` imports format rules and league
-  mappers only.
+  mappers only. `standings` is a leaf: it never imports from `groups` or
+  `games`; `groups` consumes it. `brackets` (Stage 5) will consume
+  `computeGroupStandings` directly.
 
 See `competition-structure.md` for the Stage 1 decision record.

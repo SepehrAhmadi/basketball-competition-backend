@@ -6,6 +6,8 @@ import {
   type GroupIssueAdvisory,
   type GroupLockCode,
 } from "./groups.advisories.ts";
+import type { StandingsIssueAdvisory } from "../../standings/lib/standings.advisories.ts";
+import type { StandingRow } from "../../standings/lib/standings.build.ts";
 import type { GroupWithTeams, LeagueTeamWithTeam } from "./groups.queries.ts";
 import { effectiveQualifiers } from "./groups.rules.ts";
 
@@ -24,9 +26,10 @@ export interface GroupItem {
   teamsCount: number;
   gamesCount: number;
   finishedGamesCount: number;
-  issues: GroupIssueAdvisory[];
+  issues: (GroupIssueAdvisory | StandingsIssueAdvisory)[];
   lock: Advisory<GroupLockCode> | null;
   teams: GroupTeamItem[];
+  standings: StandingRow<GroupTeamItem>[];
 }
 
 export function toGroupTeamItem(
@@ -48,7 +51,12 @@ export function toGroupTeamItem(
 export function toGroupItem(
   group: GroupWithTeams,
   leagueDefault: number | null,
-  options?: { includeDeleted?: boolean; gameCounts?: { gamesCount: number; finishedGamesCount: number } },
+  options?: {
+    includeDeleted?: boolean;
+    gameCounts?: { gamesCount: number; finishedGamesCount: number };
+    standings?: StandingRow<GroupTeamItem>[];
+    tieIssues?: StandingsIssueAdvisory[];
+  },
 ): GroupItem {
   const includeDeleted = options?.includeDeleted ?? false;
   const leagueTeams = group.teams
@@ -58,6 +66,9 @@ export function toGroupItem(
     group.qualifiersOverride,
     leagueDefault,
   );
+  const teams = leagueTeams.map((lt) =>
+    toGroupTeamItem(lt, { includeStatus: includeDeleted }),
+  );
   return {
     id: group.id,
     name: group.name,
@@ -66,15 +77,17 @@ export function toGroupItem(
     teamsCount: leagueTeams.length,
     gamesCount: options?.gameCounts?.gamesCount ?? 0,
     finishedGamesCount: options?.gameCounts?.finishedGamesCount ?? 0,
-    issues: buildGroupIssues({
-      id: group.id,
-      name: group.name,
-      teamsCount: leagueTeams.length,
-      qualifiers,
-    }),
+    issues: [
+      ...buildGroupIssues({
+        id: group.id,
+        name: group.name,
+        teamsCount: leagueTeams.length,
+        qualifiers,
+      }),
+      ...(options?.tieIssues ?? []),
+    ],
     lock: buildGroupLock(group._count.games > 0),
-    teams: leagueTeams.map((lt) =>
-      toGroupTeamItem(lt, { includeStatus: includeDeleted }),
-    ),
+    teams,
+    standings: options?.standings ?? [],
   };
 }

@@ -92,7 +92,7 @@ are never stored.
 |---|---|
 | 2 – groups | ✅ Done: format-change guards, per-group qualifier overrides, group warnings |
 | 3 – games | ✅ Done: `HAS_GAMES` emitted, group lock, league status/delete guards |
-| 4 – standings | Read `winPoints` / `lossPoints` from the league row |
+| 4 – standings | ✅ Done: computed tables from `FINISHED` games inside group lists; reads `winPoints` / `lossPoints` from the league row |
 | 5 – brackets | Read `format` to know whether a group stage precedes the bracket |
 | 6 – player stats | Add per-player-per-game stats referencing league records |
 
