@@ -6,6 +6,7 @@ import { effectiveQualifiers } from "./lib/groups.rules.ts";
 import { loadGroupsLeague } from "./lib/groups.access.ts";
 import { groupWithTeamsInclude } from "./lib/groups.queries.ts";
 import { toGroupTeamItem } from "./lib/groups.mapper.ts";
+import { buildGroupsStandings } from "../standings/lib/standings.build.ts";
 
 async function listPublicGroups(leagueId: number, actor: Actor) {
   const league = await loadGroupsLeague(leagueId, { hideInactiveFrom: actor });
@@ -18,19 +19,32 @@ async function listPublicGroups(leagueId: number, actor: Actor) {
     orderBy: { id: "asc" },
     include: groupWithTeamsInclude,
   });
+  const prepared = groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    qualifiers: effectiveQualifiers(
+      g.qualifiersOverride,
+      league.defaultQualifiersPerGroup,
+    ),
+    teams: g.teams
+      .map((t) => t.leagueTeam)
+      .filter((lt) => includeDeleted || lt.team.status !== "DELETED")
+      .map((lt) => toGroupTeamItem(lt, { includeStatus: includeDeleted })),
+  }));
+  const standingsByGroup = await buildGroupsStandings({
+    league: {
+      id: league.id,
+      winPoints: league.winPoints,
+      lossPoints: league.lossPoints,
+      groupRoundType: league.groupRoundType,
+    },
+    groups: prepared,
+  });
   return {
     format: league.format,
-    groups: groups.map((g) => ({
-      id: g.id,
-      name: g.name,
-      qualifiers: effectiveQualifiers(
-        g.qualifiersOverride,
-        league.defaultQualifiersPerGroup,
-      ),
-      teams: g.teams
-        .map((t) => t.leagueTeam)
-        .filter((lt) => includeDeleted || lt.team.status !== "DELETED")
-        .map((lt) => toGroupTeamItem(lt, { includeStatus: includeDeleted })),
+    groups: prepared.map((g) => ({
+      ...g,
+      standings: standingsByGroup.get(g.id)?.standings ?? [],
     })),
   };
 }

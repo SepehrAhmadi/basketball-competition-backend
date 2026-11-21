@@ -5,6 +5,7 @@ import { isGroupedFormat } from "../../format/lib/format.rules.ts";
 import { activeLeagueTeamWhere } from "../../../leagues/lib/league.mapper.ts";
 import { isLeagueFinished } from "../../../leagues/lib/league.rules.ts";
 import {
+  effectiveQualifiers,
   evaluateCreateGroup,
   getGroupsLockReason,
 } from "../lib/groups.rules.ts";
@@ -19,7 +20,12 @@ import {
   loadGroupsLeague,
   loadRemovalContext,
 } from "../lib/groups.access.ts";
+import {
+  runSerializable,
+  type CompetitionTransactionClient,
+} from "../../lib/competition.tx.ts";
 import { toGroupItem, toGroupTeamItem } from "../lib/groups.mapper.ts";
+import { buildGroupsStandings } from "../../standings/lib/standings.build.ts";
 import {
   countUnassigned,
   groupWithTeamsInclude,
@@ -56,9 +62,43 @@ async function listGroups(leagueId: number) {
     countUnassigned(leagueId),
     loadGroupGameCounts(leagueId),
   ]);
-  const items = groups.map((g) =>
-    toGroupItem(g, league.defaultQualifiersPerGroup, { includeDeleted, gameCounts: gameCounts.get(g.id) }),
-  );
+  const prepared = groups.map((g) => {
+    const teams = g.teams
+      .map((t) => t.leagueTeam)
+      .filter((lt) => includeDeleted || lt.team.status !== "DELETED")
+      .map((lt) => toGroupTeamItem(lt, { includeStatus: includeDeleted }));
+    return {
+      group: g,
+      teams,
+      qualifiers: effectiveQualifiers(
+        g.qualifiersOverride,
+        league.defaultQualifiersPerGroup,
+      ),
+    };
+  });
+  const standingsByGroup = await buildGroupsStandings({
+    league: {
+      id: league.id,
+      winPoints: league.winPoints,
+      lossPoints: league.lossPoints,
+      groupRoundType: league.groupRoundType,
+    },
+    groups: prepared.map((p) => ({
+      id: p.group.id,
+      name: p.group.name,
+      qualifiers: p.qualifiers,
+      teams: p.teams,
+    })),
+  });
+  const items = prepared.map((p) => {
+    const entry = standingsByGroup.get(p.group.id);
+    return toGroupItem(p.group, league.defaultQualifiersPerGroup, {
+      includeDeleted,
+      gameCounts: gameCounts.get(p.group.id),
+      standings: entry?.standings ?? [],
+      tieIssues: entry?.tieIssues ?? [],
+    });
+  });
 
   return {
     league: {
@@ -139,8 +179,11 @@ async function createGroup(
   }
 }
 
-async function assertGroupHasNoGames(groupId: number): Promise<void> {
-  const gameCount = await prisma.game.count({ where: { groupId } });
+async function assertGroupHasNoGames(
+  groupId: number,
+  client: typeof prisma | CompetitionTransactionClient = prisma,
+): Promise<void> {
+  const gameCount = await client.game.count({ where: { groupId } });
   if (gameCount > 0)
     throw new AppError(409, messages.error.group.hasGames);
 }
@@ -166,9 +209,37 @@ async function updateGroup(
       }),
       loadGroupGameCounts(leagueId, [groupId]),
     ]);
+    const includeDeleted = isLeagueFinished(league.status);
+    const teams = updated.teams
+      .map((t) => t.leagueTeam)
+      .filter((lt) => includeDeleted || lt.team.status !== "DELETED")
+      .map((lt) => toGroupTeamItem(lt, { includeStatus: includeDeleted }));
+    const entry = (
+      await buildGroupsStandings({
+        league: {
+          id: league.id,
+          winPoints: league.winPoints,
+          lossPoints: league.lossPoints,
+          groupRoundType: league.groupRoundType,
+        },
+        groups: [
+          {
+            id: updated.id,
+            name: updated.name,
+            qualifiers: effectiveQualifiers(
+              updated.qualifiersOverride,
+              league.defaultQualifiersPerGroup,
+            ),
+            teams,
+          },
+        ],
+      })
+    ).get(updated.id);
     return toGroupItem(updated, league.defaultQualifiersPerGroup, {
-      includeDeleted: isLeagueFinished(league.status),
+      includeDeleted,
       gameCounts: gameCounts.get(groupId),
+      standings: entry?.standings ?? [],
+      tieIssues: entry?.tieIssues ?? [],
     });
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code;
@@ -222,34 +293,43 @@ async function assignTeam(
   leagueTeamId: number,
 ) {
   const { league } = await loadAssignmentContext(leagueId, groupId, leagueTeamId);
-  const existing = await prisma.groupTeam.findUnique({
-    where: { leagueTeamId },
-  });
-
-  // Re-assigning to the same group is a no-op: idempotent, not blocked by the group lock.
-  if (existing && existing.groupId === groupId) {
-    return buildPlacementResult(leagueId, [groupId], league.defaultQualifiersPerGroup);
-  }
-
-  // A real placement change: both the target group and the source group (when moving) must be unlocked.
-  await assertGroupHasNoGames(groupId);
-  if (existing) await assertGroupHasNoGames(existing.groupId);
-
+  let assignment: { changed: boolean; previousGroupId: number | null };
   try {
-    await prisma.groupTeam.upsert({
-      where: { leagueTeamId },
-      create: { groupId, leagueTeamId },
-      update: { groupId },
+    assignment = await runSerializable(async (tx) => {
+      const existing = await tx.groupTeam.findUnique({
+        where: { leagueTeamId },
+      });
+
+      if (existing && existing.groupId === groupId)
+        return { changed: false, previousGroupId: existing.groupId };
+
+      await assertGroupHasNoGames(groupId, tx);
+      if (existing) await assertGroupHasNoGames(existing.groupId, tx);
+
+      await tx.groupTeam.upsert({
+        where: { leagueTeamId },
+        create: { groupId, leagueTeamId },
+        update: { groupId },
+      });
+      return { changed: true, previousGroupId: existing?.groupId ?? null };
     });
   } catch (err: unknown) {
-    if ((err as { code?: string })?.code === "P2002")
+    const code = (err as { code?: string })?.code;
+    if (code === "P2002" || code === "P2034")
       throw new AppError(409, messages.error.group.teamAssignConflict);
     throw err;
   }
 
+  // Re-assigning to the same group is a no-op: idempotent, not blocked by the group lock.
+  if (!assignment.changed) {
+    return buildPlacementResult(leagueId, [groupId], league.defaultQualifiersPerGroup);
+  }
+
   return buildPlacementResult(
     leagueId,
-    existing ? [groupId, existing.groupId] : [groupId],
+    assignment.previousGroupId !== null
+      ? [groupId, assignment.previousGroupId]
+      : [groupId],
     league.defaultQualifiersPerGroup,
   );
 }

@@ -6,6 +6,7 @@ import {
   successResponseSchema,
 } from "../../../../swagger/helpers.ts";
 import { advisorySchema } from "../../../../swagger/advisory.docs.ts";
+import { standingRowSchema } from "../../standings/standings.docs.ts";
 import {
   createGroupSchema,
   groupParamSchema,
@@ -56,7 +57,9 @@ const groupItemSchema = z
       description:
         "`issues` is always present; an empty array means no issues. " +
         "All group issues are warnings and never block saving. Codes: " +
-        "`GROUP_TOO_SMALL`, `QUALIFIERS_EXCEED_TEAMS`.",
+        "`GROUP_TOO_SMALL`, `QUALIFIERS_EXCEED_TEAMS`, `UNRESOLVED_TIE` " +
+        "(emitted only when the group has finished all expected games and " +
+        "teams are tied on every criterion).",
     }),
     lock: z.union([advisorySchema, z.null()]).openapi({
       example: null,
@@ -66,6 +69,12 @@ const groupItemSchema = z
         "are locked; name and `qualifiersOverride` stay editable.",
     }),
     teams: z.array(groupTeamSchema),
+    standings: z.array(standingRowSchema).openapi({
+      description:
+        "Computed table ordered by rank, never stored. Tiebreak chain: table points, " +
+        "head-to-head points, head-to-head difference, overall difference, " +
+        "pointsFor, then lower leagueTeamId.",
+    }),
   })
   .openapi("AdminGroupItem");
 
