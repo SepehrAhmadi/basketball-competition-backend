@@ -1,4 +1,8 @@
-import { makeAdvisory, type Advisory } from "../../../../shared/advisory.ts";
+import {
+  formatMessage,
+  makeAdvisory,
+  type Advisory,
+} from "../../../../shared/advisory.ts";
 import { messages } from "../../../../language/message.ts";
 import type { GroupIssueCode, GroupsLockReason } from "./groups.rules.ts";
 import { evaluateGroupIssues, MIN_TEAMS_PER_GROUP } from "./groups.rules.ts";
@@ -14,16 +18,6 @@ interface GroupIssueInput {
   qualifiers: number | null;
 }
 
-function format(
-  template: string,
-  params: Record<string, string | number>,
-): string {
-  return Object.entries(params).reduce(
-    (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
-    template,
-  );
-}
-
 const GROUP_ISSUE_BUILDERS: Record<
   GroupIssueCode,
   (input: GroupIssueInput) => GroupIssueAdvisory
@@ -32,7 +26,7 @@ const GROUP_ISSUE_BUILDERS: Record<
     makeAdvisory(
       "GROUP_TOO_SMALL",
       "WARNING",
-      format(messages.advisory.groups.groupTooSmall, {
+      formatMessage(messages.advisory.groups.groupTooSmall, {
         name: input.name,
         min: MIN_TEAMS_PER_GROUP,
       }),
@@ -47,7 +41,7 @@ const GROUP_ISSUE_BUILDERS: Record<
     makeAdvisory(
       "QUALIFIERS_EXCEED_TEAMS",
       "WARNING",
-      format(messages.advisory.groups.qualifiersExceedTeams, {
+      formatMessage(messages.advisory.groups.qualifiersExceedTeams, {
         name: input.name,
         qualifiers: input.qualifiers as number,
         teams: input.teamsCount,
@@ -74,7 +68,7 @@ export function buildUnassignedIssue(count: number): UnassignedIssueAdvisory[] {
     makeAdvisory(
       "TEAM_UNASSIGNED",
       "WARNING",
-      format(messages.advisory.groups.teamUnassigned, { count }),
+      formatMessage(messages.advisory.groups.teamUnassigned, { count }),
       { count },
     ),
   ];

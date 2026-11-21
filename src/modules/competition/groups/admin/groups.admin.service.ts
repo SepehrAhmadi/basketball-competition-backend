@@ -5,6 +5,7 @@ import { isGroupedFormat } from "../../format/lib/format.rules.ts";
 import { activeLeagueTeamWhere } from "../../../leagues/lib/league.mapper.ts";
 import { isLeagueFinished } from "../../../leagues/lib/league.rules.ts";
 import {
+  effectiveQualifiers,
   evaluateCreateGroup,
   getGroupsLockReason,
 } from "../lib/groups.rules.ts";
@@ -69,8 +70,10 @@ async function listGroups(leagueId: number) {
     return {
       group: g,
       teams,
-      qualifiers:
-        g.qualifiersOverride ?? league.defaultQualifiersPerGroup,
+      qualifiers: effectiveQualifiers(
+        g.qualifiersOverride,
+        league.defaultQualifiersPerGroup,
+      ),
     };
   });
   const standingsByGroup = await buildGroupsStandings({
@@ -223,8 +226,10 @@ async function updateGroup(
           {
             id: updated.id,
             name: updated.name,
-            qualifiers:
-              updated.qualifiersOverride ?? league.defaultQualifiersPerGroup,
+            qualifiers: effectiveQualifiers(
+              updated.qualifiersOverride,
+              league.defaultQualifiersPerGroup,
+            ),
             teams,
           },
         ],

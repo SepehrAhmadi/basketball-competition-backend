@@ -4,8 +4,8 @@ import {
   computeGroupStandings,
   isGroupComplete,
   type StandingStats,
-  type TiedRun,
 } from "./standings.rules.ts";
+import type { StandingsGame } from "./standings.rules.ts";
 import { loadFinishedGroupGames } from "./standings.queries.ts";
 import {
   buildUnresolvedTieIssues,
@@ -34,7 +34,7 @@ export async function buildGroupsStandings<
   const groupIds = input.groups.map((g) => g.id);
   const gamesByGroup =
     groupIds.length === 0
-      ? new Map()
+      ? new Map<number, StandingsGame[]>()
       : await loadFinishedGroupGames(input.league.id, groupIds);
   const result = new Map<
     number,
@@ -78,7 +78,7 @@ export async function buildGroupsStandings<
     const tieIssues = complete
       ? buildUnresolvedTieIssues(
           { id: group.id, name: group.name },
-          unresolvedTies as TiedRun[],
+          unresolvedTies,
         )
       : [];
     result.set(group.id, { standings, tieIssues });
