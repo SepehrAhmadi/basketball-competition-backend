@@ -114,6 +114,14 @@ player stats under the same parent folder.
   editable, but assign, move, remove and delete return 409 `group.hasGames`.
   Re-assigning a team to the group it already belongs to is idempotent and is
   not blocked by the group lock.
+- Row locks: `assignTeam` and `createGame` run in a default-isolation
+  transaction and first lock the affected `league_groups` rows with
+  `lockGroups` (`lib/competition.locks.ts`, `SELECT ... FOR UPDATE`, ids sorted).
+  `assignTeam` locks the target and current group, re-reads the membership, then
+  checks `hasGames` and upserts. `createGame` locks the home team's group,
+  re-reads both memberships (409 `teamAssignConflict` if a team moved), then
+  checks the pair quota and inserts. A move and a game creation in the same group
+  therefore serialize. `Serializable` is not used.
   Admin group items carry `lock` (`HAS_GAMES` or `null`) plus `gamesCount` (non-`CANCELED` games) and `finishedGamesCount` (status `FINISHED`), from one `game.groupBy` query (`loadGroupGameCounts`); the lock still counts all games including canceled.
 - Games exist only in `ACTIVE` leagues with a group format. One pure function
   (`evaluateGameActions`) decides `schedule`, `start`, `cancel`, `result` and

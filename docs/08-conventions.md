@@ -56,4 +56,5 @@ Severity describes the effect on the action of the current endpoint: group issue
 - ESM `.ts` files with explicit `.ts` import suffixes; `__dirname` re-derived via `fileURLToPath`.
 - Soft-delete via `status = DELETED` for orgs/teams/users + roster rows + league teams/members (with `POST .../restore` on admin org/team routes and roster reactivation); hard `delete` for seasons, age-categories, cutoffs, and leagues (guarded: leagues only in `INACTIVE`/`REGISTRATION` with no ACTIVE teams; `P2003` → 409 when referenced).
 - Uploaded file URLs generated server-side (`/uploads/<dest>/...`), never trusted from client; deletes guarded by `basename` + prefix check; orphan uploads removed when the DB write fails.
+- Serialize racing writes by locking the parent row with `lockGroups` (`competition/lib/competition.locks.ts`, `SELECT ... FOR UPDATE`) at the start of a default `prisma.$transaction`, then re-read and check. Do not use `Serializable` isolation (the database rejects it).
 - Jalali dates accepted as `YYYY/MM/DD`, stored as UTC-noon Gregorian `Date`.

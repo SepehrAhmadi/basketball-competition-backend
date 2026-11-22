@@ -8,7 +8,7 @@ import {
   unwrap,
   type CompetitionLeague,
 } from "../../lib/competition.access.ts";
-import { runSerializable } from "../../lib/competition.tx.ts";
+import { lockGroups } from "../../lib/competition.locks.ts";
 import {
   buildResultData,
   evaluateGameActions,
@@ -179,16 +179,18 @@ async function createGame(leagueId: number, input: CreateGameInput) {
 
   let result: { created: GameRow; existingPair: PairGame[] };
   try {
-    result = await runSerializable(async (tx) => {
-      const memberships = await tx.groupTeam.findMany({
-        where: {
-          leagueTeamId: {
-            in: [input.homeLeagueTeamId, input.awayLeagueTeamId],
+    result = await prisma.$transaction(async (tx) => {
+      const loadMemberships = () =>
+        tx.groupTeam.findMany({
+          where: {
+            leagueTeamId: {
+              in: [input.homeLeagueTeamId, input.awayLeagueTeamId],
+            },
+            group: { leagueId },
           },
-          group: { leagueId },
-        },
-        select: { groupId: true, leagueTeamId: true },
-      });
+          select: { groupId: true, leagueTeamId: true },
+        });
+      const memberships = await loadMemberships();
       const homeMembership = memberships.find(
         (m) => m.leagueTeamId === input.homeLeagueTeamId,
       );
@@ -199,6 +201,16 @@ async function createGame(leagueId: number, input: CreateGameInput) {
         throw new AppError(400, messages.error.game.teamNotGrouped);
       if (homeMembership.groupId !== awayMembership.groupId)
         throw new AppError(400, messages.error.game.teamsNotInSameGroup);
+
+      const groupId = homeMembership.groupId;
+      await lockGroups(tx, [groupId]);
+      // Re-read: a team may have moved while waiting for the lock.
+      const locked = await loadMemberships();
+      if (
+        locked.length !== 2 ||
+        locked.some((m) => m.groupId !== groupId)
+      )
+        throw new AppError(409, messages.error.group.teamAssignConflict);
 
       const existingPair = await loadPairGames(
         leagueId,
@@ -229,7 +241,7 @@ async function createGame(leagueId: number, input: CreateGameInput) {
       const created = await tx.game.create({
         data: {
           leagueId,
-          groupId: homeMembership.groupId,
+          groupId,
           homeLeagueTeamId: input.homeLeagueTeamId,
           awayLeagueTeamId: input.awayLeagueTeamId,
           scheduledDate: jalaliToGregorianOrNull(input.scheduledDate),
@@ -244,8 +256,7 @@ async function createGame(leagueId: number, input: CreateGameInput) {
     const code = (err as { code?: string })?.code;
     if (code === "P2002")
       throw new AppError(409, messages.error.game.alreadyRescheduled);
-    if (code === "P2034")
-      throw new AppError(409, messages.error.game.pairLimitReached);
+
     throw err;
   }
   const notSwappedIds = notSwappedGameIds(
