@@ -20,10 +20,8 @@ import {
   loadGroupsLeague,
   loadRemovalContext,
 } from "../lib/groups.access.ts";
-import {
-  runSerializable,
-  type CompetitionTransactionClient,
-} from "../../lib/competition.tx.ts";
+import type { CompetitionTransactionClient } from "../../lib/competition.tx.ts";
+import { lockGroups } from "../../lib/competition.locks.ts";
 import { toGroupItem, toGroupTeamItem } from "../lib/groups.mapper.ts";
 import { buildGroupsStandings } from "../../standings/lib/standings.build.ts";
 import {
@@ -295,10 +293,21 @@ async function assignTeam(
   const { league } = await loadAssignmentContext(leagueId, groupId, leagueTeamId);
   let assignment: { changed: boolean; previousGroupId: number | null };
   try {
-    assignment = await runSerializable(async (tx) => {
+    assignment = await prisma.$transaction(async (tx) => {
+      const preLock = await tx.groupTeam.findUnique({
+        where: { leagueTeamId },
+      });
+      await lockGroups(
+        tx,
+        preLock ? [groupId, preLock.groupId] : [groupId],
+      );
+      // Re-read: the team may have moved while waiting for the lock.
       const existing = await tx.groupTeam.findUnique({
         where: { leagueTeamId },
       });
+
+      if (existing && existing.groupId !== preLock?.groupId)
+        await lockGroups(tx, [existing.groupId]);
 
       if (existing && existing.groupId === groupId)
         return { changed: false, previousGroupId: existing.groupId };
@@ -315,7 +324,7 @@ async function assignTeam(
     });
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code;
-    if (code === "P2002" || code === "P2034")
+    if (code === "P2002")
       throw new AppError(409, messages.error.group.teamAssignConflict);
     throw err;
   }
